@@ -666,11 +666,166 @@ def test_mail_vars_bind_only_to_dkim_authenticated_documents():
 
 
 def test_registered_iban_digits_in_vars_are_t_mail_iban():
-    """#17 round 3: 20 IBAN digits without the country prefix used to pass vars_match_iban."""
+    """#17: the account number of a registered IBAN without its country prefix is T-MAIL-IBAN; short digit windows
+    are not (round 4 regression: 'PO-2000-1453' shares 8 digits with CZ65 0800 0000 1920 0014 5399)."""
     from executor.tools.handler import _vars_match_iban
 
-    vendors = [{"iban": "CZ6508000000192000145399"}]
-    for v in ("PO-65080000001920001453", "PO-0800-0000-1920", "x 19200014 y"):
+    vendors = [{"iban": "CZ6508000000192000145399"}, {"iban": "CZ6203000000000123456789"}]
+    for v in ("PO-6508000000192000145399", "PO-08000000192000145399", "x 0800 0000 1920 0014 5399 y"):
         assert _vars_match_iban({"po": v}, v, vendors), v
-    for v in ("PO-778812", "FV-2026-0412", "2026-10-25", "2026041299"):
+    for v in ("PO-778812", "FV-2026-0412", "2026-10-25", "2026041299", "PO-2000-1453", "PO-00000019",
+              "PO-80000001", "12345678", "00000000"):
         assert not _vars_match_iban({"po": v}, v, vendors), v
+
+
+# ---------------------------------------------------------------- round 4 (verifier bypasses)
+
+def _spayd_mail(spayd: str, text: str = "Upominka, prosime o uhradu:") -> bytes:
+    return ("From: fakturace@acme.cz\r\nTo: ap@airgap.example\r\nSubject: Upominka\r\nMIME-Version: 1.0\r\n"
+            f"Content-Type: text/plain; charset=utf-8\r\n\r\n{text}\r\n{spayd}\r\n").encode()
+
+
+def _pay_isdoc_in_full(h: ToolHarness) -> None:
+    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h)))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+
+
+def _propose_body(h: ToolHarness, email_id: str, raw: bytes, **over):
+    _put_email(h, email_id, raw)
+    args = {"invoice_no": "AGENT-1", "vs": None, "due": None, **over}
+    return h.tool("payment.propose", _propose_args(_body_id(h, email_id),
+                                                   **{k: v for k, v in args.items() if v is not None}))
+
+
+def _executed(h: ToolHarness) -> list[dict]:
+    return [p for p in h.store.scan("proposals") if p["status"] == "EXECUTED"]
+
+
+def test_reminders_without_the_paid_vs_or_due_date_are_refused():
+    """#6 round 4: (A) no X-VS + new DT, (B) late fee, (C) VS with leading zeros, (D) a number of its own + the same
+    VS: each used to be a second EXECUTED payment of FV-2026-0412. Now each is the paid invoice (T-INVOICENO-PRIOR)
+    and the cap refuses it."""
+    acc = "SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK"
+    cases = {
+        "A": (_spayd_mail(f"{acc}*AM:14500.00*DT:20261110"), {"amount_minor": 1450000}),
+        "B": (_spayd_mail(f"{acc}*AM:14645.00*DT:20261110"), {"amount_minor": 1464500}),
+        "C": (_spayd_mail(f"{acc}*AM:14500.00*X-VS:0020260412*DT:20261110"),
+              {"amount_minor": 1450000, "vs": "0020260412"}),
+        "D": (_spayd_mail(f"{acc}*AM:14500.00*X-VS:20260412*DT:20261110", "Faktura c. UP-2026-77, upominka:"),
+              {"amount_minor": 1450000, "vs": "20260412", "invoice_no": "UP-2026-77"}),
+    }
+    for case, (raw, over) in cases.items():
+        h = ToolHarness()
+        h.mandate()
+        _pay_isdoc_in_full(h)
+        st, r = _propose_body(h, "eml_0020", raw, due="2026-11-10", **over)
+        assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], (case, r)
+        assert len(_executed(h)) == 1, case
+        # after a PARTIAL of the invoice, a PARTIAL of the reminder reaches the executor as FV-2026-0412: I-DUP
+        h = ToolHarness()
+        h.mandate()
+        st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h), amount_minor=700000, reason_code="PARTIAL"))
+        assert st == 200 and r["result"]["decision"] == "allow", r
+        st, r = _propose_body(h, "eml_0020", raw, due="2026-11-10", reason_code="PARTIAL",
+                              **{**over, "amount_minor": 700000})
+        assert st == 200 and r["result"]["decision"] == "deny" and "I-DUP" in r["result"]["rule_ids"], (case, r)
+        leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+        assert "T-INVOICENO-PRIOR" in leaf["data"]["rule_ids"], case
+        assert [p["invoice"]["invoice_no"] for p in h.store.scan("proposals")] == ["FV-2026-0412"] * 2, case
+
+
+def test_two_body_only_mails_without_vs_are_one_invoice():
+    """#6 round 4 (E): two body-only emails, no VS, different due dates, same amount: the second is the first's."""
+    h = ToolHarness()
+    h.mandate()
+    acc = "SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK*AM:14500.00"
+    st, r = _propose_body(h, "eml_0021", _spayd_mail(f"{acc}*DT:20261029", "Platebni udaje:"), due="2026-10-29")
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    st, r = _propose_body(h, "eml_0022", _spayd_mail(f"{acc}*DT:20261112"), due="2026-11-12")
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+    assert len(_executed(h)) == 1
+
+
+def test_reminder_of_a_partial_counts_the_paid_document_amount():
+    """#6 round 4: after a PARTIAL of FV-2026-0412, a reminder for the full amount is the same invoice."""
+    h = ToolHarness()
+    h.mandate()
+    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h), amount_minor=700000, reason_code="PARTIAL"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    raw = _spayd_mail("SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK*AM:14500.00*DT:20261110")
+    st, r = _propose_body(h, "eml_0023", raw, due="2026-11-10")
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r  # 700 000 + 1 450 000 > 1 450 000
+
+
+def test_other_invoices_of_the_vendor_are_not_reminders():
+    """#6 round 4 regression (F): a constant-VS vendor's genuinely different body-only invoice (other amount) was
+    refused by the cap; and a numbered invoice of the same amount with its own VS is not a repeat either."""
+    h = ToolHarness()
+    h.mandate()
+    _pay_isdoc_in_full(h)
+    raw = _spayd_mail("SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK*AM:3000.00*X-VS:20260412*DT:20261130",
+                      "Platebni udaje:")
+    st, r = _propose_body(h, "eml_0024", raw, amount_minor=300000, vs="20260412", due="2026-11-30")
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert "T-INVOICENO-PRIOR" not in leaf["data"]["rule_ids"]
+    raw = (RAW.replace(b"FV-2026-0412", b"FV-2026-0413").replace(b"20260412", b"20260413")
+           .replace(b"2026-10-15", b"2026-10-20"))  # executor I-DUP: same amount within 3 days is a repeat
+    _put_email(h, "eml_0025", raw)
+    st, r = h.tool("inbox.read", {"email_id": "eml_0025"})
+    att = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment")
+    st, r = h.tool("payment.propose", _propose_args(att, invoice_no="FV-2026-0413", vs="20260413"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert len(_executed(h)) == 3
+
+
+def test_reminder_amount_band():
+    from executor.tools.handler import _repeats
+
+    assert _repeats(1450000, {1450000}) and _repeats(1464500, {1450000}) and _repeats(1595000, {1450000})
+    assert not _repeats(1595001, {1450000}) and not _repeats(1449999, {1450000}) and not _repeats(300000, {1450000})
+    assert _repeats(150000, {100000}) and not _repeats(150001, {100000})  # small invoice: fee up to 500.00
+    assert not _repeats(None, {1}) and not _repeats(5, {0})
+
+
+def test_invoice_extract_shows_an_iban_start_as_a_reference():
+    """#15 round 4: 'CZ-6508000000' (an IBAN start with a separator) came back verbatim from invoice.extract."""
+    h = ToolHarness()
+    for no in (b"CZ-6508000000", b"CZ65-0800-0000", b"PAY-12"):
+        _put_email(h, "eml_0026", RAW.replace(b"<ID>FV-2026-0412</ID>", b"<ID>" + no + b"</ID>"))
+        st, r = h.tool("inbox.read", {"email_id": "eml_0026"})
+        att = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment")
+        st, r = h.tool("invoice.extract", {"doc_id": att})
+        got = r["result"]["draft"]["fields"]["invoice_no"]
+        assert got.startswith("inv_") and extract.invoice_no_matches(got, no.decode()), (no, got)
+
+
+def test_mail_vars_without_digits_are_bound_too():
+    """#17 round 4: vars made only of letters skipped the binding: a BBAN spelled a=0..j=9 in a shape-valid PO, free
+    words as invoice_no, an extra var. A genuine PO sharing 8 digits with a registered IBAN is no longer T-MAIL-IBAN."""
+    h = ToolHarness()
+    raw = RAW.replace(b"posilame fakturu.", b"posilame fakturu k objednavce PO-2000-1453 a PO-ABC.")
+    _put_email(h, "eml_0027", raw)
+    send = lambda tpl, **v: h.tool("mail.send_template", {"to": "fakturace@acme.cz", "template_id": tpl,  # noqa: E731
+                                                          "vars": v})
+    for tpl, v in (("query_amount", {"invoice_no": "FV-2026-0412", "po": "PO-gfaiaaaaaabjcaaabefd"}),
+                   ("ack_invoice", {"invoice_no": "PAY NEW ACCOUNT SEE NEXT MAIL"}),
+                   ("ack_invoice", {"invoice_no": "CZ sixfive zero eight"}),
+                   ("ack_invoice", {"invoice_no": "FV-2026-0412", "note": "new account"}),
+                   ("query_amount", {"invoice_no": "FV-2026-0412", "po": "PO-XYZ"})):
+        st, r = send(tpl, **v)
+        assert st == 400, (v, r)
+    for po in ("PO-2000-1453", "PO-ABC"):
+        st, r = send("query_amount", invoice_no="FV-2026-0412", po=po)
+        assert st == 200 and r["result"]["sent"] is True, (po, r)
+
+
+def test_dkim_of_a_subdomain_authenticates_the_domain(monkeypatch):
+    from executor.facts import dkim
+    from executor.tools.handler import _authenticated
+
+    h = ToolHarness()
+    for d, ok in (("acme.cz", True), ("mail.acme.cz", True), ("evilacme.cz", False), ("acme.cz.evil.example", False)):
+        monkeypatch.setattr(dkim, "dkim_verdict", lambda raw, dns_snapshot, d=d: {"result": "pass", "aligned": True,
+                                                                                   "d": d})
+        assert _authenticated(b"", "acme.cz", settings=h.settings) is ok, d

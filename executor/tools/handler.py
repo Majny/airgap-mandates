@@ -28,7 +28,8 @@ UNTRUSTED_WINDOW = 3  # steps; taint rule "untrusted read within the last 3 step
 UNTRUSTED_SECONDS = 120  # ...or any untrusted read in the last 120 s, whatever the (agent-chosen) session and step
 LOOKUP_WINDOW_MINUTES = 10  # T-LOOKUP-RATE also counts per principal over a rolling window, not only per session
 MAX_HINTS = 5
-IBAN_DIGIT_RUN = 8  # mail vars: this many digits of a registered IBAN in one var is an IBAN fragment
+REMINDER_FEE_BP = 1000  # a reminder may add a late fee / interest: up to 10 % of the paid invoice...
+REMINDER_FEE_MIN = 50_000  # ...or 500.00, whichever is more
 _AT_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _IBAN_RE = re.compile(r"[A-Z]{2}\s?\d{2}(?:\s?[A-Z0-9]){11,30}", re.I)
 _REGISTRY_META_ID = "registry#meta"
@@ -107,17 +108,17 @@ def _context(name: str, args: dict[str, Any], history: list[dict[str, Any]], ste
 
 
 def _vars_match_iban(vars_: Any, vars_text: str, vendors: list[dict[str, Any]]) -> bool:
-    """An IBAN in the vars, or a run of >= IBAN_DIGIT_RUN digits (separators dropped) that is part of a registered
-    IBAN: 'PO-65080000001920001453' carries the account number without its country prefix."""
+    """An IBAN in the vars, or the account number of a registered IBAN without its country prefix
+    ('PO-6508000000192000145399', 'PO-08000000192000145399'). Fragments are not matched here (a short digit window also hits genuine POs, as CZ
+    IBANs have long zero runs): every var is bound to the recipient's own documents or a calendar date (_bind_vars)."""
     reg = [str(v.get("iban") or "") for v in vendors]
     if _IBAN_RE.search(vars_text) or any(i and i in vars_text for i in reg):
         return True
-    reg_digits = ["".join(c for c in i[2:] if c.isdigit()) for i in reg if i]
+    reg_digits = ["".join(c for c in i[n:] if c.isdigit()) for i in reg if i for n in (2, 4)]  # with/without check
     values = vars_.values() if isinstance(vars_, dict) else []
     for v in values:
         d = "".join(c for c in str(v) if c.isdigit())
-        if len(d) >= IBAN_DIGIT_RUN and any(d[i:i + IBAN_DIGIT_RUN] in r for r in reg_digits
-                                            for i in range(len(d) - IBAN_DIGIT_RUN + 1)):
+        if any(r and r in d for r in reg_digits):
             return True
     return False
 
@@ -251,8 +252,10 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         inv, warn = invoice_from_document(args, draft, vendor, settings=settings, siblings=_others(draft, drafts))
         inv["email_id"] = email_id
         rows = _live_proposals(store=store, settings=settings)
-        if "T-INVOICENO-DOCID" in warn and (prior := _reminder_of(inv, draft["fields"]["amount_minor"], rows)):
+        if prior := _reminder_of(inv, draft["fields"]["amount_minor"], rows, own_no="T-INVOICENO-DOCID" not in warn,
+                                 doc_amount_of=lambda ri: _prior_doc_amount(ri, store=store, settings=settings)):
             # a reminder in another email repeating a paid invoice: same invoice_no / issue_date, so I-DUP sees it
+            # and the PARTIAL cap counts what was paid
             inv["invoice_no"], inv["issue_date"] = prior["invoice_no"], prior["issue_date"]
             warn.append("T-INVOICENO-PRIOR")
         _check_cumulative(inv, _invoice_cap(draft, drafts), store=store, settings=settings, rows=rows)
@@ -292,14 +295,15 @@ def _registered_domains(store: Any) -> dict[str, str]:
 
 
 def _authenticated(raw: bytes, domain: str, *, settings: Any) -> bool:
-    """DKIM pass, aligned, d = the recipient's domain: re-verified here from the raw bytes over the same DNS snapshot
+    """DKIM pass, aligned, d = the recipient's domain or a subdomain of it: re-verified here from the raw bytes over the same DNS snapshot
     the ingest uses (GET /inbox does not carry the verdict, and a From header alone is not evidence)."""
     from executor.facts import _util
     from executor.facts.dkim import dkim_verdict
 
     dns, _ = _util.load_json(Path(settings.data_dir) / _util.SNAPSHOT_FILES["dns"])
     v = dkim_verdict(raw, dns_snapshot=dns)
-    return v.get("result") == "pass" and v.get("aligned") is True and v.get("d") == domain
+    d = str(v.get("d") or "").lower()
+    return v.get("result") == "pass" and v.get("aligned") is True and (d == domain or d.endswith("." + domain))
 
 
 def _sender_documents(to: str, ex: Any, *, settings: Any) -> list[dict[str, Any]]:
@@ -320,16 +324,15 @@ def _sender_documents(to: str, ex: Any, *, settings: Any) -> list[dict[str, Any]
 
 def _bind_vars(vars_: dict[str, str], to: str, ex: Any, *, store: Any,
                settings: Any) -> tuple[dict[str, str], list[str]]:
-    """(vars as sent, names not allowed). Vars carrying digits must mean something (an IBAN split over messages needs
-    digits): invoice_no (verbatim or its inv_ reference, sent as the document's value) and po must appear in the
-    documents of DKIM-authenticated mail from the recipient's domain; date must be a real calendar date in
-    2020..2035. Other vars: no digits. No var may carry a registered IBAN or a run of its digits."""
-    digits = {k: v for k, v in vars_.items() if any(c.isdigit() for c in v)}
-    if not digits:
+    """(vars as sent, names not allowed). Every var must mean something, digits or not (an IBAN can be spelled in
+    letters, 'PO-gfaiaaaa...', and free words are free text): invoice_no (verbatim or its inv_ reference, sent as the
+    document's value) and po must appear in the documents of DKIM-authenticated mail from the recipient's domain; date
+    must be a real calendar date in 2020..2035. Any other var is refused. No var may carry an IBAN."""
+    if not vars_:
         return vars_, []
-    docs = _sender_documents(to, ex, settings=settings) if {"invoice_no", "po"} & set(digits) else []
+    docs = _sender_documents(to, ex, settings=settings) if {"invoice_no", "po"} & set(vars_) else []
     out, bad = dict(vars_), []
-    for k, v in digits.items():
+    for k, v in vars_.items():
         if k == "invoice_no":
             nos = [n for d in docs if (n := extract.extract_draft(d)["fields"]["invoice_no"])]
             n = next((n for n in nos if extract.invoice_no_matches(v, n)), None)
@@ -347,7 +350,7 @@ def _bind_vars(vars_: dict[str, str], to: str, ex: Any, *, store: Any,
         if not ok:
             bad.append(k)
     if not bad and _vars_match_iban(out, canonical_json(out).decode(), _vendors(store)):
-        bad = sorted(digits)
+        bad = sorted(vars_)
     return out, bad
 
 
@@ -373,34 +376,68 @@ def _vendor_of(r: dict[str, Any]) -> Any:
 def _same_invoice(r: dict[str, Any], inv: dict[str, Any]) -> bool:
     """Does live proposal `r` pay (part of) the invoice `inv`? Same document; or the same email (body and attachments
     describe one invoice unless they carry different invoice numbers); or, across emails, the same vendor with the
-    same invoice number, or the same VS where either side has no invoice number (a body-only reminder)."""
+    same invoice number (a reminder of a paid invoice has been given its number by _reminder_of). A shared VS alone
+    does not make two invoices one: some vendors use a constant VS (a customer number)."""
     ri = r.get("invoice") or {}
     if ri.get("invoice_ref") == inv["invoice_ref"]:
         return True
-    loose = _unbound(ri) or _unbound(inv)
     same_no = bool(ri.get("invoice_no")) and _norm_no(ri.get("invoice_no")) == _norm_no(inv.get("invoice_no"))
     if inv.get("email_id") and ri.get("email_id") == inv["email_id"]:
-        return loose or same_no
-    if _vendor_of(r) != inv.get("vendor_id"):
-        return False
-    return same_no or (loose and bool(inv.get("vs")) and ri.get("vs") == inv["vs"])
+        return _unbound(ri) or _unbound(inv) or same_no
+    return _vendor_of(r) == inv.get("vendor_id") and same_no
 
 
-def _reminder_of(inv: dict[str, Any], doc_amount: int, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """The live proposal (another email, same vendor) that a document without an invoice number repeats: same VS,
-    or same due date and amount (+-50 bp). None when there is none or they disagree on the invoice number."""
-    hits = []
+def _norm_vs(v: Any) -> str:
+    """VS as a number: leading zeros carry no meaning ('0020260412' == '20260412')."""
+    return str(v or "").strip().lstrip("0")
+
+
+def _repeats(amount: int | None, paid: set[int]) -> bool:
+    """Is `amount` one of the `paid` amounts, possibly plus a late fee (REMINDER_FEE_BP, at least REMINDER_FEE_MIN)?"""
+    return amount is not None and any(
+        0 < p <= amount <= p + max(p * REMINDER_FEE_BP // 10_000, REMINDER_FEE_MIN) for p in paid)
+
+
+def _reminder_of(inv: dict[str, Any], doc_amount: int | None, rows: list[dict[str, Any]], *, own_no: bool,
+                 doc_amount_of: Any = None) -> dict[str, Any] | None:
+    """The live proposal of the same vendor, from another email, that this document repeats (a reminder), or None.
+
+    A reminder carries a new due date, maybe a late fee, maybe no VS, maybe a number of its own, so neither the due
+    date nor the exact amount identifies it. A repeat is a document whose amount is the paid proposal's amount or its
+    document's amount (plus at most a late fee) and whose VS does not differ (leading zeros ignored); when both carry
+    an invoice number of their own (the numbers differ: the same number is I-DUP's), the VS must also be the same.
+    A genuinely different invoice of another amount is not a repeat, whatever its VS."""
+    vs = _norm_vs(inv.get("vs"))
     for r in rows:
         ri = r.get("invoice") or {}
-        if ri.get("email_id") == inv.get("email_id") or _vendor_of(r) != inv["vendor_id"] or _unbound(ri):
+        if ri.get("email_id") == inv.get("email_id") or _vendor_of(r) != inv["vendor_id"]:
             continue
-        same_vs = bool(inv.get("vs")) and ri.get("vs") == inv["vs"]
-        same_due = (bool(inv.get("due_date")) and ri.get("due_date") == inv["due_date"]
-                    and abs(int(ri.get("amount_minor", 0)) - doc_amount) * 10_000 <= 50 * doc_amount)
-        if same_vs or same_due:
-            hits.append(ri)
-    nos = {_norm_no(h["invoice_no"]) for h in hits}
-    return hits[0] if len(nos) == 1 else None
+        if not ri.get("invoice_no") or _norm_no(ri["invoice_no"]) == _norm_no(inv.get("invoice_no")):
+            continue
+        if ri.get("currency") and inv.get("currency") and ri["currency"] != inv["currency"]:
+            continue
+        rvs = _norm_vs(ri.get("vs"))
+        if own_no and not _unbound(ri):
+            if not vs or vs != rvs:
+                continue
+        elif vs and rvs and vs != rvs:
+            continue
+        paid = {int(ri.get("amount_minor") or 0), int((doc_amount_of(ri) if doc_amount_of else None) or 0)}
+        if _repeats(doc_amount, paid):
+            return ri
+    return None
+
+
+def _prior_doc_amount(ri: dict[str, Any], *, store: Any, settings: Any) -> int | None:
+    """The document amount behind an earlier proposal (a PARTIAL pays less than its document)."""
+    if not ri.get("email_id") or not ri.get("invoice_ref"):
+        return None
+    try:
+        _, docs = _email_docs(ri["email_id"], store=store, settings=settings)
+    except ApiError:
+        return None
+    return next((extract.extract_draft(d)["fields"]["amount_minor"] for d in docs if d["doc_id"] == ri["invoice_ref"]),
+                None)
 
 
 def _others(draft: dict[str, Any], drafts: list[dict[str, Any]]) -> list[dict[str, Any]]:

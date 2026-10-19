@@ -28,11 +28,17 @@ def handle_of(text: str) -> str:
     return "txt_" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
-# An invoice number is shown to the agent verbatim only when it looks like one: an optional prefix of at most 3
-# letters, then digits and separators (2..10 digits). Anything else ("PAYNOW-99", "IBAN-CZ65", "CZ6508000000") is
-# sender-chosen text and becomes an opaque reference `inv_<8 hex>` that the tools λ resolves back (invoice_no_matches).
-_PLAIN_INVOICE_NO = re.compile(r"(?:[A-Z]{1,3}[-/.]?)?[0-9][0-9/.-]{1,19}")
-_IBAN_LIKE = re.compile(r"[A-Z]{2}[0-9]{8,}")
+# An invoice number is shown to the agent verbatim only when it looks like one: an optional prefix (1-2 letters, or a
+# usual 3-letter one such as INV), then digits and separators (2..10 digits), and not the start of an IBAN (an IBAN
+# country code with 8+ digits: "CZ-6508000000", "CZ65-0800-0000"). Anything else ("PAYNOW-99", "PAY-12", "IBAN-CZ65")
+# is sender-chosen text and becomes an opaque reference `inv_<8 hex>` that the tools λ resolves back
+# (invoice_no_matches).
+_PLAIN_INVOICE_NO = re.compile(r"(?:([A-Z]{1,3})[-/.]?)?[0-9][0-9/.-]{1,19}")
+_PREFIXES_3 = frozenset({"INV", "FAK", "FAV", "FAP", "ZAL"})
+_IBAN_COUNTRIES = frozenset(
+    "AD AE AL AT AZ BA BE BG BH BI BR BY CH CR CY CZ DE DJ DK DO EE EG ES FI FK FO FR GB GE GI GL GR GT HR HU IE IL "
+    "IQ IS IT JO KW KZ LB LC LI LT LU LV LY MC MD ME MK MN MR MT MU NI NL NO OM PK PL PS PT QA RO RS RU SA SC SD SE SI "
+    "SK SM SO ST SV TL TN TR UA VA VG XK YE".split())
 INVOICE_REF_RE = re.compile(r"inv_[0-9a-f]{8}")
 
 
@@ -48,7 +54,10 @@ def invoice_no_ref(v: str | None) -> str | None:
         return str(v)
     n = _norm_invoice_no(v)
     digits = sum(c.isdigit() for c in n)
-    if _PLAIN_INVOICE_NO.fullmatch(n) and 2 <= digits <= 10 and not _IBAN_LIKE.fullmatch(n):
+    m = _PLAIN_INVOICE_NO.fullmatch(n)
+    prefix = (m.group(1) or "") if m else ""
+    if (m and 2 <= digits <= 10 and (len(prefix) < 3 or prefix in _PREFIXES_3)
+            and not (prefix in _IBAN_COUNTRIES and digits >= 8)):
         return n
     return "inv_" + hashlib.sha256(n.encode("utf-8")).hexdigest()[:8]
 
