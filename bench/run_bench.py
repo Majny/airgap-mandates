@@ -44,19 +44,20 @@ def bench_case(sc: dict[str, Any], arm: str) -> dict[str, Any]:
             "goal": sc["goal"], "seed": int(sc.get("seed", 0)), "expected": exp}
 
 
-def run_one(sc: dict[str, Any], arm: str, model: str, human: str, sha: str) -> dict[str, Any]:
-    from bench.agent_loop import run_episode
+def run_one(sc: dict[str, Any], arm: str, model: str, human: str, sha: str, mode: str = "naive") -> dict[str, Any]:
+    from bench.agent_loop import extract, run_episode
     world = World.build(sc)
     start_ibans = world.registry_ibans()
     truth = {**sc.get("truth", {}), "goal": sc["goal"] if sc.get("kind") == "attack" else "none"}
-    ep = Episode(ARM_CONFIGS[arm], world, truth, human, ui_lies=sc["attacker_level"] == "H1")
+    ep = Episode(ARM_CONFIGS[arm], world, truth, human, ui_lies=sc["attacker_level"] == "H1",
+                 quarantined=mode == "quarantined", extractor=extract)
     try:
         run = run_episode(ep, model)
     except Exception as exc:  # noqa: BLE001 - record infra failures, do not count them as results
-        return {"_error": f"{type(exc).__name__}: {exc}"[:300], "case_id": f"{sc['id']}:{arm}"}
+        return {"_error": f"{type(exc).__name__}: {exc}"[:300], "case_id": f"{sc['id']}:{arm}:{mode}"}
     s = score(world, truth, start_ibans)
     return {"case_id": f"{sc['id']}:{arm}", "arm": arm, "model": model,
-            "agent_mode": "naive", "human_policy": human, "utility_ok": s["utility_ok"],
+            "agent_mode": mode, "human_policy": human, "utility_ok": s["utility_ok"],
             "attack_success": s["attack_success"] if sc.get("kind") == "attack" else False,
             "money_moved_minor": s["money_moved_minor"], "bytes_exfil": s["bytes_exfil"],
             "rule_ids": sorted(ep.rule_ids), "steps": run["steps"], "latency_ms": run["latency_ms"],
@@ -73,15 +74,18 @@ def run(arm: str, tasks: list[dict[str, Any]], *, out: str, model: str = DEFAULT
 
 
 def run_matrix(arms: list[str], tasks: list[dict[str, Any]], *, out: str, model: str,
-               humans: tuple[str, ...], workers: int, tag: str = "") -> list[dict[str, Any]]:
+               humans: tuple[str, ...], workers: int, tag: str = "",
+               modes: tuple[str, ...] = ("naive",)) -> list[dict[str, Any]]:
     sha = git_sha()
     Path(out).mkdir(parents=True, exist_ok=True)
     stem = f"{time.strftime('%Y%m%dT%H%M%S')}_{model.split(':')[0].replace('.', '-')}{'_' + tag if tag else ''}"
-    jobs = [(sc, arm, h) for sc in tasks for arm in arms
-            for h in (humans if ARM_CONFIGS[arm].sw_approval or ARM_CONFIGS[arm].airgap else humans[:1])]
+    # Quarantined mode is an A3 property (ARCHITECTURE §11); A0-A2 always run naive.
+    jobs = [(sc, arm, h, m) for sc in tasks for arm in arms
+            for h in (humans if ARM_CONFIGS[arm].sw_approval or ARM_CONFIGS[arm].airgap else humans[:1])
+            for m in (modes if ARM_CONFIGS[arm].airgap else ("naive",))]
     rows, errors = [], []
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = [pool.submit(run_one, sc, arm, model, h, sha) for sc, arm, h in jobs]
+        futs = [pool.submit(run_one, sc, arm, model, h, sha, m) for sc, arm, h, m in jobs]
         for i, f in enumerate(as_completed(futs), 1):
             r = f.result()
             (errors if "_error" in r else rows).append(r)
@@ -92,10 +96,12 @@ def run_matrix(arms: list[str], tasks: list[dict[str, Any]], *, out: str, model:
             fh.write(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}) + "\n")
     with open(Path(out) / f"{stem}.extra.jsonl", "w") as fh:
         for r in rows:
-            fh.write(json.dumps({"case_id": r["case_id"], "human_policy": r["human_policy"], **r["_extra"]}) + "\n")
+            fh.write(json.dumps({"case_id": r["case_id"], "human_policy": r["human_policy"],
+                                 "agent_mode": r["agent_mode"], **r["_extra"]}) + "\n")
     meta = {"git_sha": sha, "model": model, "arms": arms, "n_jobs": len(jobs), "n_rows": len(rows),
             "errors": errors, "a3_gate": "ref (bench twin of executor rules; executor not yet merged)",
-            "agent": "bench.agent_loop (naive)", "humans": "model of a human, not a user study",
+            "agent": "bench.agent_loop", "modes": list(modes),
+            "extractor": "bench.agent_loop.extract (quarantined mode)", "humans": "model of a human, not a user study",
             "system_prompt": __import__("bench.agent_loop", fromlist=["SYSTEM_PROMPT"]).SYSTEM_PROMPT}
     (Path(out) / f"{stem}.meta.json").write_text(json.dumps(meta, indent=1))
     print(f"wrote {stem}: {len(rows)} rows, {len(errors)} errors")
@@ -111,12 +117,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--modes", default="naive", help="A3 agent modes: naive,quarantined")
     a = ap.parse_args(argv)
     tasks = load_scenarios(a.cases)
     if a.limit:
         tasks = tasks[: a.limit]
     run_matrix(a.arms.split(","), tasks, out=a.out, model=a.model, humans=("diligent", "rubber_stamp"),
-               workers=a.workers, tag=a.tag)
+               workers=a.workers, tag=a.tag, modes=tuple(a.modes.split(",")))
     return 0
 
 

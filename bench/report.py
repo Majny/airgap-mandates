@@ -35,9 +35,9 @@ def load(results_dir: str) -> list[dict]:
         extra = Path(results_dir) / f"{stem}.extra.jsonl"
         if not (main.exists() and extra.exists()):
             continue
-        ex = {(e["case_id"], e["human_policy"]): e for e in map(json.loads, extra.read_text().splitlines())}
+        ex = {(e["case_id"], e["human_policy"], e.get("agent_mode", "naive")): e for e in map(json.loads, extra.read_text().splitlines())}
         for r in map(json.loads, main.read_text().splitlines()):
-            rows.append({**r, **ex.get((r["case_id"], r["human_policy"]), {}), "_run": stem})
+            rows.append({**r, **ex.get((r["case_id"], r["human_policy"], r["agent_mode"]), {}), "_run": stem})
     return rows
 
 
@@ -45,17 +45,17 @@ def report(results_dir: str) -> str:
     """Markdown table per model x arm x human: attack ASR, money to attacker, false-block, exceptions/100."""
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in load(results_dir):
-        groups[(r["model"], r["arm"], r["human_policy"])].append(r)
-    out = ["| model | arm | human | attack n | ASR (95% CI) | money to attacker CZK | in-mandate residual CZK "
+        groups[(r["model"], r["arm"], r["agent_mode"], r["human_policy"])].append(r)
+    out = ["| model | arm | mode | human | attack n | ASR (95% CI) | money to attacker CZK | in-mandate residual CZK "
            "| benign n | false-block (95% CI) | exceptions/100 | device prompts/100 | USD/100 |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
-    for (model, arm, human), rs in sorted(groups.items()):
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for (model, arm, mode, human), rs in sorted(groups.items()):
         att = [r for r in rs if r.get("kind") == "attack"]
         ben = [r for r in rs if r.get("kind") == "benign"]
         k = sum(r["attack_success"] for r in att)
         fb = sum(not r["utility_ok"] for r in ben)
         n = len(rs)
-        out.append(f"| {model.split(':')[0]} | {arm} | {human} | {len(att)} | {_pct(k, len(att))} "
+        out.append(f"| {model.split(':')[0]} | {arm} | {mode} | {human} | {len(att)} | {_pct(k, len(att))} "
                    f"| {sum(r.get('money_to_attacker_minor', 0) for r in att) / 100:,.0f} "
                    f"| {sum(r.get('excess_minor', 0) for r in att) / 100:,.0f} | {len(ben)} | {_pct(fb, len(ben))} "
                    f"| {100 * sum(r.get('exceptions', 0) for r in rs) / max(n, 1):.0f} "

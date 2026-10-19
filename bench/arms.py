@@ -9,6 +9,7 @@ meta records which gate produced each file.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -39,6 +40,7 @@ ARM_CONFIGS = {
     "A3": ArmConfig("A3", False, True, True, True, False, True),
 }
 
+EXTRACT_FIELDS = ("vendor_ico", "vendor_name", "invoice_no", "amount_minor", "currency", "vs", "due_date")
 WRITE_TOOLS = ("vendor.write", "mandate.write")
 _LEGACY_EXTRA: dict[str, dict[str, Any]] = {
     "vendor.write": {"args": {"vendor_id": {"type": "string"}, "iban": {"type": "string"}},
@@ -96,6 +98,8 @@ class Episode:
     truth: dict[str, Any]
     human_policy: str
     ui_lies: bool = False
+    quarantined: bool = False
+    extractor: Any = None  # callable(text) -> dict of typed invoice fields (quarantined mode, no tools)
     gate: Any = None
     rule_ids: set[str] = field(default_factory=set)
     lookups: int = 0
@@ -144,6 +148,9 @@ class Episode:
 
     # ------------------------------------------------------------ read tools
     def _wrap(self, text: str, source: str) -> str:
+        if self.quarantined:
+            # CaMeL-style: free text never reaches the planner, only an opaque handle (kept as [H] in hints).
+            return "txt_" + hashlib.sha256(f"{source}|{text}".encode()).hexdigest()[:8]
         if self.cfg.sanitize_inputs:
             out, dropped = sanitize(text, source=source)
             if dropped:
@@ -153,15 +160,22 @@ class Episode:
 
     def t_inbox_list(self, args: dict[str, Any]) -> dict[str, Any]:
         return {"emails": [{"email_id": e["email_id"], "from": e["from"], "subject": self._wrap(e["subject"], "subject"),
-                            "attachments": [a["filename"] for a in e["attachments"]]} for e in self.world.inbox]}
+                            "attachments": [self._fname(a) for a in e["attachments"]]} for e in self.world.inbox]}
+
+    def _fname(self, att: dict[str, Any]) -> dict[str, Any]:
+        name = self._wrap(att["filename"], "filename") if self.quarantined else att["filename"]
+        return {"doc_id": att["doc_id"], "filename": name}
 
     def t_inbox_read(self, args: dict[str, Any]) -> dict[str, Any]:
         em = next(e for e in self.world.inbox if e["email_id"] == args["email_id"])
         return {"email_id": em["email_id"], "from": em["from"], "subject": em["subject"],
-                "body": self._wrap(em["body"], "email"), "attachments": em["attachments"]}
+                "body": self._wrap(em["body"], "email"), "attachments": [self._fname(a) for a in em["attachments"]]}
 
     def t_invoice_extract(self, args: dict[str, Any]) -> dict[str, Any]:
         doc = self.world.docs[args["doc_id"]]
+        if self.quarantined:
+            draft = {k: v for k, v in (self.extractor(doc.get("text", "")) or {}).items() if k in EXTRACT_FIELDS}
+            return {"doc_id": doc["doc_id"], "draft": draft, "notes": self._wrap(doc.get("text", ""), "document")}
         draft = dict(doc.get("fields", {}))
         if not self.cfg.legacy_surface:
             draft.pop("iban", None)  # P3: the account comes from the registry, never from the document
