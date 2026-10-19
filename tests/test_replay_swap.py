@@ -73,3 +73,25 @@ def test_s5_swap():
     assert h.store.scan("ledger") == []
     # nonce binds deployment/purpose/subject: the subject hash differs per challenge
     assert ca["subject_hash"] != cb["subject_hash"] and ca["nonce"] != cb["nonce"]
+
+
+def test_signer_without_enroll_leaf_is_refused():
+    """Online "enrolled before used": a row written without its enroll leaf (or pointing at another leaf) is not an
+    enrolled signer, even if active for the role."""
+    from eth_account import Account
+
+    h = Harness()
+    ch = _pay_challenge(h)
+    ghost = Account.create()
+    h.store.put("enrolled_signers", {"address": ghost.address.lower(), "role": "clerk", "device": "GENUINE",
+                                     "active": True})  # no enroll_seq, no leaf
+    st, r = h.submit(ch, ghost)
+    assert (st, r["error"]) == (403, "unknown_signer")
+    other_seq = h.store.get("enrolled_signers", {"address": h.clerk.address.lower()})["enroll_seq"]
+    h.store.put("enrolled_signers", {"address": ghost.address.lower(), "role": "clerk", "device": "GENUINE",
+                                     "active": True, "enroll_seq": other_seq})  # borrows the clerk's leaf
+    st, r = h.submit(ch, ghost)
+    assert (st, r["error"]) == (403, "unknown_signer")
+    assert h.store.scan("ledger") == []
+    st, r = h.submit(ch, h.clerk)  # properly enrolled (row + leaf in one transaction)
+    assert st == 200 and r["effect"]["type"] == "payment_executed"

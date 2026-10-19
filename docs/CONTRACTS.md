@@ -227,7 +227,7 @@ Everything else lives in single-table **`main`** (`airgap-main`, PK `pk` = `<ent
 | `main` | `vendor_policies` | `vendor_policy#<ico>` / `v#<policy_v>` | hardware issuer profile signers (unchanged from v1) |
 | `main` | `nonces` | `nonce#<NONCE8>` / `0` | `nonce_secret`, `purpose`, `role`, `subject_id`, `template`, `params` S (canonical JSON), `profile`, `deployment`, `text`, `text_sha256`, `subject_hash`, `exp`, `used` BOOL, `used_at`?, `used_by`?, `result`?, `created_at` |
 | `main` | `counters` | `counter#<name>` / `0` | `value` N. Names: `mandate_no`, `proposal_no`, `change_no` |
-| `main` | `enrolled_signers` | `signer#<address>` / `0` | `role` (`clerk`\|`treasury`), `label`, `device` (`GENUINE`\|`EMULATOR`, **set by `tools/enroll.py`**), `device_model`, `firmware_version`, `cert_chain_sha256`?, `fw_hash`?, `derivation_path`, `enroll_sig`, `active` BOOL, `enrolled_at` |
+| `main` | `enrolled_signers` | `signer#<address>` / `0` | `role` (`clerk`\|`treasury`), `label`, `device` (`GENUINE`\|`EMULATOR`, **set by `tools/enroll.py`**), `device_model`, `firmware_version`, `cert_chain_sha256`?, `fw_hash`?, `derivation_path`, `enroll_sig`, `active` BOOL, `enrolled_at`, `enroll_seq` N (audit seq of this signer's `enroll` leaf; row and leaf are written in one transaction by `executor.store.signers.enroll()`) |
 | `main` | `inbox` | `email#<id>` / `0` | `s3_key`, `sha256`, `from_addr`, `from_domain`, `subject`, `received_at`, `dkim` M (ingest verdict); `gsi1` = (`domain#<d>`, `received_at`) |
 | `main` | `checkpoints` | `checkpoint#<log_id>` / `<size:012d>` | `note` S (signed-note text incl. cosignatures), `root_hash`, `created_at` |
 | `main` | `tool_calls` | `toolsession#<session_id>` / `<step:06d>` | `tool`, `args_sha256`, `result`, `untrusted_read` BOOL, `seq` |
@@ -377,7 +377,8 @@ code_sha256, log_origin, log_pubkey_id, log_vkey, w1_vkey, w2_vkey}` (vkeys let 
    the stored `text` and its `subject_hash` must equal `sha256(canonical_json(stored subject))` (else 500 `internal_error`).
 4. If `displayed_text` given and ≠ re-rendered text → 403 `render_mismatch` (nonce **not** consumed). Diagnostic only.
 5. `sig` malformed or recovery fails (`executor.sig.verify_eip191`) → 403 `bad_signature`.
-6. Recovered address enrolled and active for `role` (bank roles: `enrolled_signers`; vendor roles: current
+6. Recovered address enrolled and active for `role` (bank roles: `enrolled_signers`, whose `enroll_seq` must point
+   at an `enroll` leaf for the same address and role — "enrolled before used", checked online; vendor roles: current
    `vendor_policies`) → else 403 `unknown_signer`.
    6b. For `CHG` in `SIG_TREASURY` and for `MANDATE` 2/2: the recovered address ≠ the first signer → else 403
    `sigs_insufficient`; profile `prod` requires `device = GENUINE` for treasury → else 403 `emulator_not_allowed`.
