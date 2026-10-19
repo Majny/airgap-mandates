@@ -17,7 +17,7 @@ cp -R executor agent witness "$OUT"/
 mkdir -p "$OUT/contracts" && cp -R contracts/schemas "$OUT/contracts/" && cp contracts/__init__.py "$OUT/contracts/"
 [ -d data ] && cp -R data "$OUT/" || true
 cp infra/lambda_src/*.py "$OUT"/
-find "$OUT" -name "__pycache__" -prune -exec rm -rf {} + ; find "$OUT" -name "*.dist-info" -prune -exec rm -rf {} +
+find "$OUT" -name "__pycache__" -prune -exec rm -rf {} +  # keep *.dist-info: importlib.metadata needs it
 # deterministic zip (sorted, fixed mtime) so CodeSha256 is reproducible
 (cd "$OUT" && find . -type f | LC_ALL=C sort | TZ=UTC xargs touch -t 202610190000 && \
   find . -type f | LC_ALL=C sort | zip -q -X -D ../lambda.zip -@)

@@ -99,7 +99,8 @@ class AirgapStack(Stack):
 
         human = iam.AccountRootPrincipal()  # laptops (TeamAdmin SSO) assume host/auditor/... via sts:AssumeRole
         r_exec = role("executor-api")
-        r_tools = role("tools")
+        # assumable by operators too, so bench/e2e can play the tools λ (TeamAdmin is account admin anyway; §9 limit)
+        r_tools = role("tools", iam.CompositePrincipal(lam, human), [basic])
         r_ckpt = role("checkpointer")
         r_w1 = role("witness")
         r_agent = role("agent", managed=[basic, vpc_access])
@@ -149,8 +150,9 @@ class AirgapStack(Stack):
                     "AIRGAP_TABLE_PREFIX": PREFIX, "AIRGAP_INBOX_BUCKET": inbox.bucket_name,
                     "AIRGAP_ANCHOR_BUCKET": anchor.bucket_name, "AIRGAP_KMS_KEY_ID": k_log.key_id,
                     "AIRGAP_CODE_SHA256": code_sha256_hex(), "AIRGAP_DATA_DIR": "data",
-                    # executor does not hold kms:Sign on the log key: checkpoints come from the scheduled tick
-                    "AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "1000000000"}
+                    # only the checkpointer holds kms:Sign on the log key: no inline checkpoints anywhere else
+                    # (log.checkpoint_due is also true when no checkpoint exists yet; the first tick creates one)
+                    "AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "1000000000", "AIRGAP_CHECKPOINT_MAX_SECONDS": "1000000000"}
 
         def fn(name: str, handler: str, r: iam.Role, *, env: dict[str, str] | None = None, timeout: int = 30,
                memory: int = 1024, **extra) -> lambda_.Function:
@@ -164,7 +166,8 @@ class AirgapStack(Stack):
                     env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id})  # egress E-GUARDRAILS 2nd opinion
         f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1,
                   env={"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""})
-        f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60)
+        f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60,
+                    env={"AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "10", "AIRGAP_CHECKPOINT_MAX_SECONDS": "30"})
 
         # ------------------------------------------------------------ regional API (IAM)
         api = apigw.RestApi(self, "Api", rest_api_name=f"{PREFIX}api",
@@ -183,8 +186,8 @@ class AirgapStack(Stack):
         def invoke(method: str, path: str, a: apigw.RestApi = api) -> str:
             return a.arn_for_execute_api(method, path, "prod")
 
-        f_ckpt.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness/add-checkpoint")
-        f_exec.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness/add-checkpoint")
+        f_ckpt.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness")  # base: the client appends /add-checkpoint
+        f_exec.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness")  # base: the client appends /add-checkpoint
 
         # ------------------------------------------------------------ agent VPC (no IGW, no NAT)
         vpc = ec2.Vpc(self, "AgentVpc", vpc_name=f"{PREFIX}agent", max_azs=1, nat_gateways=0,
