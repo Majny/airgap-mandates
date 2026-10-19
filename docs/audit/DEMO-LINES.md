@@ -17,6 +17,8 @@ comes out. Owner: WS-B. Anything simulated is labelled; the last section lists w
 | L8 | "The witness key and the log key are different keys; the witness never writes to the log." | `witness/witness.py` (no audit writes; trusts a pinned log key `AIRGAP_W1_LOG_VKEY`) · CONTRACTS §7.3 |
 | L9 | "A payment receipt is self-contained: inclusion proof plus a cosigned checkpoint. Amount and IBAN on it are covered by the signatures." | `.venv/bin/pytest -q tests/test_receipt.py` |
 | L10 | "An auditor can pin the keys: a log re-signed under other keys is rejected." | `.venv/bin/pytest -q tests/test_verify_audit.py -k "pinned or trust_keys"` |
+| L12 | "Every approval in the log is re-checked offline: we re-render the exact text the device showed and recover the signer from the signature." | `.venv/bin/pytest -q tests/test_audit_fuzz.py::test_real_executor_run_verifies` · `tests/test_demo_bundle.py::test_bundle_green_with_replay_receipt_green` (S2) |
+| L13 | "Wi-Fi off, one command: stock Go checks the checkpoint, the bundle and receipt verify with pinned keys, a one-byte edit goes red at `seq N`." | `make offline-demo` (after `make demo-bundle`; `tests/test_demo_bundle.py::test_offline_demo_all_steps`) |
 | L11 | "Every execution is covered by a witnessed checkpoint within 60 seconds." | `tests/test_audit_fuzz.py::test_s6_checkpoint_lag` (simulated clock; on AWS the 30 s tick is EventBridge, WS-E) (S6) |
 
 ## Labelled as simulated (say the label)
@@ -28,9 +30,8 @@ comes out. Owner: WS-B. Anything simulated is labelled; the last section lists w
 
 ## Do not say (yet)
 
-- "Every signature in the log is re-verified offline from the device text." The re-render matches `text_sha256`
-  on real leaves, but accepted signature leaves are currently logged without `sig` (WS-A fix pending). Until
-  `tests/test_audit_fuzz.py::test_real_executor_run_verifies` passes, the EIP-191 half of S2 is not offline-verifiable.
+- "Keys pinned on stage prove anything by themselves." In the demo pack, `trust-keys.json` ships next to the bundle;
+  in real use the auditor gets the keys out of band (`/health`, slide, QR). Say that.
 - "Witness checked by stock Go." Stock `sumdb/note` cannot verify the 0x04 cosignature: `noteverify` prints
   `UNCHECKED` for it. The W1 cosignature was cross-checked against torchwood once, manually; in CI it is checked by
   our Python verifier.
