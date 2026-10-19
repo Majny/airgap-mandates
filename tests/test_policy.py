@@ -48,7 +48,8 @@ def _mandate_entities(**over):
 
 def _ctx(**over):
     c = dict(amount_minor=1_450_000, vop="MTCH", reg_hit=True, warn_hit=False, block_hit=False, warn_count=0, anom=0,
-             dup=False, split_sum=0, z_hit=False, now=1_792_400_000, attest_count=0)
+             dup=False, split_sum=0, z_hit=False, now=1_792_400_000, attest_count=0,
+             amount_doc_block=False)
     c.update(over)
     return c
 

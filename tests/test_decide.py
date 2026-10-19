@@ -144,6 +144,9 @@ TABLE = [
      ("allow", [])),
     ("block", dict(facts=(VOP, W, fact("F-WARNLIST", "BLOCK", "WARNLIST HIT"))),
      ("deny", ["F-PSP", "F-WARNLIST", "I-BLOCK"])),
+    ("amount != doc", dict(facts=(VOP, fact("F-AMOUNT-DOC", "BLOCK", "AMOUNT != DOC"))),
+     ("deny", ["F-AMOUNT-DOC", "I-AMOUNT", "I-BLOCK"])),
+    ("amount = doc", dict(facts=(VOP, fact("F-AMOUNT-DOC", "INFO", "AMOUNT = DOC"))), ("allow", [])),
     ("block beats mandate", dict(m=None, facts=(fact("F-VOP", "BLOCK", "VOP NMTC", code="NMTC"),)),
      ("deny", ["F-VOP", "I-BLOCK"])),
 ]
