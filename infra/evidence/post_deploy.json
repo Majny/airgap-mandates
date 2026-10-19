@@ -1,0 +1,15 @@
+{
+  "api_url": "https://ehhxkpbfcc.execute-api.eu-central-1.amazonaws.com/prod",
+  "agent_tools_url": "https://2z9jam0k9j.execute-api.eu-central-1.amazonaws.com/prod",
+  "vkeys": {
+    "log": "airgap.example/demo/audit+05e38094+AYMB6t/Q61AckfFZgHBU50wiDz+u2PMzsCnuFTyhHJn2",
+    "w1": "airgap.example/demo/w1+a2e46ba2+BAx0bd3NtelGOJf81qgBU3uIEEGhPwhQTFiG21pddB3q"
+  },
+  "code_sha256": "040c6bbb36b462eec3f6b2ff5320157adf1c95b49b8befbd55a91078e6bcbde2",
+  "w2_instance": "i-0bc5865c1ddae7b1d",
+  "next": [
+    "infra/w2_ctl.sh trust '<log vkey>'",
+    "infra/w2_ctl.sh vkey -> AIRGAP_W2_VKEY",
+    "infra/iam_evidence.sh"
+  ]
+}

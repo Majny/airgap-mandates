@@ -99,7 +99,8 @@ class AirgapStack(Stack):
 
         human = iam.AccountRootPrincipal()  # laptops (TeamAdmin SSO) assume host/auditor/... via sts:AssumeRole
         r_exec = role("executor-api")
-        r_tools = role("tools")
+        # assumable by operators too, so bench/e2e can play the tools λ (TeamAdmin is account admin anyway; §9 limit)
+        r_tools = role("tools", iam.CompositePrincipal(lam, human), [basic])
         r_ckpt = role("checkpointer")
         r_w1 = role("witness")
         r_agent = role("agent", managed=[basic, vpc_access])
@@ -127,7 +128,7 @@ class AirgapStack(Stack):
                            policy=iam.PolicyDocument(statements=[admin, sign, read]))
 
         k_log = ed_key("log", r_ckpt, [r_exec, r_w1, r_host, r_auditor, r_relay])
-        k_w1 = ed_key("w1", r_w1, [r_exec, r_host, r_auditor, r_relay])
+        k_w1 = ed_key("w1", r_w1, [r_exec, r_ckpt, r_host, r_auditor, r_relay])
 
         # ------------------------------------------------------------ Guardrails (A1 input + egress 2nd opinion)
         iban_rx = r"[A-Z]{2}[0-9]{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,4})?"
@@ -149,8 +150,9 @@ class AirgapStack(Stack):
                     "AIRGAP_TABLE_PREFIX": PREFIX, "AIRGAP_INBOX_BUCKET": inbox.bucket_name,
                     "AIRGAP_ANCHOR_BUCKET": anchor.bucket_name, "AIRGAP_KMS_KEY_ID": k_log.key_id,
                     "AIRGAP_CODE_SHA256": code_sha256_hex(), "AIRGAP_DATA_DIR": "data",
-                    # executor does not hold kms:Sign on the log key: checkpoints come from the scheduled tick
-                    "AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "1000000000"}
+                    # only the checkpointer holds kms:Sign on the log key: no inline checkpoints anywhere else
+                    # (log.checkpoint_due is also true when no checkpoint exists yet; the first tick creates one)
+                    "AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "1000000000", "AIRGAP_CHECKPOINT_MAX_SECONDS": "1000000000"}
 
         def fn(name: str, handler: str, r: iam.Role, *, env: dict[str, str] | None = None, timeout: int = 30,
                memory: int = 1024, **extra) -> lambda_.Function:
@@ -161,10 +163,13 @@ class AirgapStack(Stack):
                                     log_retention=logs.RetentionDays.ONE_WEEK, **extra)
 
         f_exec = fn("executor", "executor.handler.lambda_handler", r_exec,
-                    env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id})  # egress E-GUARDRAILS 2nd opinion
+                    env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id,  # egress E-GUARDRAILS 2nd opinion
+                         "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})  # GetPublicKey only (vkeys in /health, export)
         f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1,
                   env={"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""})
-        f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60)
+        f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60,
+                    env={"AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "10", "AIRGAP_CHECKPOINT_MAX_SECONDS": "30",
+                         "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})
 
         # ------------------------------------------------------------ regional API (IAM)
         api = apigw.RestApi(self, "Api", rest_api_name=f"{PREFIX}api",
@@ -183,8 +188,8 @@ class AirgapStack(Stack):
         def invoke(method: str, path: str, a: apigw.RestApi = api) -> str:
             return a.arn_for_execute_api(method, path, "prod")
 
-        f_ckpt.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness/add-checkpoint")
-        f_exec.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness/add-checkpoint")
+        f_ckpt.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness")  # base: the client appends /add-checkpoint
+        f_exec.add_environment("AIRGAP_WITNESS_URL", f"{api_url}/witness")  # base: the client appends /add-checkpoint
 
         # ------------------------------------------------------------ agent VPC (no IGW, no NAT)
         vpc = ec2.Vpc(self, "AgentVpc", vpc_name=f"{PREFIX}agent", max_azs=1, nat_gateways=0,
@@ -284,8 +289,12 @@ class AirgapStack(Stack):
                                                   resources=[invoke("POST", "/tools/*", papi)]))
         deny = iam.Effect.DENY
         r_agent.add_to_policy(iam.PolicyStatement(sid="DenyState", effect=deny, actions=[
-            "dynamodb:*", "kms:*", "secretsmanager:*", "states:*", "s3:Put*", "s3:Delete*", "lambda:InvokeFunction",
-            "iam:*", "sts:AssumeRole"], resources=["*"]))
+            "dynamodb:*", "kms:Sign", "kms:GenerateDataKey*", "secretsmanager:*", "states:*", "s3:Put*", "s3:Delete*",
+            "lambda:InvokeFunction", "iam:*", "sts:AssumeRole"], resources=["*"]))
+        # kms:* on our keys; kms:Decrypt elsewhere stays possible because Lambda decrypts the function's own env
+        # vars (aws/lambda key) with the execution role
+        r_agent.add_to_policy(iam.PolicyStatement(sid="DenyOurKeys", effect=deny, actions=["kms:*"],
+                                                  resources=[k_log.key_arn, k_w1.key_arn]))
         r_agent.add_to_policy(iam.PolicyStatement(sid="DenyMoneyRoutes", effect=deny, actions=["execute-api:Invoke"],
                                                   resources=[invoke("*", "/signatures"), invoke("*", "/mandates*"),
                                                              invoke("*", "/changes/*/approve"), invoke("*", "/proposals"),
