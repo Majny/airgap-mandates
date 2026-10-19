@@ -179,3 +179,17 @@ def may_issue_chg_challenge(change: dict[str, Any], facts: FactSet, *, now: Any,
                            "block_hit": bool(blocks), "now": inv.epoch(now)}}
     allowed, forbids = _authorize(policy_sets(policy)["change"], request, [principal, resource], policy["cedar_schema"])
     return allowed and not blocks, sorted(set(forbids) | blocks)
+
+
+def replay_decision(leaf: dict[str, Any], policy: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+    """S12 hook for tools/verify_audit.py: re-run decide() on a `decision` leaf's data.inputs with the policy
+    material whose hash is leaf.policy_hash. Returns (match, recomputed {decision, rule_ids, mandate_id})."""
+    if policy_hash_of(policy) != leaf.get("policy_hash"):
+        raise ValueError("policy material does not match the leaf policy_hash")
+    inputs = leaf["data"]["inputs"]
+    if inputs_digest(inputs["subject"], inputs["facts"], inputs["state"]) != leaf.get("inputs_digest"):
+        return False, {"error": "inputs_digest mismatch"}
+    got = decide(inputs["subject"], inputs["facts"], inputs["state"], policy)
+    out = {"decision": got["decision"], "rule_ids": got["rule_ids"], "mandate_id": got["mandate_id"]}
+    d = leaf["data"]
+    return out == {"decision": d["decision"], "rule_ids": d["rule_ids"], "mandate_id": d["mandate_id"]}, out
