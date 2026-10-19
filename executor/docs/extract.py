@@ -1,4 +1,4 @@
-"""Documents and deterministic InvoiceDraft extraction for the tools λ (CONTRACTS.md v2 §4.2 invoice_ref, §4.5).
+"""Documents and deterministic InvoiceDraft extraction (CONTRACTS.md v2 §4.2 invoice_ref, §4.5). Pure, no I/O.
 
 A document is one part of an inbox email: the text body or a text-like attachment (ISDOC XML, SPAYD/QR text, .txt).
 doc_id = "doc_" + sha256(part bytes)[:16], so invoice_ref is a provenance hash of exactly what was extracted.
@@ -155,3 +155,29 @@ def extract_draft(doc: dict[str, Any]) -> dict[str, Any]:
     handles["body"] = handle_of(text)
     return {"doc_id": doc["doc_id"], "sha256": doc["sha256"], "source": source, "fields": fields,
             "handles": handles, "missing": sorted(k for k, v in fields.items() if v is None)}
+
+
+def check_against_document(draft: dict[str, Any], claimed: dict[str, Any], vendor_ico: str | None
+                           ) -> list[tuple[str, str]]:
+    """[(rule_id, reason)] where `claimed` disagrees with the document. Empty = consistent.
+
+    claimed keys (all optional except amount_minor): amount_minor, reason_code, currency, vs, due (or due_date),
+    invoice_no. Rules: T-DOC-MISSING (no machine-readable amount/currency: fail closed); T-AMOUNT-MISMATCH (higher than
+    the document, or lower without reason_code PARTIAL); T-DOC-MISMATCH (other field differs, or the document's
+    supplier ICO is not the vendor's). Shared by the tools λ (A2) and the facts engine (F-AMOUNT-DOC, A3).
+    """
+    f = draft["fields"]
+    if f["amount_minor"] is None or f["currency"] is None:
+        return [("T-DOC-MISSING", "document has no machine-readable amount/currency")]
+    out: list[tuple[str, str]] = []
+    amount = int(claimed["amount_minor"])
+    if amount > f["amount_minor"] or (amount < f["amount_minor"] and claimed.get("reason_code") != "PARTIAL"):
+        out.append(("T-AMOUNT-MISMATCH", f"amount {amount} != document {f['amount_minor']}"))
+    due = claimed.get("due") or claimed.get("due_date")
+    for name, value, field in (("currency", claimed.get("currency"), "currency"), ("vs", claimed.get("vs"), "vs"),
+                               ("due", due, "due_date"), ("invoice_no", claimed.get("invoice_no"), "invoice_no")):
+        if value and f[field] and str(value) != str(f[field]):
+            out.append(("T-DOC-MISMATCH", f"{name} {value!r} != document {f[field]!r}"))
+    if f["supplier_ico"] and f["supplier_ico"] != vendor_ico:
+        out.append(("T-DOC-MISMATCH", "document supplier ICO is not this vendor"))
+    return out

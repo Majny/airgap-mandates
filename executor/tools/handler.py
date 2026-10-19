@@ -17,7 +17,7 @@ from executor.config import now
 from executor.egress import allowlist
 from executor.errors import ApiError, ErrorCode
 from executor.store import shims
-from executor.tools import extract
+from executor.docs import extract
 from executor.tools import policy as tool_policy
 from executor.tools.manifest import DECOY_TOOLS, TOOL_MANIFEST, manifest_sha256
 
@@ -225,23 +225,10 @@ def invoice_from_document(args: dict[str, Any], draft: dict[str, Any], vendor: d
     fails closed (T-DOC-MISSING). Returns (invoice, WARN rule ids for fallbacks).
     """
     f = draft["fields"]
-    forbid: list[str] = []
-    why: list[str] = []
-    if f["amount_minor"] is None or f["currency"] is None:
-        raise DocMismatch(["T-DOC-MISSING"], "document has no machine-readable amount/currency")
+    problems = extract.check_against_document(draft, args, vendor.get("ico"))
+    if problems:
+        raise DocMismatch(sorted({r for r, _ in problems}), "; ".join(w for _, w in problems)[:200])
     amount = int(args["amount_minor"])
-    if amount > f["amount_minor"] or (amount < f["amount_minor"] and args.get("reason_code") != "PARTIAL"):
-        forbid.append("T-AMOUNT-MISMATCH")
-        why.append(f"amount {amount} != document {f['amount_minor']}")
-    for arg, field in (("currency", "currency"), ("vs", "vs"), ("due", "due_date"), ("invoice_no", "invoice_no")):
-        if args.get(arg) and f[field] and str(args[arg]) != str(f[field]):
-            forbid.append("T-DOC-MISMATCH")
-            why.append(f"{arg} {args[arg]!r} != document {f[field]!r}")
-    if f["supplier_ico"] and f["supplier_ico"] != vendor.get("ico"):
-        forbid.append("T-DOC-MISMATCH")
-        why.append("document supplier ICO is not this vendor")
-    if forbid:
-        raise DocMismatch(sorted(set(forbid)), "; ".join(why)[:200])
 
     warn: list[str] = []
     issue = f["issue_date"]
