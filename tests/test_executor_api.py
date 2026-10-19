@@ -253,3 +253,20 @@ def test_proposal_without_source_email_is_denied_without_challenge():
     assert st == 201 and r["decision"]["decision"] == "allow", r["decision"]
     doc = next(f for f in r["decision"]["facts"] if f["id"] == "F-AMOUNT-DOC")
     assert (doc["severity"], doc["display_line"]) == ("INFO", "AMOUNT OK DOC")
+
+
+def test_split_needs_a_prior_payment():
+    """A single over-cap payment is I-PER only (no SPLIT on the device); 2 x 50000 CZK to one vendor in 24 h is a
+    split: the first pays under the mandate, the second steps up with I-SPLIT and SPLIT 24H on the device."""
+    h = Harness()
+    h.mandate()
+    st, r = h.propose(9_000_000, vendor="ven_87654321", no="BS-OVER-1")
+    assert r["decision"]["decision"] == "challenge", r["decision"]
+    assert "I-PER" in r["decision"]["rule_ids"] and "I-SPLIT" not in r["decision"]["rule_ids"]
+    assert "F-SPLIT" not in r["decision"]["rule_ids"] and "SPLIT" not in r["decision"]["challenge"]["text"]
+    st, r = h.propose(5_000_000, no="FV-SPLIT-1", issue="2026-10-01")
+    assert r["decision"]["decision"] == "allow", r["decision"]
+    st, r = h.propose(5_000_000, no="FV-SPLIT-2", issue="2026-10-12")
+    d = r["decision"]
+    assert d["decision"] == "challenge" and {"I-SPLIT", "F-SPLIT"} <= set(d["rule_ids"]), d["rule_ids"]
+    assert "SPLIT 24H" in d["challenge"]["text"]

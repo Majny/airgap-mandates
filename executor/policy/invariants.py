@@ -85,12 +85,22 @@ def is_duplicate(invoice: dict[str, Any], proposals: list[dict[str, Any]], *, pr
 
 # ---------------------------------------------------------------- I-SPLIT / I-Z
 
-def split_sum(invoice: dict[str, Any], history: list[dict[str, Any]], *, now: Any) -> int:
-    """I-SPLIT: executed sum for the vendor with executed_at in (now - 24 h, now] (minor units)."""
+def _split_window(invoice: dict[str, Any], history: list[dict[str, Any]], now: Any) -> list[dict[str, Any]]:
     end = to_datetime(now)
     start = end - timedelta(hours=PARAMS["I-SPLIT"]["split_window_hours"])
-    return sum(int(r["amount_minor"]) for r in history
-               if r.get("vendor_id") == invoice["vendor_id"] and start < to_datetime(r["executed_at"]) <= end)
+    return [r for r in history
+            if r.get("vendor_id") == invoice["vendor_id"] and start < to_datetime(r["executed_at"]) <= end]
+
+
+def split_sum(invoice: dict[str, Any], history: list[dict[str, Any]], *, now: Any) -> int:
+    """I-SPLIT: executed sum for the vendor with executed_at in (now - 24 h, now] (minor units)."""
+    return sum(int(r["amount_minor"]) for r in _split_window(invoice, history, now))
+
+
+def split_count(invoice: dict[str, Any], history: list[dict[str, Any]], *, now: Any) -> int:
+    """I-SPLIT: number of executed payments to the vendor in the same window. A split needs at least one earlier
+    payment: a single over-cap payment is I-PER, not a split."""
+    return len(_split_window(invoice, history, now))
 
 
 def _median(xs: list[int] | list[Fraction]) -> Fraction:
@@ -143,7 +153,7 @@ def _anom(ff: list[dict[str, Any]]) -> int:
 
 def cedar_context(subject: dict[str, Any], facts: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     """Context for action `pay` per cedar schema: amount_minor, vop, reg_hit, warn_hit, block_hit, warn_count,
-    anom, dup, split_sum, z_hit, now (epoch s), attest_count, amount_doc_block. [F] only."""
+    anom, dup, split_sum, split_count, z_hit, now (epoch s), attest_count, amount_doc_block. [F] only."""
     inv = subject["invoice"]
     ff = f_facts(facts)
     warn = [f for f in ff if f["severity"] == "WARN"]
@@ -158,6 +168,7 @@ def cedar_context(subject: dict[str, Any], facts: dict[str, Any], state: dict[st
         "anom": _anom(ff),
         "dup": is_duplicate(inv, state.get("proposals") or [], proposal_id=subject.get("proposal_id")),
         "split_sum": split_sum(inv, state.get("history") or [], now=state["now"]),
+        "split_count": split_count(inv, state.get("history") or [], now=state["now"]),
         "z_hit": z_hit(inv, state.get("history") or []),
         "now": epoch(state["now"]),
         "attest_count": 0,

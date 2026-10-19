@@ -5,7 +5,7 @@
     "nonce": "91BC02E1",
     "role": "clerk",
     "sig": "0x74ca3711f87a29690b82abeced5eae31c7a87a561dcde86aa6eb8c0a7e967cd774ca3711f87a29690b82abeced5eae31c7a87a561dcde86aa6eb8c0a7e967cd71b",
-    "displayed_text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE CLERK 1/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E1\nP 3909f806c26877\nH 1b9db1002f5ac6"
+    "displayed_text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE CLERK 1/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E1\nP d33008c432bad2\nH c8afa02a18320a"
   },
   "response": {
     "nonce": "91BC02E1",
@@ -33,7 +33,7 @@
       "max_anom": 40,
       "payee_registry_version": 31,
       "payee_registry_hash": "54294c749c0715b2bf15e4e85413584e0b2fd8c2c3bd1f6c5541994fe7595f19",
-      "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+      "policy_hash": "d33008c432bad2a31eff226b8c1b4e292dee360197149f93646b7d95aeddf921",
       "sig_required": 2,
       "signers": [
         {
@@ -57,9 +57,9 @@
       "deployment": "DEMO",
       "profile": "safe3-mono-16x4",
       "exp": "2026-10-19T12:06:00Z",
-      "text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE TREAS 2/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E2\nP 3909f806c26877\nH fc0f737f2dee5f",
-      "text_sha256": "327cc43f9226d078d8ee607143e9c5abeff012ab13768f2a4b7213cbcccfa31a",
-      "subject_hash": "fc0f737f2dee5f39851d090238a817b0bd798b7e9c2c5cd7fff7bee3065cb716",
+      "text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE TREAS 2/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E2\nP d33008c432bad2\nH 381ff4db7e71bf",
+      "text_sha256": "fcbfeccc8693ef872dab3cbd0395b976dbf738f598d918f7b043b5d312ac2be0",
+      "subject_hash": "381ff4db7e71bf477032fd0c675159c664b40b58e9fbaafcc4f049bc5b87b033",
       "width": 16,
       "lines_per_page": 4,
       "pages": 4,

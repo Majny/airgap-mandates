@@ -48,7 +48,7 @@ def _mandate_entities(**over):
 
 def _ctx(**over):
     c = dict(amount_minor=1_450_000, vop="MTCH", reg_hit=True, warn_hit=False, block_hit=False, warn_count=0, anom=0,
-             dup=False, split_sum=0, z_hit=False, now=1_792_400_000, attest_count=0,
+             dup=False, split_sum=0, split_count=0, z_hit=False, now=1_792_400_000, attest_count=0,
              amount_doc_block=False)
     c.update(over)
     return c
@@ -67,7 +67,9 @@ def test_tri_state_semantics_smoke():
     assert _authz("hard_deny", _ctx()) == (True, ["P-BASE"])
     assert _authz("mandate_allow", _ctx()) == (True, ["P-MANDATE"])
     allowed, ids = _authz("mandate_allow", _ctx(amount_minor=12_500_050, warn_hit=True, warn_count=1))
-    assert not allowed and ids == ["I-PER", "I-SPLIT", "I-WARN"]
+    assert not allowed and ids == ["I-PER", "I-WARN"]  # one over-cap payment, no prior: not a split
+    allowed, ids = _authz("mandate_allow", _ctx(amount_minor=5_000_000, split_sum=5_000_000, split_count=1))
+    assert not allowed and ids == ["I-SPLIT"]
     allowed, ids = _authz("hard_deny", _ctx(block_hit=True, dup=True))
     assert not allowed and ids == ["I-BLOCK", "I-DUP"]
     allowed, ids = _authz("mandate_allow", _ctx(), status="PENDING_SIG_CLERK")

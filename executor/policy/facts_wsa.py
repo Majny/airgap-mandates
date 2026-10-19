@@ -42,10 +42,10 @@ def wsa_facts(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> 
 
     history = state.get("history") or []
     if active is not None:
-        s = inv.split_sum(invoice, history, now=now)
-        if s + amount > int(active["max_per_payment_minor"]):
+        s, n = inv.split_sum(invoice, history, now=now), inv.split_count(invoice, history, now=now)
+        if n > 0 and s + amount > int(active["max_per_payment_minor"]):  # a single over-cap payment is I-PER only
             out.append(_fact("F-SPLIT", "split", "Vendor total in 24 h above per-payment cap", "SPLIT 24H",
-                             {"split_sum_minor": s, "amount_minor": amount,
+                             {"split_sum_minor": s, "split_count": n, "amount_minor": amount,
                               "max_per_payment_minor": int(active["max_per_payment_minor"])}))
 
     if inv.z_hit(invoice, history):

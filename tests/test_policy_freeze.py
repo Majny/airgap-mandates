@@ -7,7 +7,7 @@ executor/render.TRANSLIT (WS-C). Everything else (render layout, display lines, 
 """
 from executor.policy import rules
 
-FROZEN_POLICY_HASH = "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd"
+FROZEN_POLICY_HASH = "d33008c432bad2a31eff226b8c1b4e292dee360197149f93646b7d95aeddf921"
 
 
 def test_policy_hash_is_frozen():

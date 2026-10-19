@@ -42,7 +42,8 @@ when { principal.status == "ACTIVE" && (context.anom >= principal.max_anom) };
 
 @id("I-SPLIT")
 forbid (principal is Mandate, action == Action::"pay", resource)
-when { principal.status == "ACTIVE" && (context.split_sum + context.amount_minor > principal.max_per_payment_minor) };
+when { principal.status == "ACTIVE" && (context.split_count > 0 &&
+         context.split_sum + context.amount_minor > principal.max_per_payment_minor) };
 
 @id("I-Z")
 forbid (principal is Mandate, action == Action::"pay", resource)

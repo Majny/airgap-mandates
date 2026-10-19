@@ -59,6 +59,7 @@
               "anom": {"type": "Long"},
               "dup": {"type": "Boolean"},
               "split_sum": {"type": "Long"},
+              "split_count": {"type": "Long"},
               "z_hit": {"type": "Boolean"},
               "now": {"type": "Long"},
               "attest_count": {"type": "Long"},
