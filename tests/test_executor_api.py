@@ -129,11 +129,7 @@ def test_health_vendors_pain001_and_receiptless_paths():
     h = Harness()
     st, r = h.call("GET", "/health")
     assert st == 200 and r["log_vkey"] and r["w1_vkey"]
-    from tests.test_contracts import SCHEMAS
-    import json as _json
-
-    props = _json.loads((SCHEMAS / "health.response.json").read_text())["properties"]
-    validate({k: v for k, v in r.items() if k in props}, "health.response")  # vkeys: schema update pending
+    validate(r, "health.response")
     st, v = h.call("GET", "/vendors")
     validate(v, "vendor_list.response")
     h.mandate()
