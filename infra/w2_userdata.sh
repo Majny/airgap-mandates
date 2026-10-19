@@ -1,8 +1,10 @@
 # W2 = unmodified litewitness (filippo.io/torchwood v0.10.0), witness/w2/README.md. Listens on 127.0.0.1:7380 only;
 # reached via SSM port forwarding (infra/w2_ctl.sh forward). Key lives in a dedicated ssh-agent.
 set -eux
+# t4g.nano has 0.5 GB RAM: dnf and the Go build get OOM-killed without swap
+if [ ! -f /swapfile ]; then dd if=/dev/zero of=/swapfile bs=1M count=2048; chmod 600 /swapfile; mkswap /swapfile; swapon /swapfile; echo '/swapfile swap swap defaults 0 0' >> /etc/fstab; fi
 dnf install -y golang openssh-clients
-export HOME=/root GOPATH=/root/go GOBIN=/opt/w2/bin
+export HOME=/root GOPATH=/root/go GOBIN=/opt/w2/bin GOTOOLCHAIN=auto  # torchwood v0.10.0 needs go >= 1.27; AL2023 ships 1.26
 mkdir -p /opt/w2/bin /opt/w2/state
 go install filippo.io/torchwood/cmd/litewitness@v0.10.0 filippo.io/torchwood/cmd/witnessctl@v0.10.0
 [ -f /opt/w2/state/w2key ] || ssh-keygen -q -t ed25519 -N "" -C airgap-w2 -f /opt/w2/state/w2key

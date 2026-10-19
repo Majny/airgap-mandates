@@ -35,12 +35,24 @@ def main() -> None:
     ap.add_argument("--yes", action="store_true")
     if not ap.parse_args().yes:
         sys.exit("refusing without --yes (deletes all demo data in the airgap-* tables)")
-    for name in TABLES:
-        print(f"airgap-{name}: deleted {empty('airgap-' + name)} items")
-    from infra.aws_e2e import seed
+    sch = boto3.client("scheduler", region_name=REGION)
+    tick = sch.get_schedule(Name="airgap-tick")
 
-    clerk, treasury = seed()
-    print("re-seeded registry; signers", clerk.address, treasury.address)
+    def set_tick(state: str) -> None:  # pause the 1-min checkpoint tick so it cannot race the wipe
+        sch.update_schedule(Name="airgap-tick", State=state, ScheduleExpression=tick["ScheduleExpression"],
+                            FlexibleTimeWindow=tick["FlexibleTimeWindow"], Target=tick["Target"])
+
+    set_tick("DISABLED")
+    try:
+        for name in TABLES:
+            print(f"airgap-{name}: deleted {empty('airgap-' + name)} items")
+        from infra.aws_e2e import seed
+
+        clerk, treasury = seed()
+        print("re-seeded registry; signers", clerk.address, treasury.address)
+    finally:
+        set_tick("ENABLED")
+        print("tick re-enabled")
 
 
 if __name__ == "__main__":
