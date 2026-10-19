@@ -258,6 +258,10 @@ def main() -> None:
             st.rerun()
     title, tab_name, cue = next(b for b in BEATS if b[0] == beat)
     st.markdown(f"### {title}  \n{cue}  \n*look at: {tab_name}*")
+    clip = Path(__file__).resolve().parent.parent / "demo" / "assets" / "synthetic_cfo_call.mp3"
+    if title.startswith("1:35") and clip.exists():
+        st.caption("SYNTHETIC VOICE (Amazon Polly), fictional person: the 'CFO' pressing the clerk")
+        st.audio(clip.read_bytes(), format="audio/mpeg")
     if emulator_only():
         st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 5 attached)</span>',
                     unsafe_allow_html=True)
