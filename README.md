@@ -4,32 +4,38 @@
 
 The FinTechers Hackathon 2026 · Track 3 "Securing the agentic bank".
 
-A bank back-office AI agent proposes payments but holds no write credential. An executor outside the operator's laptop pays only within a mandate signed on a hardware device (Trezor Safe 5), or after a human signs exactly what the device display shows — and the display shows only facts the executor verified itself. Payee changes require a supplier attestation (2-of-3) and dual control on our side. Every decision lands in an offline-verifiable Merkle audit log.
+A bank back-office AI agent proposes payments but holds no write credential. An executor outside the operator's laptop pays only within a mandate signed on a hardware device (Trezor Safe 5), or after a human holds-to-confirm exactly what the device display shows — and the display shows only facts the executor verified itself. A new payee account needs 2-of-3 independent supplier attestations (SD-JWT VCs bound to the change) and dual control on two devices. Every input, decision, signature and execution lands in a C2SP-format transparency log, cosigned by witnesses and verifiable offline with code we did not write.
+
+The demo runs on AWS eu-central-1 (executor, store, KMS, Object Lock, Bedrock, witnesses). The local `memory`/`moto` backends exist for development and CI only.
 
 ## For contributors
 
-Shared contracts (API, DynamoDB, canonical display text, audit log, invariants): [`docs/CONTRACTS.md`](docs/CONTRACTS.md), machine-readable in `contracts/`. `make venv test dev`.
+- Design (what and why): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- Shared contracts v2 (API, storage, device display bytes, audit log, Cedar rules, invariants, env): [`docs/CONTRACTS.md`](docs/CONTRACTS.md), machine-readable in `contracts/` (`make contracts`).
+- `make venv`, `make test`, `make ci` (contracts up to date → ruff → pytest), `make dev` (local executor, development only).
 
 ## Pre-existing work
 
-None. The repository starts empty at the `hackathon-start` tag. Before kickoff we only prepared a written plan (not code). Open-source libraries we build on are credited below.
+None. The repository starts at the `hackathon-start` tag, an empty commit made at kickoff (Mon 19 Oct 2026, 12:02 CEST). Before kickoff we only prepared a written plan outside the repository (not code). Everything in this repository was written during the hackathon. Open-source libraries and datasets we build on are credited below.
 
 ## Built during the hackathon
 
-Everything after the `hackathon-start` tag (Mon 19 Oct 2026, 12:00 CEST). This section is updated as modules land:
+Everything after the `hackathon-start` tag. This list is updated as modules land:
 
-- [ ] M0 executor core (canonical render, signature recovery, nonce/TTL, mandate, ledger)
-- [ ] M1 executor-verified facts [F] vs host hints [H]
-- [ ] M2 payee-change protocol (state machine)
-- [ ] M3 supplier account attestation (2-of-3) + transparency log + witness
-- [ ] M4 in-mandate invariants + "Replay a month"
-- [ ] M5 audit log with completeness (RFC 9162, KMS, anchors, offline verify)
-- [ ] M6 egress gateway against data exfiltration
-- [ ] M7 AgentPayBench
+- [x] Architecture v2 and shared contracts v2 (schemas, fixtures, Cedar policy sets, FSM v2 table)
+- [x] `safe5-mono-18x7` device renderer with byte-exact goldens (WS-C)
+- [ ] WS-A executor core: dispatch, store (memory/moto/DynamoDB), Cedar `decide()`, mandates 2/2, single-use nonces, single `TransactWriteItems` execution, pain.001 rail, receipts API
+- [ ] WS-B transparency log: leaves v2, signed-note checkpoints (KMS Ed25519), W1 `add-checkpoint` witness, W2 litewitness relay, receipts/QR, export, `verify_audit.py` with decision replay, `noteverify` (Go)
+- [ ] WS-C device: Safe 5 (USB) + emulator signer worker, screen oracle, enrolment ceremony, camera rig
+- [ ] WS-D payee change: FSM v2, facts engine on content-hashed snapshots (incl. Mostly Right), VoP mock, 3 SD-JWT VC issuers + verifier, vendor portal (callback, tripwire, break-glass)
+- [ ] WS-E agent and perimeter: AP-Clerk (naive + quarantined), tools λ with Cedar tool policies / AgentCore Gateway, egress λ + DLP, VPC without NAT, IAM split, IaC
+- [ ] WS-F bench and demo: H0–H6 attackers, arms A0–A3, simulated humans, Wilson CIs, dashboard, demo scenes, fallback video
 
-## Open source we build on
+## Open source / data we build on
 
-To be listed as dependencies are added.
+- Libraries: `eth-account`, `trezor` (trezorlib), `cedarpy` (Cedar), `sd-jwt`, `cryptography`, `pynacl`, `boto3`, `dkimpy`, `dnspython`, `schwifty`, `rapidfuzz`, `confusable_homoglyphs`, `lxml`, `zeep`, `jsonschema`, `fastapi`, `uvicorn`, `streamlit`, `pytest`, `hypothesis`, `moto`, `ruff`.
+- Specifications and verifiers: C2SP signed-note / tlog-checkpoint / tlog-witness / tlog-cosignature, Go `golang.org/x/mod/sumdb/note`, litewitness (filippo.io/torchwood), RFC 6962/9162, RFC 8785 (JCS), EIP-191, SD-JWT (RFC 9901) and SD-JWT VC (draft), ISO 20022 pain.001, EPC VoP codes.
+- Data: the **Mostly Right** dataset provided at the hackathon (CNB and ESMA licence registers, SEPA Instant and VoP participant lists, EU sanctions, regulator warning lists) feeds the F-PSP, F-WARNLIST and F-SANCTION facts; the ČNB synthetic transactions dataset (thresholds, benign traffic); the Tapaya KYB pack (supplier enrolment examples).
 
 ## AI assistance
 
@@ -37,4 +43,4 @@ We use AI coding assistants (Claude Code) during the hackathon.
 
 ## Data
 
-Synthetic only. The hardware wallet uses a dedicated demo seed holding no funds.
+Synthetic and fictitious only (companies, people, inbox, invoices). The hardware wallet uses a dedicated demo seed holding no funds.
