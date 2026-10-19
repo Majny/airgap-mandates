@@ -12,6 +12,13 @@
       "items": {
         "$ref": "common.json#/$defs/hint"
       }
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "step": {
+      "type": "integer",
+      "minimum": 0
     }
   },
   "required": [

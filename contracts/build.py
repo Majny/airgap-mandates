@@ -44,6 +44,9 @@ MINOR = {"type": "integer", "minimum": 0}
 POSINT = {"type": "integer", "minimum": 1}
 NNINT = {"type": "integer", "minimum": 0}
 STR = {"type": "string"}
+# Optional tool-session reference on agent-originated requests (the tools λ forwards its session_id/step so the
+# executor can read the session tool log for F-ANOM; CONTRACTS §4.2).
+TOOL_SESSION = {"session_id": STR, "step": NNINT}
 BOOL = {"type": "boolean"}
 DEPLOY = {"type": "string", "pattern": r"^[A-Z0-9]{1,5}$"}
 CURRENCY = {"enum": ["CZK", "EUR"]}
@@ -312,12 +315,14 @@ SCHEMA_FILES = {
         required=["max_per_payment_minor", "max_total_minor", "max_count", "payee_scope", "valid_until",
                   "currency"]),
     "mandate_create.response": obj({"mandate": ref("mandate"), "challenge": ref("challenge_ref")}),
-    "proposal_create.request": obj({"invoice": ref("invoice"), "hints": arr(ref("hint"))}, required=["invoice"]),
+    "proposal_create.request": obj({"invoice": ref("invoice"), "hints": arr(ref("hint")), **TOOL_SESSION},
+                                   required=["invoice"]),
     "proposal_create.response": obj({"proposal": ref("proposal"), "decision": ref("decision"),
                                      "tx": nullable(ref("ledger_tx"))}),
     "proposal_list.response": obj({"proposals": arr(ref("proposal"))}),
     "change_create.request": obj({"vendor_id": {"type": "string", "pattern": r"^ven_[0-9]{8}$"}, "new_iban": IBAN,
-                                  "email_id": STR, "evidence_ids": arr(STR), "hints": arr(ref("hint"))},
+                                  "email_id": STR, "evidence_ids": arr(STR), "hints": arr(ref("hint")),
+                                  **TOOL_SESSION},
                                  required=["vendor_id", "new_iban"]),
     "change_create.response": obj({"change": ref("change"), "decision": ref("decision")}),
     "change_list.response": obj({"changes": arr(ref("change"))}),

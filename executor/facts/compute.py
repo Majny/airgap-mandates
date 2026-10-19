@@ -107,8 +107,8 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     "domain_first_seen": iso str|None (inbox by_domain), "change": change row (for F-ATTEST / F-CALLBACK),
     "attest_results": [AttestResult], "tool_log": [tool_call rows], "mandate", "extra_facts": [Fact] (WS-A:
     F-MANDATE / F-DUP / F-SPLIT / F-Z), "snapshots": {name: path} overrides, "data_dir",
-    "email_raw": raw .eml bytes|None (inbox.email_state; for a proposal its presence enables F-AMOUNT-DOC, and None
-    blocks)}.
+    "email_raw": raw .eml bytes|None (inbox.email_state; for a proposal F-AMOUNT-DOC is always computed and a
+    missing source email blocks it and F-DKIM)}.
     Returns FactSet (F facts sorted by FACT_ORDER, then H facts; facts_digest over F facts only; prov on every
     snapshot-derived fact)."""
     from executor.facts import anom, attest_fact, callback, firstseen, iban_bank, psp, sanction, vat, vop, warnlist
@@ -149,6 +149,11 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
         cited = str(subject["email_id"])[:64]
         add(_util.make_fact("F-DKIM", "BLOCK", f"Cited email {cited} is not in the inbox", "DKIM FAIL",
                             evidence={"result": "none", "d": None, "s": None, "aligned": False}))
+    elif kind == "proposal":
+        # A proposal must come from a source email (invoice.email_id is optional in the schema, and the tools
+        # principal may be driven by a compromised agent): no email means no verified sender (fail closed).
+        add(_util.make_fact("F-DKIM", "BLOCK", "No source email for the invoice: sender cannot be verified",
+                            "DKIM FAIL", evidence={"result": "none", "d": None, "s": None, "aligned": False}))
 
     mr_path = _util.snapshot_path(state, "mostlyright")
     add(warnlist.warnlist_fact(name, [payee.get("domain", "")], mr_path=mr_path), "mostlyright")
@@ -165,11 +170,12 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     add(anom.anom_fact(subject, state.get("tool_log") or [], payee=payee, mandate=state.get("mandate"), now=now),
         "toollog")
     add(_translit_fact(name))
-    if kind == "proposal" and "email_raw" in state:
+    if kind == "proposal":
         from executor.facts.amount_doc import amount_doc_fact
 
-        add(amount_doc_fact(subject.get("invoice") or {}, state["email_raw"], vendor_ico=ico))
-    if kind == "proposal":
+        # Always computed: no source email / raw message -> BLOCK 'AMOUNT DOC N/A' (CONTRACTS §2.1, fail closed).
+        add(amount_doc_fact(subject.get("invoice") or {}, state.get("email_raw"), vendor_ico=ico))
+
         from executor.policy.facts_wsa import wsa_facts  # F-MANDATE, F-DUP, F-SPLIT, F-Z (WS-A)
 
         facts.extend(wsa_facts(subject, state, now))
