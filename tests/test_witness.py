@@ -372,3 +372,29 @@ def test_add_cosignature_row_22b(env, tmp_path):
     vk = cp.vkeys(settings)
     assert set(cp.verify_note(stored, [vk["log"], vk["w1"], w2_vkey])["verified"]) == {
         cp.origin("audit", settings), cp.witness_name(settings), w2_name}
+
+
+# ------------------------------------------------------------------ W1 over HTTP: endpoint URL and misrouting
+
+def test_witness_endpoint_accepts_base_or_full_url():
+    base = "https://api.example/prod/witness"
+    assert cp.witness_endpoint(base) == base + "/add-checkpoint"
+    assert cp.witness_endpoint(base + "/add-checkpoint/") == base + "/add-checkpoint"
+
+
+@pytest.mark.parametrize("reply,refusal_leaf", [
+    ((403, "application/json", b'{"message":"Missing Authentication Token"}'), False),  # API Gateway, not W1
+    ((403, "text/plain; charset=utf-8", b"no signature from a known key\n"), True),     # W1's own refusal
+])
+def test_only_real_w1_refusals_are_logged(env, monkeypatch, reply, refusal_leaf):
+    settings, store = env
+    monkeypatch.setattr(cp, "_submit_w1", lambda *a, **k: reply)
+    for i in range(2):
+        log.append(log.make_event("tool_call", {"session_id": "s", "step": i, "tool": "t", "args_sha256": "0" * 64,
+                                                "result": "ok", "rule_ids": [], "untrusted_read": False},
+                                  subject_id=None, actor="agent"), store=store, settings=settings, checkpoint=False)
+    note = cp.make_checkpoint("audit", store=store, settings=settings)
+    assert cp.witness_name(settings) not in note
+    events = [json.loads(r["event"]) for r in log.leaves("audit", store=store)]
+    assert any(e["type"] == "witness_refusal" for e in events) is refusal_leaf
+    assert events[-1]["type"] == "checkpoint" and events[-1]["data"]["cosigners"] == []
