@@ -1,22 +1,31 @@
-"""Trezor signer: trezorlib ethereum.sign_message on device or emulator (AIRGAP_TREZOR_PATH). CONTRACTS.md §6.
+"""Signer worker: Trezor Safe 5 over USB (clerk) and trezor-user-env emulator over UDP (treasury, labelled EMULATOR).
 
-Owner: WS-A.
+EIP-191 ethereum.sign_message; the human holds to confirm exactly the executor-rendered text. CONTRACTS.md v2 §6.
+Owner: WS-C.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol
+
+from executor.models import Approval
 
 
-def sign_text(text: str, *, path: str = "m/44'/60'/0'/0/0", transport: str | None = None) -> tuple[str, str]:
-    """Return (address lowercase, '0x'+130 hex signature)."""
-    raise NotImplementedError("TODO WS-A")
+class SignerDriver(Protocol):
+    def sign(self, challenge: dict, key_ref: str, timeout: float) -> Approval:
+        """Show challenge['text'] on the device (key_ref = derivation path or role), wait for hold-to-confirm,
+        return Approval {nonce, address, sig, displayed_text, device}. Raises TimeoutError / RuntimeError."""
+        ...
+
+    def get_address(self, key_ref: str) -> str:
+        """Lowercase address for enrolment."""
+        ...
 
 
-def get_address(*, path: str = "m/44'/60'/0'/0/0", transport: str | None = None) -> str:
-    """Address for enrollment."""
-    raise NotImplementedError("TODO WS-A")
+def get_driver(transport: str | None = None) -> SignerDriver:
+    """'usb' (physical Safe 5, default) or 'udp:127.0.0.1:21324' (emulator)."""
+    raise NotImplementedError("TODO WS-C")
 
 
-def sign_challenge(nonce: str, role: str, *, executor_url: str | None = None, transport: str | None = None) -> dict[str, Any]:
-    """GET /challenges/{nonce}, sign text, POST /signatures."""
-    raise NotImplementedError("TODO WS-A")
+def sign_challenge(nonce: str, role: str, *, executor_url: str | None = None, transport: str | None = None) -> dict:
+    """GET /challenges/{nonce}, driver.sign(), POST /signatures; returns the signature_submit.response."""
+    raise NotImplementedError("TODO WS-C")

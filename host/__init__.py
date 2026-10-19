@@ -1,4 +1,4 @@
-"""Untrusted laptop side: agent, UI, signer, egress client. CONTRACTS.md §1.
+"""Untrusted laptop side: UI, signer worker, egress client (the agent lives in agent/). CONTRACTS.md v2 §1.
 
-Owner: WS-C/WS-F.
+Owner: WS-C (signer), WS-E (egress), WS-F (ui, compromised).
 """

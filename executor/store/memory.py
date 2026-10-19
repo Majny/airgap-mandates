@@ -1,4 +1,4 @@
-"""In-memory Store backend (dicts + one threading.Lock). Implements CONTRACTS.md §3.3.
+"""In-memory Store backend (dicts + one threading.Lock). Implements CONTRACTS.md v2 §3.3 (dev/CI only).
 
 Owner: WS-A.
 """
@@ -35,5 +35,5 @@ class MemoryStore:
     def scan(self, table: str) -> list[dict[str, Any]]:
         raise NotImplementedError("TODO WS-A")
 
-    def transact(self, ops: list[Any]) -> bool:
+    def transact(self, ops: list[Any], client_request_token: str | None = None) -> bool:
         raise NotImplementedError("TODO WS-A")

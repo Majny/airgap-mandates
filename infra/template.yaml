@@ -1,4 +1,4 @@
-# AWS SAM template (eu-central-1). Owner: WS-A. CONTRACTS.md §3, §9, S7.
-# TODO WS-A: executor Lambda + HTTP API, witness Lambda (separate role + KMS key),
-# DynamoDB tables per CONTRACTS.md §3.1 (prefix airgap-), S3 inbox bucket, S3 anchor bucket
-# with Object Lock (COMPLIANCE, 1 day), KMS ECC_NIST_P256 keys, agent role with explicit Deny (infra/iam/).
+# AWS IaC (eu-central-1; the demo runs here). Owner: WS-E. CONTRACTS.md v2 §3, §9, S7, S10.
+# TODO WS-E: executor Lambda + HTTP API, witness Lambda (separate role + KMS key),
+# DynamoDB tables per CONTRACTS.md v2 §3.1 (ledger, mandates, audit, registry, witness_state, main, portal), S3 inbox bucket, S3 anchor bucket
+# with Object Lock (GOVERNANCE, 1 day), KMS Ed25519 keys (log, W1), agent role with explicit Deny (infra/iam/).

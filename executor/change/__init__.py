@@ -1,4 +1,4 @@
-"""M2 payee-change protocol. CONTRACTS.md §6.1.
+"""Payee-change FSM v2. CONTRACTS.md v2 §6.1.
 
-Owner: WS-A.
+Owner: WS-D.
 """

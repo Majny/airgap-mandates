@@ -1,17 +1,14 @@
-"""Mock ledger: atomic execution after execution leaf (S1, S6). CONTRACTS.md §3.2.
-
-Owner: WS-A.
-"""
+"""Mock ledger: execution via one TransactWriteItems (S1, S6). CONTRACTS.md v2 §3.2. Owner: WS-A."""
 from __future__ import annotations
 
 from typing import Any
 
 
-def execute(proposal: dict[str, Any], authorization: dict[str, Any], *, store: Any, settings: Any) -> dict[str, Any]:
-    """Append execution leaf, then TransactWriteItems (ledger + mandate spend + proposal). Returns ledger tx."""
+def tx_id_for(auth_ref: str, proposal_id: str) -> str:
+    """'tx_' + sha256(f'{auth_ref}|{proposal_id}')[:16]; auth_ref = mandate_id (mandate path) or nonce (step-up)."""
     raise NotImplementedError("TODO WS-A")
 
 
-def receipt(tx_id: str, *, store: Any, settings: Any) -> dict[str, Any]:
-    """Receipt with inclusion proof + STH."""
+def execute(proposal: dict[str, Any], authorization: dict[str, Any], *, store: Any, settings: Any) -> dict[str, Any]:
+    """store.tx_execute(): execution leaf + head seq + mandate debit + ledger row + proposal EXECUTED. Returns ledger tx."""
     raise NotImplementedError("TODO WS-A")

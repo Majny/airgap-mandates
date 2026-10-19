@@ -4,7 +4,6 @@ Owner: WS-B.
 """
 from __future__ import annotations
 
-from typing import Any
 
 
 def leaf_hash(leaf_bytes: bytes) -> bytes:

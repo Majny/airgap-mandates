@@ -1,22 +1,27 @@
-"""Fact orchestration: run all fact producers for a proposal or change. CONTRACTS.md §2.1.
+"""Facts engine: FactSet for a proposal or a payee change, pure over content-hashed snapshots. CONTRACTS.md v2 §2.1.
 
-Owner: WS-E.
+Owner: WS-D.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-
-def facts_for_proposal(invoice: dict[str, Any], vendor: dict[str, Any] | None, hints: list[dict[str, Any]], *, store: Any, settings: Any) -> list[dict[str, Any]]:
-    """All F facts + H facts (from hints) for a payment proposal."""
-    raise NotImplementedError("TODO WS-E")
+from executor.models import Fact, FactSet
 
 
-def facts_for_change(vendor: dict[str, Any], new_iban: str, email_id: str | None, hints: list[dict[str, Any]], *, store: Any, settings: Any) -> list[dict[str, Any]]:
-    """All F facts + H facts for a payee change request."""
-    raise NotImplementedError("TODO WS-E")
+def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> FactSet:
+    """subject: {"kind": "proposal"|"change", ...request fields}; state: {"payee", "mandate", "history",
+    "snapshots": {name: path}, "tool_log", "change"}. Returns FactSet (F facts sorted by FACT_ORDER, then H facts;
+    facts_digest over F facts only; prov on every snapshot-derived fact)."""
+    raise NotImplementedError("TODO WS-D")
 
 
-def hint_facts(hints: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """H-AGENT / H-UI facts, severity INFO, display_line 'agent: "<text>"'."""
-    raise NotImplementedError("TODO WS-E")
+def facts_digest(facts: list[Fact]) -> str:
+    """sha256(canonical_json([f for f in facts if f['kind'] == 'F'])) in canonical order."""
+    raise NotImplementedError("TODO WS-D")
+
+
+def hint_facts(hints: list[dict[str, Any]]) -> list[Fact]:
+    """H-AGENT / H-UI facts, severity INFO; UI and log only, never on the device."""
+    raise NotImplementedError("TODO WS-D")

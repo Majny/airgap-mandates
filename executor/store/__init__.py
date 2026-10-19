@@ -1,8 +1,8 @@
-"""Storage interface. Owner: WS-A. Implements CONTRACTS.md §3.3.
+"""Storage interface. Owner: WS-A. Implements CONTRACTS.md v2 §3.2-§3.3.
 
-Backends: executor.store.memory.MemoryStore (dicts + one lock) and executor.store.dynamo.DynamoStore
-(boto3; also used against moto). Logical table names are the TABLES in executor.config; the backend
-maps them to physical names. Numbers come back as int (never Decimal).
+Backends: executor.store.memory.MemoryStore (dicts + one lock; dev/CI) and executor.store.dynamo.DynamoStore
+(boto3; real DynamoDB in the demo, moto in CI). Table arguments are logical names (executor.config.LOGICAL_TABLES);
+the backend maps them to physical tables (airgap-main entities get pk "<entity>#<id>"). Numbers come back as int.
 """
 from __future__ import annotations
 
@@ -65,7 +65,20 @@ class Store(Protocol):
 
     def scan(self, table: str) -> list[dict[str, Any]]: ...
 
-    def transact(self, ops: list[Op]) -> bool: ...
+    def transact(self, ops: list[Op], client_request_token: str | None = None) -> bool: ...
+
+
+class TxConflict(Exception):
+    """A TransactWriteItems condition failed; nothing was written."""
+
+
+def tx_execute(store: Store, *, leaf_event: dict[str, Any], expected_seq: int, ledger_row: dict[str, Any],
+               proposal_id: str, mandate_debit: dict[str, Any] | None) -> int:
+    """CONTRACTS §3.2 execution transaction: audit leaf Put (attribute_not_exists(seq)) + audit head Update
+    (next_seq = expected_seq) + mandate debit (mandate path; {mandate_id, amount_minor, max_total_minor,
+    max_count}) + ledger Put (attribute_not_exists(tx_id)) + proposal Update to EXECUTED, with
+    ClientRequestToken = ledger_row['tx_id']. Returns the leaf seq; raises TxConflict."""
+    raise NotImplementedError("TODO WS-A")
 
 
 def get_store(settings: "Settings") -> Store:

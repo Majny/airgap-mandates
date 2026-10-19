@@ -1,4 +1,4 @@
-"""M5 audit log: RFC 9162 Merkle, STH (KMS), witness, anchors. CONTRACTS.md §7.
+"""Audit log v2: RFC 9162 hashing, C2SP checkpoints (Ed25519), witnesses, receipts, Object Lock. CONTRACTS.md v2 §7.
 
-Owner: WS-A/WS-B.
+Owner: WS-B.
 """

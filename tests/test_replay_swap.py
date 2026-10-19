@@ -1,4 +1,4 @@
-"""Security invariant tests (CONTRACTS.md §8.2). Owner: WS-A."""
+"""Security invariant tests (CONTRACTS.md v2 §8.2). Owner: WS-A."""
 import pytest
 
 

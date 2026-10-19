@@ -1,4 +1,4 @@
-"""DynamoDB Store backend (boto3; moto in tests). Implements CONTRACTS.md §3.1–§3.3. Convert Decimal -> int at this boundary.
+"""DynamoDB Store backend (boto3; moto in tests). Implements CONTRACTS.md v2 §3.1–§3.3 (real DynamoDB in the demo, moto in CI). Convert Decimal -> int at this boundary.
 
 Owner: WS-A.
 """
@@ -35,5 +35,5 @@ class DynamoStore:
     def scan(self, table: str) -> list[dict[str, Any]]:
         raise NotImplementedError("TODO WS-A")
 
-    def transact(self, ops: list[Any]) -> bool:
+    def transact(self, ops: list[Any], client_request_token: str | None = None) -> bool:
         raise NotImplementedError("TODO WS-A")
