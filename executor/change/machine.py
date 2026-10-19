@@ -225,10 +225,26 @@ def compute_change_facts(req: dict[str, Any], vendor: dict[str, Any], *, store: 
     return _compute.compute(subject, state, now)
 
 
+_SEV = {"INFO": 0, "WARN": 1, "BLOCK": 2}
+
+
+def _sticky_anom(previous: list[dict[str, Any]], fs: FactSet) -> FactSet:
+    """F-ANOM only escalates (CONTRACTS §2.1): a recompute without the creating session's tool log must never lower
+    the F-ANOM the change was created with, so the more severe of the two is kept."""
+    old = next((f for f in previous if f.get("id") == "F-ANOM" and f.get("kind") == "F"), None)
+    new = next((f for f in fs["facts"] if f.get("id") == "F-ANOM" and f.get("kind") == "F"), None)
+    if old is None or (new is not None and _SEV[new["severity"]] >= _SEV[old["severity"]]):
+        return fs
+    facts = _compute.order_facts([f for f in fs["facts"] if f is not new] + [old])
+    return {**fs, "facts": facts, "facts_digest": _compute.facts_digest(facts),
+            "max_severity": _compute.max_severity(facts)}
+
+
 def _recompute(change: Change, *, store: Any, settings: Any, now: datetime) -> FactSet:
     vendor = _vendor(store, change["vendor_id"])
     req = {"vendor_id": change["vendor_id"], "new_iban": change["new_iban"], "email_id": change.get("email_id")}
     fs = compute_change_facts(req, vendor, store=store, settings=settings, now=now, change=change)
+    fs = _sticky_anom(change.get("facts") or [], fs)
     hints = [f for f in change.get("facts") or [] if f.get("kind") == "H"]  # request hints are not re-sent: keep them
     change["facts"] = [f for f in fs["facts"] if f.get("kind") == "F"] + hints
     return fs
@@ -250,7 +266,8 @@ def _severity_rank(fs: FactSet) -> tuple[int, int]:
 
 
 def _facts_for_cited_email(req: dict[str, Any], vendor: dict[str, Any], *, store: Any, settings: Any,
-                           now: datetime) -> tuple[dict[str, Any], FactSet]:
+                           now: datetime, tool_log: list[dict[str, Any]] | None = None
+                           ) -> tuple[dict[str, Any], FactSet]:
     """(request with the email the change is judged on, its FactSet). The candidates are `email_id` and every inbox
     email named by `evidence_ids` (the tools surface sends only evidence_ids); the WORST FactSet wins (most BLOCK,
     then most WARN; ties keep the earlier candidate), so citing more evidence can only move a change toward deny."""
@@ -260,7 +277,7 @@ def _facts_for_cited_email(req: dict[str, Any], vendor: dict[str, Any], *, store
     best: tuple[dict[str, Any], FactSet] | None = None
     for eid in cands or [None]:
         cand = {**req, "email_id": eid}
-        fs = compute_change_facts(cand, vendor, store=store, settings=settings, now=now)
+        fs = compute_change_facts(cand, vendor, store=store, settings=settings, now=now, tool_log=tool_log)
         if best is None or _severity_rank(fs) > _severity_rank(best[1]):
             best = (cand, fs)
     assert best is not None
@@ -268,18 +285,19 @@ def _facts_for_cited_email(req: dict[str, Any], vendor: dict[str, Any], *, store
 
 
 def create(req: dict[str, Any], facts: FactSet, vendor: dict[str, Any], *, store: Any, settings: Any,
-           now: datetime) -> Change:
+           now: datetime, tool_log: list[dict[str, Any]] | None = None) -> Change:
     """POST /changes: initial state REJECTED (any F BLOCK) | PENDING_ATTEST (in_network) | CALLBACK_PENDING;
     tripwire to the registered contact on every create; change_event + state_transition leaves.
 
     The caller's `facts` are recomputed here with the full store-backed state (inbox email, first-seen), so a
     caller that passed a thinner state can never skip F-DOMAIN / F-DKIM (fail closed). H facts are kept. The email
-    judged is the worst of `email_id` and the emails named by `evidence_ids` (_facts_for_cited_email)."""
+    judged is the worst of `email_id` and the emails named by `evidence_ids` (_facts_for_cited_email). `tool_log`:
+    the requesting agent session's tool calls (anom.session_log), so F-ANOM sees untrusted reads before the request."""
     if req.get("vendor_id", vendor["vendor_id"]) != vendor["vendor_id"]:
         raise ApiError(ErrorCode.INVALID_REQUEST, "vendor_id does not match the registry row")
     if req["new_iban"] == vendor["iban"]:
         raise ApiError(ErrorCode.INVALID_REQUEST, "new_iban is already the active IBAN")
-    req, full = _facts_for_cited_email(req, vendor, store=store, settings=settings, now=now)
+    req, full = _facts_for_cited_email(req, vendor, store=store, settings=settings, now=now, tool_log=tool_log)
     facts = {**full, "facts": [f for f in full["facts"] if f["kind"] == "F"]
              + [f for f in facts["facts"] if f["kind"] == "H"]}
     n = store.increment("counters", {"name": "change_no"}, "value")

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from executor.config import Settings, iso
-from executor.facts import anom, sanction, vop, warnlist
+from executor.facts import anom, compute, sanction, vop, warnlist
 from executor.facts import mostlyright as mr
 from executor.store.memory import MemoryStore
 from tests.test_wsd_scenarios import ACME, NEW_IBAN, World, _facts
@@ -319,3 +319,20 @@ def test_facts7_shipped_fixtures_carry_received_at():
     assert {m["file"] for m in manifest} == {p.name for p in Path("data/emails").glob("*.eml")}
     assert all(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", m["received_at"]) for m in manifest)
 
+
+
+def test_facts2_change_create_takes_the_tool_log_and_anom_never_drops_on_recompute():
+    """machine.create(tool_log=...) feeds F-ANOM; a later recompute (VC received, R0 recheck) has no session log and
+    must not lower it (F-ANOM only escalates)."""
+    from executor.change import machine
+
+    w = World()
+    vendor = w.store.get("registry", {"vendor_id": ACME})
+    log = anom.normalize_log(_rows((1, "inbox.read", True), (2, "payee.request_change", False)))
+    empty = {"facts": [], "facts_digest": "", "snapshots": {}, "max_severity": "INFO"}
+    c = machine.create({"vendor_id": ACME, "new_iban": NEW_IBAN}, empty, vendor, store=w.store, settings=w.settings,
+                       now=w.now, tool_log=log)
+    assert _facts(c["facts"])["F-ANOM"][0] == "WARN" and c["state"] == "PENDING_ATTEST"
+    fs = machine._recompute(c, store=w.store, settings=w.settings, now=w.now)
+    assert _facts(fs["facts"])["F-ANOM"][0] == "WARN" and _facts(c["facts"])["F-ANOM"][0] == "WARN"
+    assert fs["facts_digest"] == compute.facts_digest(fs["facts"])
