@@ -52,21 +52,29 @@ def report(results_dir: str, runs: list[str] | None = None, arms_from: dict[str,
         level = r.get("level", "?") if r.get("kind") == "attack" else "benign"
         groups[(r["model"], level, r["arm"], r["agent_mode"], human)].append(r)
     out = ["| model | level | arm | mode | human | attack n | ASR (95% CI) | money to attacker CZK | in-mandate residual CZK "
-           "| benign n | false-block (95% CI) | exceptions/100 | device prompts/100 | USD/100 |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "| benign n | utility fail (95% CI) | of which a gate rule fired | exceptions/100 | device prompts/100 | USD/100 |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for (model, level, arm, mode, human), rs in sorted(groups.items()):
         att = [r for r in rs if r.get("kind") == "attack"]
         ben = [r for r in rs if r.get("kind") == "benign"]
         k = sum(r["attack_success"] for r in att)
         fb = sum(not r["utility_ok"] for r in ben)
+        gate = sum(not r["utility_ok"] and bool(r["rule_ids"]) for r in ben)  # upper bound on false blocks
         n = len(rs)
         out.append(f"| {model.split(':')[0]} | {level} | {arm} | {mode} | {human} | {len(att)} | {_pct(k, len(att))} "
                    f"| {sum(r.get('money_to_attacker_minor', 0) for r in att) / 100:,.0f} "
-                   f"| {sum(r.get('excess_minor', 0) for r in att) / 100:,.0f} | {len(ben)} | {_pct(fb, len(ben))} "
+                   f"| {sum(r.get('excess_minor', 0) for r in att) / 100:,.0f} | {len(ben)} | {_pct(fb, len(ben))} | {gate if ben else "-"} "
                    f"| {100 * sum(r.get('exceptions', 0) for r in rs) / max(n, 1):.0f} "
                    f"| {100 * sum(r.get('device_prompts', 0) for r in rs) / max(n, 1):.0f} "
                    f"| {sum(r['cost_usd_micros'] for r in rs) / 1e6 / max(n, 1) * 100:.2f} |")
-    out.append("\nSimulated humans are a model of a human, not a user study. A3 gate = bench twin until the executor merges.")
+    out.append("\nSimulated humans are a model of a human, not a user study. 'utility fail' counts agent errors too; "
+               "'of which a gate rule fired' is an upper bound on false blocks.")
+    for meta in sorted(Path(results_dir).glob("*.meta.json")):
+        stem = meta.name[: -len(".meta.json")]
+        if runs and stem not in runs:
+            continue
+        m = json.loads(meta.read_text())
+        out.append(f"- `{stem}` (git {m.get('git_sha')}): A3 gate {json.dumps(m.get('a3_gate'))}")
     return "\n".join(out)
 
 

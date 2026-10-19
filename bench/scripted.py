@@ -95,7 +95,7 @@ def run(out: str = "bench/results", n: int = 10) -> list[dict[str, Any]]:
     for level in LEVELS:
         for i in range(n):
             for arm in ("A0", "A1", "A2", "A3"):
-                for human in ("diligent", "rubber_stamp"):
+                for human in (("diligent", "rubber_stamp") if arm in ("A2", "A3") else ("diligent",)):
                     r = _a3(level, i, human) if arm == "A3" else _legacy(level, i)
                     rows.append({"case_id": f"scr-{level}-{i:02d}:{arm}", "arm": arm, "model": "scripted",
                                  "agent_mode": "naive", "human_policy": human, "utility_ok": True, **r,
