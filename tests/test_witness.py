@@ -328,3 +328,47 @@ def test_400_non_ascii_digits(env, old_line):
     settings, store = env
     status, _, _ = witness.add_checkpoint((old_line + "\n\nx\n").encode(), store=store, settings=settings)
     assert status == 400
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda n: n.replace("\n", "\r\n", 1),                              # control char in origin line
+    lambda n: n + n[n.rindex("\n\n") + 2:],                             # duplicate signature line
+    lambda n: n.replace(" airgap.example/demo/audit ", " airgap+x ", 1),  # '+' in key name
+])
+def test_parse_note_rejects_malformed(env, mutate):
+    settings, _ = env
+    body = cp.checkpoint_body(cp.origin("audit", settings), 0, hashlib.sha256(b"").hexdigest(),
+                              policy_hash="0" * 64, code_sha256="0" * 64)
+    note = cp.sign_note(body, name=cp.origin("audit", settings), settings=settings)
+    cp.parse_note(note)
+    with pytest.raises(cp.NoteError):
+        cp.parse_note(mutate(note))
+
+
+# ------------------------------------------------------------------ row 22b: W2 cosignature upload
+
+def test_add_cosignature_row_22b(env, tmp_path):
+    settings, store = env
+    for i in range(3):
+        log.append(log.make_event("tool_call", {"session_id": "s", "step": i, "tool": "t", "args_sha256": "0" * 64,
+                                                "result": "ok", "rule_ids": [], "untrusted_read": False},
+                                  subject_id=None, actor="agent"), store=store, settings=settings, checkpoint=False)
+    original = cp.make_checkpoint("audit", store=store, settings=settings)
+    size = cp.parse_note(original)["size"]
+    w2 = make_settings(tmp_path / "w2")  # stand-in W2 key (real W2 = litewitness, witness/w2/README.md)
+    w2_name = "supervisor.example/w2"
+    w2_vkey = cp.verifier_key(w2_name, kms.public_key(settings=w2, key="w1"), cp.SIG_COSIGNATURE)
+    line = cp.cosign(cp.parse_note(original)["body"], name=w2_name, settings=w2)
+    pinned = {"AIRGAP_W2_VKEY": w2_vkey}
+
+    assert cp.add_cosignature("audit", size + 99, line.encode(), store=store, settings=settings, env=pinned)[0] == 404
+    assert cp.add_cosignature("audit", size, line.encode(), store=store, settings=settings, env={})[0] == 403
+    forged = line[:-6] + ("A" if line[-6] != "A" else "B") + line[-5:]
+    assert cp.add_cosignature("audit", size, forged.encode(), store=store, settings=settings, env=pinned)[0] == 403
+    status, _, out = cp.add_cosignature("audit", size, line.encode(), store=store, settings=settings, env=pinned)
+    assert status == 200 and out.decode() == original + line
+    assert cp.add_cosignature("audit", size, line.encode(), store=store, settings=settings, env=pinned)[2] == out
+    stored = cp.latest("audit", store=store)["note"]
+    vk = cp.vkeys(settings)
+    assert set(cp.verify_note(stored, [vk["log"], vk["w1"], w2_vkey])["verified"]) == {
+        cp.origin("audit", settings), cp.witness_name(settings), w2_name}

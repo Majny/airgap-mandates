@@ -98,7 +98,9 @@ def parse_note(note: str) -> dict[str, Any]:
     """{origin, size, root_hash, extensions[], signatures[{name, key_id, sig, timestamp?}]}."""
     if "\n\n" not in note or not note.endswith("\n"):
         raise NoteError("note must be body + blank line + signature lines, LF-terminated")
-    split = note.index("\n\n")
+    if any(ord(c) < 0x20 and c != "\n" for c in note):
+        raise NoteError("control character in note")
+    split = note.rindex("\n\n")  # signed-note: signatures follow the LAST blank line
     body, sig_text = note[:split + 1], note[split + 2:]
     lines = body[:-1].split("\n")
     if len(lines) < 3:
@@ -109,16 +111,18 @@ def parse_note(note: str) -> dict[str, Any]:
     root_hash = _unb64(root_b64)
     if len(root_hash) != 32:
         raise NoteError("root hash must be 32 bytes")
-    if any(not e or any(ord(c) < 0x20 for c in e) for e in extensions):
-        raise NoteError("bad extension line")
+    if any(not e for e in extensions):
+        raise NoteError("empty extension line")
     signatures = []
     for line in sig_text[:-1].split("\n") if sig_text else []:
         parts = line.split(" ")
-        if len(parts) != 3 or parts[0] != DASH or not parts[1]:
+        if len(parts) != 3 or parts[0] != DASH or not parts[1] or "+" in parts[1]:
             raise NoteError(f"bad signature line: {line!r}")
         raw = _unb64(parts[2])
         if len(raw) < 5:
             raise NoteError(f"signature too short: {line!r}")
+        if any(x["name"] == parts[1] and x["key_id"] == raw[:4] for x in signatures):
+            raise NoteError(f"duplicate signature from {parts[1]}")
         signatures.append({"name": parts[1], "key_id": raw[:4], "sig": raw[4:]})
     if not signatures:
         raise NoteError("note has no signatures")
@@ -207,6 +211,43 @@ def _submit_w1(request_body: bytes, *, store: Any, settings: Any) -> tuple[int, 
             return resp.status, resp.headers.get("Content-Type", ""), resp.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.headers.get("Content-Type", ""), exc.read()
+
+
+def add_cosignature(log_id: str, size: int, body: bytes, *, store: Any, settings: Any,
+                    env: dict[str, str] | None = None) -> tuple[int, str, bytes]:
+    """Row 22b: append W2 cosignature line(s) to the stored checkpoint note of `size` after verifying each against the
+    pinned AIRGAP_W2_VKEY. Returns (status, content_type, body): 200 updated note | 403 bad/unknown | 404 unknown size.
+    The checkpoint leaf's note_sha256 stays the hash of the note as first stored (lines added here are extra)."""
+    text = "text/plain; charset=utf-8"
+    row = store.get("checkpoints", log.checkpoint_key(log_id, size))
+    if row is None:
+        return 404, text, b"unknown checkpoint size\n"
+    w2_vkey = (os.environ if env is None else env).get("AIRGAP_W2_VKEY", "").strip()
+    if not w2_vkey:
+        return 403, text, b"no W2 key configured (AIRGAP_W2_VKEY)\n"
+    try:
+        w2_name = parse_vkey(w2_vkey)["name"]
+        lines = body.decode("utf-8").splitlines()
+        cp_body = parse_note(row["note"])["body"]
+    except (NoteError, UnicodeDecodeError) as exc:
+        return 403, text, f"{exc}\n".encode()
+    note, added = row["note"], 0
+    for line in lines:
+        if not line.startswith(f"{DASH} {w2_name} "):
+            return 403, text, b"not a cosignature line from the pinned W2 key\n"
+        try:
+            ok = w2_name in verify_note(cp_body + "\n" + line + "\n", [w2_vkey])["verified"]
+        except NoteError:
+            ok = False
+        if not ok:
+            return 403, text, b"cosignature does not verify against AIRGAP_W2_VKEY\n"
+        if line + "\n" not in note:
+            note, added = note + line + "\n", added + 1
+    if not lines:
+        return 403, text, b"no cosignature lines\n"
+    if added:
+        store.put("checkpoints", {**row, "note": note})
+    return 200, text, note.encode()
 
 
 def add_checkpoint_request(old_size: int, proof: list[bytes], note: str) -> bytes:
