@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui ui-visual bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2
+.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -40,6 +40,10 @@ ui:  ## operations console against AWS (AWS_PROFILE=hackathon); UI_URL=memory: f
 ui-visual:  ## visual test: headless Chromium clicks every console tab on seeded data, screenshots in .local/ui-visual/
 	$(PY) -m playwright install chromium >/dev/null
 	$(PY) -m tools.ui_visual
+
+alerts:  ## post blocked attempts to a Slack/Teams webhook (WEBHOOK=https://...; without it: --dry-run); ALERT_URL=memory: for seeded data
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.alerts --url $(or $(ALERT_URL),$(DEMO_URL)) \
+	  $(if $(WEBHOOK),--webhook $(WEBHOOK) --state-file .local/alerts-state.json,--dry-run) $(ARGS)
 
 bench:  ## run AgentPayBench
 	$(PY) -m bench.run_bench --out bench/results

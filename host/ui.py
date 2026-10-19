@@ -8,9 +8,13 @@ Untrusted host (TB3): it only reads the public executor API (`AIRGAP_EXECUTOR_UR
 """
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import sys
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +23,7 @@ from urllib.parse import urlencode
 # `streamlit run host/ui.py` puts only host/ on sys.path; infra/ (SigV4 signing) is not an installed package
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from host import compromised, story  # noqa: E402
+from host import auth, compromised, story  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 EXECUTOR = os.environ.get("AIRGAP_EXECUTOR_URL", "http://127.0.0.1:8000")
@@ -103,6 +107,98 @@ def export_bundle() -> dict[str, Any] | None:
     return b if code == 200 and isinstance(b, dict) else None
 
 
+_PAIN001: dict[tuple[str, str], dict[str, Any]] = {}  # (executor, tx_id) -> export; immutable once executed
+
+
+def pain001(tx_id: str, who: str = "host") -> dict[str, Any] | None:
+    """GET /export/pain001/{tx_id}, cached per process (the XML of an executed payment never changes)."""
+    key = (EXECUTOR, tx_id)
+    if key not in _PAIN001:
+        code, b = api(f"/export/pain001/{tx_id}", who)
+        if code != 200 or not isinstance(b, dict) or "xml" not in b:
+            return None
+        _PAIN001[key] = b
+    return _PAIN001[key]
+
+
+def c14n_sha256(xml: str) -> str:
+    """The executor hashes the C14N of its element tree (no pretty-print whitespace); recompute that from the file."""
+    from lxml import etree
+
+    parser = etree.XMLParser(remove_blank_text=True, resolve_entities=False, no_network=True)
+    root = etree.fromstring(xml.encode("utf-8"), parser)
+    return hashlib.sha256(etree.tostring(root, method="c14n")).hexdigest()
+
+
+def rail_hashes(bundle: dict[str, Any] | None) -> dict[str, tuple[int, str]]:
+    """tx_id -> (seq, xml_c14n_sha256) of its first `rail_submitted` leaf in the witnessed log."""
+    out: dict[str, tuple[int, str]] = {}
+    for leaf in (bundle or {}).get("leaves", []):
+        ev = leaf.get("event") or {}
+        d = ev.get("data") or {}
+        if ev.get("type") == "rail_submitted" and d.get("tx_id") and d["tx_id"] not in out:
+            out[d["tx_id"]] = (int(leaf.get("seq", 0)), str(d.get("xml_c14n_sha256")))
+    return out
+
+
+def pain001_check(exp: dict[str, Any], logged: tuple[int, str] | None) -> tuple[bool, str]:
+    """Three hashes must agree: recomputed from the XML bytes, the export's own claim, and the rail_submitted leaf."""
+    try:
+        h = c14n_sha256(exp["xml"])
+    except Exception as e:  # noqa: BLE001 - malformed XML from a broken executor or proxy
+        return False, f"XML does not parse ({type(e).__name__})"
+    if h != exp.get("xml_c14n_sha256"):
+        return False, "XML does not match the hash the executor sent with it"
+    if logged is None:
+        return False, "no rail_submitted entry in the audit log yet"
+    if logged[1] != h:
+        return False, f"XML hash differs from the audit log entry (seq {logged[0]})"
+    return True, f"hash matches the signed audit log (seq {logged[0]})"
+
+
+PAIN001_README = """One ISO 20022 pain.001.001.09 file per payment, exactly as the AirGap executor exported it.
+Each file's C14N SHA-256 equals the `rail_submitted` entry of the signed, witnessed audit log (seq in manifest.json).
+The files are deliberately not merged into one batch message: a merged file would get a new MsgId and a hash that
+is not in the audit log. Import each file, or let core banking check each hash against the exported log first.
+Payments whose hashes did not agree are listed under "excluded" in manifest.json and are not in this zip.
+"""
+
+
+def pain001_zip(day: str, txs: list[dict[str, Any]], exports: dict[str, dict[str, Any]],
+                logged: dict[str, tuple[int, str]]) -> bytes:
+    """One pain.001 file per payment (exactly the bytes the executor logged) + manifest.json + README.txt. Only
+    payments whose three hashes agree go in; the others are listed in the manifest as `excluded` with the reason.
+    Deterministic (fixed zip timestamps): the same day always gives the same zip."""
+    files: list[dict[str, Any]] = []
+    excluded: list[dict[str, str]] = []
+    buf = io.BytesIO()
+    stamp = (2026, 1, 1, 0, 0, 0)
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for tx in txs:
+            tx_id = tx["tx_id"]
+            exp = exports.get(tx_id)
+            ok, why = pain001_check(exp, logged.get(tx_id)) if exp else (False, "export unavailable")
+            if not ok:
+                excluded.append({"tx_id": tx_id, "reason": why})
+                continue
+            name = f"pain001-{tx_id}.xml"
+            z.writestr(zipfile.ZipInfo(name, stamp), exp["xml"].encode("utf-8"))
+            files.append({"file": name, "tx_id": tx_id, "msg_id": exp.get("msg_id"),
+                          "xml_c14n_sha256": exp["xml_c14n_sha256"], "audit_seq": logged[tx_id][0],
+                          "amount_minor": tx.get("amount_minor"), "currency": tx.get("currency"),
+                          "vendor_id": tx.get("vendor_id"), "executed_at": tx.get("executed_at")})
+        manifest = {"date_utc": day, "format": "pain.001.001.09", "files": files, "excluded": excluded,
+                    "nb_of_txs": len(files), "ctrl_sum_minor": sum(int(f["amount_minor"] or 0) for f in files)}
+        z.writestr(zipfile.ZipInfo("manifest.json", stamp), json.dumps(manifest, indent=2, sort_keys=True))
+        z.writestr(zipfile.ZipInfo("README.txt", stamp), PAIN001_README)
+    return buf.getvalue()
+
+
+def executed_on(txs: list[dict[str, Any]]) -> list[str]:
+    """Distinct UTC execution dates, newest first."""
+    return sorted({str(t.get("executed_at", ""))[:10] for t in txs if t.get("executed_at")}, reverse=True)
+
+
 def device_labels(bundle: dict[str, Any] | None) -> dict[str, str]:
     """address -> GENUINE | EMULATOR, from the `enroll` leaves (set by the enrolment tool, never by the host)."""
     out: dict[str, str] = {}
@@ -182,9 +278,31 @@ def tab_overview(st: Any, data: dict[str, Any]) -> None:
     render_cards(st, data["cards"])
 
 
+def pain001_batch(st: Any, data: dict[str, Any]) -> None:
+    txs = data.get("ledger") or []
+    days = executed_on(txs)
+    if not days:
+        return
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with st.container(border=True):
+        c1, c2 = st.columns([2, 3])
+        day = c1.selectbox("Payments executed on (UTC)", days, index=days.index(today) if today in days else 0,
+                           format_func=lambda d: f"{d} (today)" if d == today else d)
+        day_txs = [t for t in txs if str(t.get("executed_at", "")).startswith(day)]
+        exports = {t["tx_id"]: e for t in day_txs if (e := pain001(t["tx_id"])) is not None}
+        what = "today's" if day == today else day
+        c2.download_button(f"Download {what} payments as pain.001 files (zip, {len(day_txs)})",
+                           pain001_zip(day, day_txs, exports, data["rail"]), file_name=f"pain001-{day}.zip",
+                           mime="application/zip", on_click="ignore", key=f"pain001-zip-{day}", type="primary")
+        c2.caption("For core banking: one ISO 20022 pain.001 file per payment, each checked against the signed "
+                   "audit log, plus a manifest. Not merged into one batch message, because a merged file would "
+                   "carry a hash that is not in the log.")
+
+
 def tab_payments(st: Any, data: dict[str, Any]) -> None:
     if not data["proposals"]:
         st.info("No payment proposals yet.")
+    pain001_batch(st, data)
     for p in data["proposals"]:
         v = view(proposal_view(p, data["names"]))
         label, colour = STATUS.get(v.get("status") or "", (str(v.get("status")), "#475467"))
@@ -206,9 +324,22 @@ def tab_payments(st: Any, data: dict[str, Any]) -> None:
                 st.caption("Exactly this text is on the clerk's Trezor. The device signs what it shows, "
                            "not what this screen shows.")
                 st.markdown(f'<div class="device">{ch["text"]}</div>', unsafe_allow_html=True)
+            tx_id = p.get("tx_id")
+            if p.get("status") == "EXECUTED" and tx_id:
+                exp = pain001(tx_id)
+                d1, d2 = st.columns([1, 4], vertical_alignment="center")
+                if exp is None:
+                    d2.caption("pain.001 export unavailable")
+                else:
+                    ok, why = pain001_check(exp, data["rail"].get(tx_id))
+                    d1.download_button("pain.001 (ISO 20022)", exp["xml"].encode("utf-8"),
+                                       file_name=f"pain001-{tx_id}.xml", mime="application/xml",
+                                       on_click="ignore", key=f"pain001-{tx_id}", disabled=not ok)
+                    d2.caption(("✓ " if ok else "✗ ") + why)
             with st.expander("Facts checked by the executor"):
                 st.markdown(fact_chips(v.get("facts", [])), unsafe_allow_html=True)
-                st.caption(f"{v['id']} · rules {', '.join(v.get('rule_ids') or []) or '-'}")
+                st.caption(f"{v['id']} · rules {', '.join(v.get('rule_ids') or []) or '-'}"
+                           + (f" · {tx_id}" if tx_id else ""))
 
 
 def tab_changes(st: Any, data: dict[str, Any]) -> None:
@@ -281,11 +412,11 @@ def tab_mandate(st: Any, data: dict[str, Any]) -> None:
     st.caption(f"{m.get('mandate_id')} · policy {str(m.get('policy_hash'))[:16]}")
 
 
-def tab_receipts(st: Any) -> None:
+def tab_receipts(st: Any, who: str = "host") -> None:
     tx_id = st.text_input("Transaction ID (tx_...)")
     if not tx_id:
         return
-    code, r = api(f"/receipts/{tx_id}")
+    code, r = api(f"/receipts/{tx_id}", who)
     if code != 200:
         st.warning(r)
         return
@@ -300,7 +431,7 @@ def tab_receipts(st: Any) -> None:
 
 
 def tab_audit(st: Any, data: dict[str, Any]) -> None:
-    code, note = api("/checkpoint", log_id="audit")
+    code, note = api("/checkpoint", data.get("who", "host"), log_id="audit")
     st.markdown("**Latest signed checkpoint** (log key + witnesses)")
     st.code(note if code == 200 else f"unavailable: {note}", language="text")
     if st.button("Verify the full audit log now"):
@@ -325,7 +456,7 @@ def tab_audit(st: Any, data: dict[str, Any]) -> None:
         except ImportError:
             st.info("supervisor view not available on this build")
     st.markdown("**Receipts**")
-    tab_receipts(st)
+    tab_receipts(st, data.get("who", "host"))
 
 
 def tab_reports(st: Any) -> None:
@@ -344,45 +475,49 @@ def tab_reports(st: Any) -> None:
             st.json(json.loads(f.read_text()), expanded=False) if f.suffix == ".json" else st.code(f.read_text())
 
 
-def load() -> dict[str, Any]:
+def load(ident: auth.Identity) -> dict[str, Any]:
+    """Operators: everything. Auditors: the audit export only, read with the auditor principal (no vendor master,
+    proposals or payee changes are fetched for them, so none can leak into the page)."""
+    if ident.role == "auditor":
+        return {"who": ident.principal, "bundle": export_bundle()}
     vendors = _list("/vendors", "vendors")
     proposals = _list("/proposals", "proposals", limit=50)
     changes = _list("/changes", "changes")
+    ledger = _list("/ledger", "txs")
     bundle = export_bundle()
     kpis, cards = story.build(bundle, vendors, changes, proposals)
-    return {"vendors": vendors, "names": {v["vendor_id"]: v.get("name") or v["vendor_id"] for v in vendors},
-            "proposals": proposals, "changes": changes, "bundle": bundle, "kpis": kpis, "cards": cards}
+    return {"who": ident.principal, "vendors": vendors,
+            "names": {v["vendor_id"]: v.get("name") or v["vendor_id"] for v in vendors},
+            "proposals": proposals, "changes": changes, "ledger": ledger, "bundle": bundle,
+            "rail": rail_hashes(bundle), "kpis": kpis, "cards": cards}
 
 
-def body(st: Any) -> None:
-    data = load()
-    k = data["kpis"]
-    waiting = [p for p in data["proposals"] if p.get("status") == "CHALLENGED"]
-    waiting += [c for c in data["changes"] if c.get("state") in ("SIG_CLERK", "SIG_TREASURY")]
-    if waiting:
-        st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Check the text on the Trezor.")
-    m = st.columns(4)
-    m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payments",
-                delta_color="off")
-    m[1].metric("Paid to unregistered accounts", story.czk(k["attacker_minor"]))
-    m[2].metric("Blocked attempts", k["attacks"])
-    m[3].metric("Paid without a human", f"{k['auto_n']} of {k['paid_n']}", "inside the signed mandate",
-                delta_color="off")
-    tabs = st.tabs(["Overview", "Payments", "Payee changes", "Approvals", "Mandate", "Audit", "Reports"])
-    with tabs[0]:
-        tab_overview(st, data)
-    with tabs[1]:
-        tab_payments(st, data)
-    with tabs[2]:
-        tab_changes(st, data)
-    with tabs[3]:
-        tab_approvals(st, data)
-    with tabs[4]:
-        tab_mandate(st, data)
-    with tabs[5]:
-        tab_audit(st, data)
-    with tabs[6]:
-        tab_reports(st)
+TAB_RENDER = {
+    "Overview": tab_overview, "Payments": tab_payments, "Payee changes": tab_changes, "Approvals": tab_approvals,
+    "Mandate": tab_mandate, "Audit": tab_audit, "Reports": lambda st, data: tab_reports(st),
+}
+
+
+def body(st: Any, ident: auth.Identity | None = None) -> None:
+    ident = ident or auth.Identity("local", "operator")
+    data = load(ident)
+    if ident.role == "operator":
+        k = data["kpis"]
+        waiting = [p for p in data["proposals"] if p.get("status") == "CHALLENGED"]
+        waiting += [c for c in data["changes"] if c.get("state") in ("SIG_CLERK", "SIG_TREASURY")]
+        if waiting:
+            st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Check the text on the Trezor.")
+        m = st.columns(4)
+        m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payments",
+                    delta_color="off")
+        m[1].metric("Paid to unregistered accounts", story.czk(k["attacker_minor"]))
+        m[2].metric("Blocked attempts", k["attacks"])
+        m[3].metric("Paid without a human", f"{k['auto_n']} of {k['paid_n']}", "inside the signed mandate",
+                    delta_color="off")
+    names = list(ident.tabs)
+    for tab, name in zip(st.tabs(names), names):
+        with tab:
+            TAB_RENDER[name](st, data)
 
 
 def main() -> None:
@@ -391,7 +526,10 @@ def main() -> None:
 
     st.set_page_config(page_title="AirGap Mandates", layout="wide", initial_sidebar_state="collapsed")
     st.markdown(CSS, unsafe_allow_html=True)
-    code, health = api("/health")
+    ident = auth.gate(st)
+    if ident is None:  # sign-in page or refusal already rendered; nothing else is fetched or shown
+        return
+    code, health = api("/health", ident.principal)
     backend = health.get("backend") if isinstance(health, dict) else None
     if backend == "aws":
         cls, label = "banner-aws", f"AWS eu-central-1 · {health.get('deployment')}"
@@ -402,14 +540,20 @@ def main() -> None:
     h1, h2 = st.columns([3, 2])
     h1.markdown("## AirGap Mandates  \nPayment control for AI agents")
     policy = str(health.get("policy_hash"))[:16] if isinstance(health, dict) else "-"
+    who = "Console: local, no SSO" if ident.mode == "local" else f"Signed in: {ident.email} ({ident.role})"
     h2.markdown(f'<div style="text-align:right"><span class="{cls}">{label}</span><br>'
-                f'<small>policy {policy}</small></div>', unsafe_allow_html=True)
+                f'<small>policy {policy} · {who}</small></div>', unsafe_allow_html=True)
+    if ident.mode == "sso":
+        with st.sidebar:
+            st.markdown(f"Signed in as **{ident.email}**  \nRole: **{ident.role}**")
+            if st.button("Sign out"):
+                st.logout()
     if code != 200:
         st.error(f"executor: {health}")
     if emulator_only():
         st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 3 attached)</span>',
                     unsafe_allow_html=True)
-    if DEMO_TOOLS:
+    if DEMO_TOOLS and ident.mode == "local":  # the stage "compromised host" switch never exists behind SSO
         with st.sidebar:
             on = st.toggle("COMPROMISED host", value=compromised.is_compromised(),
                            help="The UI lies (H1). The device text and the executor are unaffected.")
@@ -418,9 +562,9 @@ def main() -> None:
         st.markdown('<span class="banner-local">COMPROMISED HOST: this screen may lie, trust the device</span>',
                     unsafe_allow_html=True)
     if REFRESH_S > 0 and hasattr(st, "fragment"):
-        st.fragment(run_every=REFRESH_S)(body)(st)
+        st.fragment(run_every=REFRESH_S)(body)(st, ident)
     else:
-        body(st)
+        body(st, ident)
 
 
 if __name__ == "__main__":
