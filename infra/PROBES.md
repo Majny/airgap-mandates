@@ -86,6 +86,8 @@ All named `airgap-probe-*`, tagged `project=airgap-mandates`, deleted right afte
 
 - Typed `invoice_no` can still carry very short imperative-looking values within its shape budget (e.g. `STOP/00`);
   the planner sees them as data only, and no money path depends on them.
-- A later body-only "reminder" email for an already paid invoice with a different VS / due date is not linked to
-  the first payment by the tools λ; the executor's I-DUP / F-SPLIT and the human step-up remain the gate.
+- Cross-email reminders: a later "reminder" email for an already paid invoice (different VS / due date / late fee)
+  is not linked to the first payment by the tools λ. Heuristics were tried in review rounds 3-4 and dropped: they
+  either missed real reminders or refused legitimate recurring invoices permanently. The executor's I-DUP / F-SPLIT,
+  the mandate cap and the human step-up remain the gate (demo/REAL_VS_SIMULATED.md gap 5).
 - Lambda pool of 10 means overlapping ticks are possible; W2 answers 409 and the relay catches up.
