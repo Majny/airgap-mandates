@@ -1,0 +1,17 @@
+**/__pycache__
+**/*.pyc
+.git
+.venv
+.local
+.env
+**/*.seed
+.streamlit/secrets.toml
+data/mostlyright/*.csv
+bench/results/*.jsonl
+infra/build
+infra/cdk.out
+infra/.venv
+node_modules
+data/issuer_keys
+data/dkim_keys
+data/mostlyright/snapshot.sqlite
