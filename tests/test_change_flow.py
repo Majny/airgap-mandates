@@ -671,7 +671,9 @@ def test_seed_registry_signers_and_inbox(tmp_path):
     assert row["email_id"] == "eml_" + hashlib.sha256(raw).hexdigest()[:16]
     assert row["from_domain"] == "acme.cz" and row["received_at"] == "2026-10-19T09:15:00Z"
     assert row["dkim"]["result"] in ("pass", "fail", "none")  # no DKIM-Signature: never "pass"
-    assert [json.loads(r["event"])["type"] for r in store.query("audit", ("log_id", "audit"))] == ["ingest"]
+    leaves = [json.loads(r["event"]) for r in store.query("audit", ("log_id", "audit"))]
+    assert [e["type"] for e in leaves] == ["enroll", "enroll", "ingest"]  # signers enrolled in the log (§7.2)
+    assert clerk["enroll_seq"] == next(e["seq"] for e in leaves if e["type"] == "enroll" and e["subject_id"] == CLERK)
     # a second run is idempotent on the inbox and bumps the registry version
     assert seed_data.seed(settings=settings, data_dir=str(tmp_path), store=store, now=T0)["emails"] == 1
     assert len(store.scan("inbox")) == 1
