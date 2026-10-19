@@ -163,7 +163,7 @@ F-SANCTION and the MostlyRight leg of F-DOMAIN, and appears in `FactSet.snapshot
 - `decision`: `"allow"` | `"deny"` | `"challenge"` for proposals; `"deny"` | `"pending"` for payee changes.
 - `challenge` present **iff** `decision == "challenge"`. **R0: `deny` ⇒ no challenge** (nothing to approve means nothing on the device).
 - `rule_ids`: sorted ascending union of (a) the `@id`s of the determining Cedar `forbid` policies (`P-*` permits are never
-  listed) and (b) the F ids of BLOCK/WARN facts that drove the outcome. `allow` ⇒ `[]`.
+  listed) and (b) the F ids of **all** BLOCK and WARN facts present (e.g. a WARN `F-PSP` is listed on a deny). `allow` ⇒ `[]`.
 - `mandate_id`: ACTIVE mandate evaluated, or `null`.
 - **Proposal decision** (pure `executor.policy.decide.decide()`, Cedar via `cedarpy`, tri-state, §8.1):
   1. Policy set `hard_deny` (Cedar, default-allow base `P-BASE`): any determining forbid (`I-PAYEE` unknown/inactive payee,
@@ -756,8 +756,8 @@ allowed if the cedarpy diagnostics prove awkward (decision Mon 16:00). There is 
 `policy_material() = {cedar_policies_text, cedar_schema, translit_table, fact_severity_table, params, policy_v: 2}`
 (`executor.policy.rules`; `cedar_policies_text` = the three files concatenated in the order above, LF-joined).
 Any change to a policy, the schema, the translit table or the severity table changes the hash. A mandate whose
-`policy_hash` ≠ the current hash fails I-MANDATE. Normalized invoice no: uppercase, strip non-alphanumerics, strip
-leading zeros of numeric runs.
+`policy_hash` ≠ the current hash fails I-MANDATE. Normalized invoice no: uppercase, strip leading zeros of numeric
+runs, then strip non-alphanumerics (`FV-2026-0412` → `FV2026412`).
 
 ### 8.2 Security invariants (each has a named test; all green by Tue 06:00)
 
