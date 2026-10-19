@@ -8,6 +8,7 @@ import hashlib
 import os
 import re
 import struct
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -196,6 +197,12 @@ def latest(log_id: str, *, store: Any) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+def witness_endpoint(url: str) -> str:
+    """AIRGAP_WITNESS_URL may be the witness base URL or the full add-checkpoint endpoint."""
+    url = url.rstrip("/")
+    return url if url.endswith("/add-checkpoint") else url + "/add-checkpoint"
+
+
 def _submit_w1(request_body: bytes, *, store: Any, settings: Any) -> tuple[int, str, bytes]:
     if settings.witness_url == "inproc":
         from witness import witness
@@ -204,7 +211,7 @@ def _submit_w1(request_body: bytes, *, store: Any, settings: Any) -> tuple[int, 
     import urllib.error
     import urllib.request
 
-    req = urllib.request.Request(settings.witness_url.rstrip("/") + "/add-checkpoint", data=request_body,
+    req = urllib.request.Request(witness_endpoint(settings.witness_url), data=request_body,
                                  method="POST", headers={"Content-Type": "text/plain"})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310 - configured witness URL
@@ -280,7 +287,7 @@ def make_checkpoint(log_id: str, *, store: Any, settings: Any) -> str:
     cosigners: list[str] = []
     for _ in range(2):  # second round only after a 409 told us the witness's real size
         proof = merkle.consistency_proof(old_size, hashes) if old_size <= size else []
-        status, _ctype, resp = _submit_w1(add_checkpoint_request(old_size, proof, note), store=store,
+        status, ctype, resp = _submit_w1(add_checkpoint_request(old_size, proof, note), store=store,
                                           settings=settings)
         witness_size = resp.strip().decode("ascii", "replace")
         if status == 409 and re.fullmatch(r"0|[1-9][0-9]*", witness_size) and int(witness_size) != old_size:
@@ -295,7 +302,11 @@ def make_checkpoint(log_id: str, *, store: Any, settings: Any) -> str:
 
     store.put("checkpoints", {**log.checkpoint_key(log_id, size), "note": note, "root_hash": root_hash.hex(),
                               "size": size, "created_at": log.now_iso(settings)})
-    if status in REFUSAL_STATUSES:  # W1 never writes the log (S7); the checkpointer records its refusal
+    from_witness = ctype.startswith(("text/plain", "text/x.tlog.size"))  # not e.g. an API Gateway JSON error
+    if status != 200 and not from_witness:
+        print(f"checkpoint {size}: W1 unreachable or misrouted (HTTP {status}, {ctype or 'no content type'}): "
+              f"{resp[:200]!r}", file=sys.stderr)
+    if status in REFUSAL_STATUSES and from_witness:  # W1 never writes the log (S7); the checkpointer records it
         log.append(log.make_event("witness_refusal", {"witness": witness_name(settings), "status": status,
                                                       "old_size": old_size, "size": size},
                                   subject_id=origin(log_id, settings), actor="checkpointer", log_id=log_id),
