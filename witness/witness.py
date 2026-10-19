@@ -1,17 +1,19 @@
 """W1 witness: C2SP tlog-witness add-checkpoint, timestamped Ed25519 cosignature (type 0x04).
 
 Refuses forks (409 stale / 422 bad proof), 403 bad signature, 404 unknown origin; size check + persistence in one
-conditional write on witness_state. CONTRACTS.md v2 §7.3. Owner: WS-B.
+conditional write on witness_state. W1 never writes the audit log (S7): the checkpointer/relay records refusals.
+Trusted log keys are pinned via AIRGAP_W1_LOG_VKEY. CONTRACTS.md v2 §7.3, §9. Owner: WS-B.
 """
 from __future__ import annotations
 
 import base64
-import binascii
 import hashlib
+import os
+import re
 from typing import Any
 
 from executor.audit import checkpoint as cp
-from executor.audit import kms, log, merkle
+from executor.audit import kms, merkle
 
 TEXT = "text/plain; charset=utf-8"
 SIZE = "text/x.tlog.size"
@@ -25,10 +27,18 @@ class _Reject(Exception):
         self.status, self.message, self.content_type = status, message, content_type
 
 
-def trusted_logs(settings: Any) -> dict[str, list[str]]:
-    """{origin: [log vkey]} this witness accepts (the deployment's audit and attestation logs)."""
+def trusted_logs(settings: Any, env: dict[str, str] | None = None) -> dict[str, list[str]]:
+    """{origin: [log vkey]} this witness accepts. AIRGAP_W1_LOG_VKEY = comma-separated pinned log vkeys (origin = key
+    name). Unset off AWS (dev/CI): derived from the local log key; unset on AWS: trust nothing (every origin 404)."""
+    pinned = (os.environ if env is None else env).get("AIRGAP_W1_LOG_VKEY", "")
+    out: dict[str, list[str]] = {}
+    if pinned.strip():
+        for vk in (v.strip() for v in pinned.split(",") if v.strip()):
+            out.setdefault(cp.parse_vkey(vk)["name"], []).append(vk)
+        return out
+    if settings.backend == "aws":
+        return out
     pub = kms.public_key(settings=settings, key="log")
-    out = {}
     for log_id in LOG_IDS:
         o = cp.origin(log_id, settings)
         out[o] = [cp.verifier_key(o, pub)]
@@ -46,15 +56,15 @@ def _parse_request(body: bytes) -> tuple[int, list[bytes], str]:
     lines = head.split("\n")
     old_line, proof_lines = lines[0], lines[1:]
     old_s = old_line[4:] if old_line.startswith("old ") else ""
-    if not old_s.isdigit() or (old_s != "0" and old_s.startswith("0")):
+    if not re.fullmatch(r"0|[1-9][0-9]*", old_s):
         raise _Reject(400, "bad old size line")
     if len(proof_lines) > MAX_PROOF_LINES:
         raise _Reject(400, "too many consistency proof lines")
     proof = []
     for p in proof_lines:
         try:
-            h = base64.b64decode(p, validate=True)
-        except binascii.Error as exc:
+            h = cp._unb64(p)  # canonical base64 only (C2SP)
+        except (cp.NoteError, ValueError) as exc:
             raise _Reject(400, "bad consistency proof line") from exc
         if len(h) != 32:
             raise _Reject(400, "bad consistency proof hash length")
@@ -108,17 +118,14 @@ def _check(body: bytes, *, store: Any, settings: Any, ctx: dict[str, Any]) -> tu
 
 
 def add_checkpoint(body: bytes, *, store: Any, settings: Any) -> tuple[int, str, bytes]:
-    """Return (http_status, content_type, body): 200 text/plain cosignature line(s) | 409 text/x.tlog.size | 403 | 404 | 422."""
-    ctx: dict[str, Any] = {}
+    """Return (http_status, content_type, body): 200 text/plain cosignature line(s) | 400 | 403 | 404 |
+    409 text/x.tlog.size | 422. Refusals are returned only; the caller logs them (W1 has no audit-log access)."""
     try:
-        return _check(body, store=store, settings=settings, ctx=ctx)
+        return _check(body, store=store, settings=settings, ctx={})
     except _Reject as r:
-        if r.status in (403, 404, 409, 422):
-            log.append(log.make_event("witness_refusal", {
-                "witness": cp.witness_name(settings), "status": r.status, "old_size": ctx.get("old_size", 0),
-                "size": ctx.get("size", 0)}, subject_id=ctx.get("origin"), actor="witness"),
-                store=store, settings=settings, checkpoint=False)
         return r.status, r.content_type, r.message.encode() if r.message.endswith("\n") else (r.message + "\n").encode()
+    except (ValueError, UnicodeError) as exc:  # anything unparseable that slipped past the checks above
+        return 400, TEXT, f"malformed request: {type(exc).__name__}\n".encode()
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:

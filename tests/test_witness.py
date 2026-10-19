@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from executor.audit import checkpoint as cp
-from executor.audit import log, merkle
+from executor.audit import kms, log, merkle
 from tests.ws_b_store import FakeStore, make_settings
 from witness import witness
 
@@ -65,7 +66,7 @@ def test_s8_fork_refused(env):
     status, _, body = _submit(settings, store, 4, merkle.consistency_proof(4, fork), _note(settings, fork))
     assert status == 422 and body == b"consistency proof does not verify\n"
     assert _state(settings, store) == before
-    assert _refusals(store) == [{"witness": cp.witness_name(settings), "status": 422, "old_size": 4, "size": 7}]
+    assert _refusals(store) == []  # W1 never writes the audit log (S7); the checkpointer records refusals
 
 
 def test_s8_stale_409(env):
@@ -78,7 +79,7 @@ def test_s8_stale_409(env):
     status, ctype, body = _submit(settings, store, 0, [], _note(settings, main))  # client thinks witness is fresh
     assert (status, ctype, body) == (409, "text/x.tlog.size", b"4\n")
     assert _state(settings, store) == before
-    assert [r["status"] for r in _refusals(store)] == [409, 409]
+    assert _refusals(store) == []  # W1 never writes the audit log (S7)
 
 
 # ------------------------------------------------------------------------------------------------- 200 paths
@@ -136,7 +137,7 @@ def test_403_bad_log_signature(env, tmp_path):
     status, _, _ = _submit(settings, store, 0, [], forged)
     assert status == 403
     assert _state(settings, store) is None
-    assert [r["status"] for r in _refusals(store)] == [403]
+    assert _refusals(store) == []  # W1 never writes the audit log (S7)
 
 
 def test_403_unknown_key_only(env, tmp_path):
@@ -145,14 +146,14 @@ def test_403_unknown_key_only(env, tmp_path):
     status, _, body = _submit(settings, store, 0, [], _note(rogue, _leaves(3)))
     assert status == 403 and b"known key" in body
     assert _state(settings, store) is None
-    assert [r["status"] for r in _refusals(store)] == [403]
+    assert _refusals(store) == []  # W1 never writes the audit log (S7)
 
 
 def test_404_unknown_origin(env):
     settings, store = env
     status, _, _ = _submit(settings, store, 0, [], _note(settings, _leaves(3), log_id="ledger"))
     assert status == 404
-    assert [r["status"] for r in _refusals(store)] == [404]
+    assert _refusals(store) == []  # W1 never writes the audit log (S7)
 
 
 def test_400_old_larger_than_size(env):
@@ -286,4 +287,44 @@ def test_concurrent_add_checkpoint_one_wins(env):
     final = _state(settings, store)
     assert loser[1] == "text/x.tlog.size" and loser[2] == f"{final['size']}\n".encode()
     assert final["size"] in (7, 9)
-    assert [r["status"] for r in _refusals(store)] == [409]
+    assert _refusals(store) == []  # W1 never writes the audit log (S7)
+
+
+# ------------------------------------------------------------------ checkpointer-side refusals and pinned log key
+
+def test_checkpointer_logs_w1_fork_refusal(env):
+    """W1 refuses (422) after its state diverges from the log; the checkpointer, not W1, appends witness_refusal."""
+    settings, store = env
+    for i in range(3):
+        log.append(log.make_event("tool_call", {"session_id": "s", "step": i, "tool": "t", "args_sha256": "0" * 64,
+                                                "result": "ok", "rule_ids": [], "untrusted_read": False},
+                                  subject_id=None, actor="agent"), store=store, settings=settings, checkpoint=False)
+    cp.make_checkpoint("audit", store=store, settings=settings)
+    state = _state(settings, store)
+    store.put("witness_state", {**state, "root_hash": "11" * 32})  # witness remembers a different tree
+    for i in range(3, 6):
+        log.append(log.make_event("tool_call", {"session_id": "s", "step": i, "tool": "t", "args_sha256": "0" * 64,
+                                                "result": "ok", "rule_ids": [], "untrusted_read": False},
+                                  subject_id=None, actor="agent"), store=store, settings=settings, checkpoint=False)
+    note = cp.make_checkpoint("audit", store=store, settings=settings)
+    assert cp.witness_name(settings) not in note
+    events = [json.loads(r["event"]) for r in log.leaves("audit", store=store)]
+    refusals = [e for e in events if e["type"] == "witness_refusal"]
+    assert len(refusals) == 1 and refusals[0]["actor"] == "checkpointer"
+    assert refusals[0]["data"]["status"] == 422 and refusals[0]["data"]["old_size"] == 3
+
+
+def test_pinned_log_vkey(env, tmp_path):
+    settings, _ = env
+    other = make_settings(tmp_path / "other")
+    pinned = cp.verifier_key(cp.origin("audit", other), kms.public_key(settings=other, key="log"))
+    assert witness.trusted_logs(settings, {"AIRGAP_W1_LOG_VKEY": pinned}) == {cp.origin("audit", other): [pinned]}
+    assert witness.trusted_logs(replace(settings, backend="aws"), {}) == {}  # AWS without a pin trusts nothing
+    assert set(witness.trusted_logs(settings, {})) == {cp.origin("audit", settings), cp.origin("attest", settings)}
+
+
+@pytest.mark.parametrize("old_line", ["old \u0661", "old 1\u0660"])
+def test_400_non_ascii_digits(env, old_line):
+    settings, store = env
+    status, _, _ = witness.add_checkpoint((old_line + "\n\nx\n").encode(), store=store, settings=settings)
+    assert status == 400

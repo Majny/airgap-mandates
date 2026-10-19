@@ -12,28 +12,28 @@ from executor import config
 from executor.audit import merkle
 from executor.canonical import canonical_json
 from executor.models import DECISION_RELEVANT_EVENTS, AuditEventType
-from executor.store import Put, TxConflict, UpdateIf
+from executor import store as storemod
+from executor.store import TxConflict
 
 DIGESTS = ("policy_hash", "inputs_digest", "facts_digest", "hints_digest")
 _DECISION_RELEVANT = {e.value for e in DECISION_RELEVANT_EVENTS}
 _EVENT_TYPES = {e.value for e in AuditEventType}
 
 
-# Store keys (CONTRACTS §3.1). Kept in one place so a backend key-shape change touches only these helpers.
+# Natural store keys (CONTRACTS §3.3: the backend builds physical pk/sk). Kept in one place.
 def leaf_key(log_id: str, seq: int) -> dict[str, Any]:
     return {"log_id": log_id, "seq": seq}
 
 
-def head_key(log_id: str) -> dict[str, Any]:
-    return {"log_id": f"head#{log_id}", "seq": 0}
+head_key = storemod.head_key
 
 
 def checkpoint_pk(log_id: str) -> tuple[str, str]:
-    return ("pk", f"checkpoint#{log_id}")
+    return ("log_id", log_id)
 
 
 def checkpoint_key(log_id: str, size: int) -> dict[str, Any]:
-    return {"pk": f"checkpoint#{log_id}", "sk": f"{size:012d}"}
+    return {"log_id": log_id, "sk": f"{size:012d}"}
 
 
 def now_iso(settings: Any) -> str:
@@ -44,16 +44,13 @@ def now_iso(settings: Any) -> str:
 def make_event(event_type: str, data: dict[str, Any], *, subject_id: str | None, actor: str, log_id: str = "audit",
                policy_hash: str | None = None, inputs_digest: str | None = None, facts_digest: str | None = None,
                hints_digest: str | None = None, ts: str | None = None) -> dict[str, Any]:
-    """Build a v2 event without seq (digests required for models.DECISION_RELEVANT_EVENTS)."""
+    """Build a v2 event without seq. Digests belong on models.DECISION_RELEVANT_EVENTS and are null elsewhere; a
+    missing digest is recorded as null, never refused (the log must not drop events): verify_audit flags it."""
     if event_type not in _EVENT_TYPES:
         raise ValueError(f"unknown event type {event_type!r}")
     digests: dict[str, str | None] = {"policy_hash": policy_hash, "inputs_digest": inputs_digest, "facts_digest": facts_digest,
                "hints_digest": hints_digest}
-    if event_type in _DECISION_RELEVANT:
-        missing = [k for k, v in digests.items() if not v]
-        if missing:
-            raise ValueError(f"{event_type} event requires {', '.join(missing)}")
-    else:
+    if event_type not in _DECISION_RELEVANT:
         digests = dict.fromkeys(DIGESTS)
     return {"v": 2, "log_id": log_id, "ts": ts, "type": event_type, "actor": actor, "subject_id": subject_id,
             "data": data, **digests}
@@ -65,21 +62,8 @@ def leaf_hash(event: dict[str, Any]) -> str:
 
 
 def _next_seq(log_id: str, store: Any) -> int:
-    head = store.get("audit", head_key(log_id))
-    if head is None:
-        store.put_if_absent("audit", {**head_key(log_id), "next_seq": 0}, "log_id")
-        head = store.get("audit", head_key(log_id))
-    return int(head["next_seq"])
-
-
-def leaf_ops(event: dict[str, Any], expected_seq: int) -> tuple[dict[str, Any], list[Any]]:
-    """(stored item, [leaf Put, head UpdateIf]) for one leaf at expected_seq (CONTRACTS §3.2 steps 1-2)."""
-    log_id = event["log_id"]
-    ev = {**event, "seq": expected_seq}
-    item = {**leaf_key(log_id, expected_seq), "event": canonical_json(ev).decode("utf-8"), "leaf_hash": leaf_hash(ev),
-            "ts": ev["ts"]}
-    return item, [Put("audit", item, if_absent_key="seq"),
-                  UpdateIf("audit", head_key(log_id), {"next_seq": expected_seq + 1}, {"next_seq": expected_seq})]
+    storemod.ensure_head(store, log_id)
+    return storemod.next_seq(store, log_id)
 
 
 def append(event: dict[str, Any], *, store: Any, settings: Any, checkpoint: bool = True) -> int:
@@ -91,38 +75,51 @@ def append(event: dict[str, Any], *, store: Any, settings: Any, checkpoint: bool
     log_id = event["log_id"]
     for _ in range(50):
         seq = _next_seq(log_id, store)
-        _, ops = leaf_ops(event, seq)
         try:
-            if store.transact(ops):
+            if store.transact(storemod.leaf_ops(event, seq)):
                 break
         except TxConflict:
             pass
     else:
         raise TxConflict(f"could not append to {log_id} after 50 attempts")
-    if checkpoint and _checkpoint_due(log_id, seq + 1, store=store, settings=settings):
+    if checkpoint:
         from executor.audit import checkpoint as cp
 
-        cp.make_checkpoint(log_id, store=store, settings=settings)
+        cp.maybe_checkpoint(log_id, store=store, settings=settings)
     return seq
 
 
-def _checkpoint_due(log_id: str, size: int, *, store: Any, settings: Any) -> bool:
+def checkpoint_due(log_id: str, size: int, *, store: Any, settings: Any) -> bool:
+    """N leaves since the last checkpoint, or max_seconds elapsed with uncovered leaves (or no checkpoint yet)."""
     from executor.audit import checkpoint as cp
 
     prev = cp.latest(log_id, store=store)
-    if prev is None:
+    covered = int(prev["size"]) if prev else 0
+    if size <= covered:
+        return False
+    if size - covered >= settings.checkpoint_every_n_leaves:
         return True
-    if size - int(prev["size"]) >= settings.checkpoint_every_n_leaves:
-        return True
-    age = config.now(settings) - datetime.fromisoformat(prev["created_at"].replace("Z", "+00:00"))
+    if prev is not None:
+        since = prev["created_at"]
+    else:  # fresh log: age of the oldest uncovered leaf
+        first = store.get("audit", leaf_key(log_id, 0))
+        if first is None:
+            return False
+        since = first["ts"]
+    age = config.now(settings) - datetime.fromisoformat(since.replace("Z", "+00:00"))
     return age.total_seconds() >= settings.checkpoint_max_seconds
+
+
+def next_size(log_id: str = "audit", *, store: Any) -> int:
+    """Current tree size (= next seq)."""
+    return storemod.next_seq(store, log_id)
 
 
 def tick(log_id: str = "audit", *, store: Any, settings: Any) -> str | None:
     """Scheduler entry: checkpoint if leaves exist that no checkpoint covers. Returns the new note or None."""
     from executor.audit import checkpoint as cp
 
-    size = _next_seq(log_id, store)
+    size = next_size(log_id, store=store)
     prev = cp.latest(log_id, store=store)
     if size == 0 or (prev is not None and int(prev["size"]) >= size):
         return None
@@ -153,7 +150,7 @@ def export(log_id: str, from_seq: int = 0, *, redact: bool = False, store: Any, 
         raise NotImplementedError("TODO WS-B: redacted export (IBAN -> salted commitment)")
     out_leaves = [{"seq": int(r["seq"]), "event": json.loads(r["event"]), "leaf_hash": r["leaf_hash"]}
                   for r in leaves(log_id, from_seq, store=store)]
-    notes = [r["note"] for r in sorted(store.query("checkpoints", checkpoint_pk(log_id)), key=lambda r: r["sk"])]
+    notes = [r["note"] for r in sorted(store.query("checkpoints", checkpoint_pk(log_id)), key=lambda r: int(r["size"]))]
     vk = cp.vkeys(settings)
     approvers = [{"address": e["data"]["address"], "role": e["data"]["role"], "device": e["data"]["device"],
                   "enroll_seq": le["seq"]} for le in out_leaves if (e := le["event"])["type"] == "enroll"]
@@ -161,10 +158,5 @@ def export(log_id: str, from_seq: int = 0, *, redact: bool = False, store: Any, 
     return {"log_id": log_id, "redacted": 0, "leaves": out_leaves, "checkpoints": notes,
             "pubkeys": {"log": vk["log"], "w1": vk["w1"], "w2": getattr(settings, "w2_vkey", None)},
             "approvers": approvers,
-            "policies": {rules.policy_hash(): {
-                "cedar_policies_text": material.get("cedar_policies_text", ""),
-                "cedar_schema": material.get("cedar_schema", ""),
-                "translit_table": material.get("translit_table"),
-                "fact_severity_table": material.get("fact_severity_table"),
-                "policy_v": material.get("policy_v")}},
+            "policies": {rules.policy_hash(): material},  # verbatim: sha256(canonical_json(material)) == key
             "snapshots": {}, "render_profile": settings.render_profile}

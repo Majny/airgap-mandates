@@ -6,6 +6,7 @@ import binascii
 import functools
 import hashlib
 import os
+import re
 import struct
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ SIG_ED25519 = 0x01
 SIG_COSIGNATURE = 0x04
 DASH = "—"
 MAX_SIGNATURES = 16
+REFUSAL_STATUSES = (403, 404, 409, 422)  # witness_refusal.status enum (CONTRACTS §7.2)
 
 
 class NoteError(ValueError):
@@ -102,7 +104,7 @@ def parse_note(note: str) -> dict[str, Any]:
     if len(lines) < 3:
         raise NoteError("checkpoint body needs origin, size and root hash")
     origin, size_s, root_b64, *extensions = lines
-    if not origin or not size_s.isdigit() or (size_s != "0" and size_s.startswith("0")):
+    if not origin or not re.fullmatch(r"0|[1-9][0-9]*", size_s):
         raise NoteError(f"bad checkpoint header: {origin!r} {size_s!r}")
     root_hash = _unb64(root_b64)
     if len(root_hash) != 32:
@@ -212,6 +214,15 @@ def add_checkpoint_request(old_size: int, proof: list[bytes], note: str) -> byte
     return (f"old {old_size}\n" + "".join(_b64(p) + "\n" for p in proof) + "\n" + note).encode()
 
 
+def maybe_checkpoint(log_id: str = "audit", *, store: Any, settings: Any) -> str | None:
+    """Checkpoint if due (N leaves or max seconds with uncovered leaves). Called after every append and by WS-A's
+    tx_execute after it commits an execution leaf. Returns the new note or None."""
+    size = log.next_size(log_id, store=store)
+    if not log.checkpoint_due(log_id, size, store=store, settings=settings):
+        return None
+    return make_checkpoint(log_id, store=store, settings=settings)
+
+
 def make_checkpoint(log_id: str, *, store: Any, settings: Any) -> str:
     """Compute root, sign, send to W1 (and W2 relay), store the cosigned note in `checkpoints`, S3 Object Lock copy,
     checkpoint leaf. Returns the cosigned note text."""
@@ -224,14 +235,17 @@ def make_checkpoint(log_id: str, *, store: Any, settings: Any) -> str:
     note = sign_note(body, name=origin(log_id, settings), settings=settings)
 
     prev = latest(log_id, store=store)
-    old_size = prev["size"] if prev else 0
+    old_size = int(prev["size"]) if prev else 0
     cosigners: list[str] = []
     for _ in range(2):  # second round only after a 409 told us the witness's real size
         proof = merkle.consistency_proof(old_size, hashes) if old_size <= size else []
-        status, ctype, resp = _submit_w1(add_checkpoint_request(old_size, proof, note), store=store,
-                                         settings=settings)
-        if status == 409 and resp.strip().isdigit() and int(resp) != old_size:
-            old_size = int(resp)
+        status, _ctype, resp = _submit_w1(add_checkpoint_request(old_size, proof, note), store=store,
+                                          settings=settings)
+        witness_size = resp.strip().decode("ascii", "replace")
+        if status == 409 and re.fullmatch(r"0|[1-9][0-9]*", witness_size) and int(witness_size) != old_size:
+            old_size = int(witness_size)
+            if old_size > size:  # the witness has seen a larger tree than ours: rollback/fork evidence
+                break
             continue
         break
     if status == 200:
@@ -240,6 +254,11 @@ def make_checkpoint(log_id: str, *, store: Any, settings: Any) -> str:
 
     store.put("checkpoints", {**log.checkpoint_key(log_id, size), "note": note, "root_hash": root_hash.hex(),
                               "size": size, "created_at": log.now_iso(settings)})
+    if status in REFUSAL_STATUSES:  # W1 never writes the log (S7); the checkpointer records its refusal
+        log.append(log.make_event("witness_refusal", {"witness": witness_name(settings), "status": status,
+                                                      "old_size": old_size, "size": size},
+                                  subject_id=origin(log_id, settings), actor="checkpointer", log_id=log_id),
+                   store=store, settings=settings, checkpoint=False)
     log.append(log.make_event("checkpoint", {"origin": origin(log_id, settings), "size": size,
                                              "root_hash": root_hash.hex(),
                                              "note_sha256": hashlib.sha256(note.encode()).hexdigest(),
