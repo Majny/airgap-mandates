@@ -16,8 +16,6 @@ def test_scene_s3_takeover_rejected_without_challenge():
     assert out["takeover"]["state"] == "REJECTED"
 
 
-@pytest.mark.xfail(strict=True, reason="WS-D: attestation rows keyed by sk vc#<n> and CHG challenges via "
-                   "policy.challenge.issue_challenge (in flight); remove this marker with that fix")
 def test_scene_s3_legit_change_reaches_active():
     out = scenes.scene_s3(log=lambda s: None)
     assert out["legit"]["state"] == "ACTIVE"
