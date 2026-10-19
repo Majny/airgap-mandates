@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import argparse
 import base64
-import email.utils
 import json
-from datetime import timezone
 from pathlib import Path
 
 from infra.aws_e2e import signed_call
@@ -25,11 +23,9 @@ def main() -> None:
     manifest = {r["file"]: r for r in json.loads((Path(a.dir) / "manifest.json").read_text())}
     for f in sorted(Path(a.dir).glob("*.eml")):
         raw = f.read_bytes()
-        msg = email.message_from_bytes(raw)
+        # no received_at: the sender-controlled Date header must not set our receive time (domain first-seen, age
+        # facts); the executor stamps it on ingest
         body = {"raw_b64": base64.b64encode(raw).decode()}
-        if msg.get("Date"):
-            body["received_at"] = email.utils.parsedate_to_datetime(msg["Date"]).astimezone(timezone.utc) \
-                .strftime("%Y-%m-%dT%H:%M:%SZ")
         st, r = call("POST", "/ingest", body, "ingest")
         want = manifest.get(f.name, {}).get("email_id")
         ok = st in (200, 201) and (want is None or r.get("email_id") == want)
