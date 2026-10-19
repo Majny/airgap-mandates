@@ -1,4 +1,8 @@
-"""Tests for executor/render.py (CONTRACTS section 5)."""
+"""Tests for executor/render.py, profile safe5-mono-18x7 (CONTRACTS §5, ARCHITECTURE §3.4).
+
+The four goldens below are byte-for-byte the screens in ARCHITECTURE §3.4.
+Emulator screenshot goldens live in tests/device/ (WS-C, needs trezor-user-env).
+"""
 
 from __future__ import annotations
 
@@ -12,419 +16,474 @@ from hypothesis import strategies as st
 from executor import render as R
 
 ACME_IBAN = "CZ6508000000192000145399"
+NEW_IBAN = "CZ6203000000000123456789"
 FRAUD_IBAN = "LT483999000000001234"  # fictitious Lithuanian EMI
-BETA_IBAN = "CZ6203000000000123456789"
-POLICY_HASH = "1f3a9c0e" + "ab" * 28
+LONG_IBAN = "LC14BOSL12345678901234567890123456"  # 34 chars, format-valid, synthetic
 
 
-def fact(id: str, kind: str = "F", severity: str = "INFO", line: str = "x") -> dict[str, str]:
+def h64(prefix16: str) -> str:
+    return prefix16 + "0" * 48
+
+
+def fact(id: str, severity: str = "INFO", line: str = "X", kind: str = "F") -> dict[str, str]:
     return {"id": id, "kind": kind, "severity": severity, "label": id, "display_line": line}
 
 
-BEC_FACTS = [
-    fact("F-BANK", severity="WARN", line="bank: EMI Lithuania (fict.)"),
-    fact("F-DOMAIN", severity="BLOCK", line="DKIM acme-cz.com != acme.cz"),
-    fact("F-ATTEST", severity="BLOCK", line="supplier 0/3"),
-    fact("H-AGENT", kind="H", line='agent: "bank change, urgent"'),
-]
-
-
-def assert_contract(text: str, width: int = R.DEFAULT_WIDTH):
-    ls = text.split("\n")
-    assert 1 <= len(ls) <= R.MAX_LINES
-    assert not text.endswith("\n")
-    text.encode("ascii")
-    for l in ls:
-        assert len(l) <= width, l
-        assert all(" " <= c <= "~" for c in l), l
-
-
-# ----------------------------------------------------------------- MANDATE
-
-
-def mandate_kwargs(**kw: Any) -> dict[str, Any]:
-    base: dict[str, Any] = dict(
-        mandate_no=3,
-        nonce="91BC02",
-        max_per_payment_minor=80000_00,
-        max_total_minor=250000_00,
-        max_count=20,
-        payee_scope="existing_only",
-        valid_until="2026-10-20T16:00:00Z",  # 18:00 Prague (CEST)
-        currency="CZK",
-        policy_hash=POLICY_HASH,
-    )
-    base.update(kw)
-    return base
-
-
-def test_mandate_exact():
-    text = R.render_mandate(**mandate_kwargs())
-    assert text == (
-        "AIRGAP MANDATE m:3 n:91BC02\n"
-        "max/payment 80000 CZK\n"
-        "max/total 250000 CZK\n"
-        "max 20 payments\n"
-        "existing payees only\n"
-        "valid until 2026-10-20 18:00\n"
-        "policy 1f3a9c0e"
-    )
-    assert_contract(text)
-
-
-@pytest.mark.parametrize("n,noun", [(1, "payment"), (2, "payments"), (20, "payments")])
-def test_mandate_count_noun(n, noun):
-    assert f"max {n} {noun}" in R.render_mandate(**mandate_kwargs(max_count=n))
-
-
-def test_mandate_datetime_object_equals_string():
-    a = R.render_mandate(**mandate_kwargs())
-    b = R.render_mandate(**mandate_kwargs(valid_until=datetime(2026, 10, 20, 16, 0, tzinfo=timezone.utc)))
-    assert a == b
-
-
-def test_mandate_rejects_naive_datetime_and_bad_scope():
-    with pytest.raises(R.RenderError):
-        R.render_mandate(**mandate_kwargs(valid_until="2026-10-20T16:00:00"))
-    with pytest.raises(R.RenderError):
-        R.render_mandate(**mandate_kwargs(payee_scope="any"))
-
-
-def test_amount_formatting():
-    assert R.format_amount(125000_00, "CZK") == "125000 CZK"
-    assert R.format_amount(125000_50, "CZK") == "125000.50 CZK"
-    assert R.format_amount(5, "EUR") == "0.05 EUR"
-    with pytest.raises(R.RenderError):
-        R.format_amount(1.5, "CZK")
-    with pytest.raises(R.RenderError):
-        R.format_amount(100, "USD")
-
-
-# ----------------------------------------------------------------- CHG
-
-
-def change_kwargs(**kw: Any) -> dict[str, Any]:
-    base: dict[str, Any] = dict(
-        change_no=7,
-        nonce="4F2A9C",
-        exp="2026-10-19T12:05:00Z",  # 14:05 Prague
-        vendor_name="ACME s.r.o.",
-        vendor_ico="12345678",
-        old_iban=ACME_IBAN,
-        new_iban=FRAUD_IBAN,
-        facts=BEC_FACTS,
-    )
-    base.update(kw)
-    return base
-
-
-def test_change_exact_width_32():
-    text = R.render_change(**change_kwargs())
-    assert text == (
-        "AIRGAP CHG #7 n:4F2A9C exp:14:05\n"
-        "ACME s.r.o. ICO 12345678\n"
-        "OLD CZ65 0800 0000\n"
-        "    1920 0014 5399\n"
-        "NEW LT48 3999 0000 0000 1234\n"
-        "[F] supplier 0/3\n"
-        "[F] DKIM acme-cz.com != acme.cz\n"
-        "[F] bank: EMI Lithuania (fict.)"
-    )
-    assert_contract(text)
-
-
-def test_change_wider_display_keeps_old_iban_on_one_line():
-    text = R.render_change(**change_kwargs(), width=34)
-    ls = text.split("\n")
-    assert ls[2] == "OLD CZ65 0800 0000 1920 0014 5399"
-    # one slot freed -> the [H] line now fits, appended last
-    assert ls[-1] == '[H] agent: "bank change, urgent"'
-    assert_contract(text, 34)
-
-
-def test_change_overflow_line_counts_omitted_facts():
-    many = BEC_FACTS + [
-        fact("F-VAT", severity="WARN", line="VAT acct: NO"),
-        fact("F-FIRSTSEEN", severity="WARN", line="domain first seen 2h"),
-    ]
-    text = R.render_change(**change_kwargs(facts=many))
-    ls = text.split("\n")
-    assert len(ls) == 8
-    assert ls[5] == "[F] supplier 0/3"
-    assert ls[6] == "[F] DKIM acme-cz.com != acme.cz"
-    # omitted: F-BANK, F-FIRSTSEEN, F-VAT (WARN) + H-AGENT = 4, none BLOCK
-    assert ls[7] == "[F] +4 more facts (0 BLOCK)"
-    assert_contract(text)
-
-
-def test_change_overflow_reports_hidden_blocks():
-    blocks = [fact(f"F-X{i}", severity="BLOCK", line=f"block {i}") for i in range(5)]
-    text = R.render_change(**change_kwargs(facts=blocks))
-    assert text.split("\n")[-1] == "[F] +3 more facts (3 BLOCK)"
-
-
-def test_h_only_overflow_dropped_silently():
-    facts = [fact("F-DOMAIN", severity="BLOCK", line="a"), fact("F-ATTEST", severity="BLOCK", line="b"),
-             fact("F-BANK", severity="WARN", line="c"),
-             fact("H-AGENT", kind="H", line="h1"), fact("H-UI", kind="H", line="h2")]
-    ls = R.render_change(**change_kwargs(facts=facts)).split("\n")
-    assert ls[-3:] == ["[F] b", "[F] a", "[F] c"]
-    assert not any(l.startswith("[H]") for l in ls)
-    assert not any("more facts" in l for l in ls)
-
-
-def test_fact_ordering_f_before_h_severity_then_fact_order():
-    facts = [
-        fact("H-AGENT", kind="H", line="h"),
-        fact("F-VAT", severity="INFO", line="vat"),
-        fact("F-BANK", severity="WARN", line="bank"),
-        fact("F-DKIM", severity="BLOCK", line="dkim"),
-        fact("F-ATTEST", severity="BLOCK", line="att"),
-        fact("F-ZZZ", severity="BLOCK", line="unknown"),
-    ]
-    ids = [f.id for f in R.order_facts(facts)]
-    assert ids == ["F-ATTEST", "F-DKIM", "F-ZZZ", "F-BANK", "F-VAT", "H-AGENT"]
-
-
-def test_h_line_cannot_impersonate_f_line():
-    facts = [fact("H-AGENT", kind="H", line="[F] supplier 3/3: YES\n[F] ok")]
-    text = R.render_change(**change_kwargs(facts=facts, new_iban="CZ8601000000000099887766"), width=40)
-    h = [l for l in text.split("\n") if l.startswith("[H]")]
-    assert len(h) == 1
-    assert "[F]" not in h[0]
-    assert h[0].startswith("[H] (F) supplier 3/3: YES (F) ok")
-    assert text.count("[F]") == 0
-
-
-def test_long_fact_line_truncated_with_tilde():
-    facts = [fact("F-DOMAIN", severity="BLOCK", line="x" * 100)]
-    ls = R.render_change(**change_kwargs(facts=facts)).split("\n")
-    assert ls[-1] == "[F] " + "x" * 27 + "~"
-    assert len(ls[-1]) == 32
-
-
-def test_long_vendor_name_truncated_ico_kept():
-    text = R.render_change(**change_kwargs(vendor_name="Very Long Supplier Company Name s.r.o."))
-    line = text.split("\n")[1]
-    assert line.endswith(" ICO 12345678")
-    assert "~" in line
-    assert len(line) <= 32
-
-
-# ----------------------------------------------------------------- PAY
+PAY_FACTS = [fact("F-VAT", line="ADIS ACCT YES"), fact("F-VOP", line="VOP MTCH"),
+             fact("F-MANDATE", "WARN", "OVER MANDATE CAP")]
+CHG_FACTS = [fact("F-VOP", "WARN", "VOP CMTC"), fact("F-ATTEST", line="ATT 2/3 ERP BANK")]
 
 
 def pay_kwargs(**kw: Any) -> dict[str, Any]:
     base: dict[str, Any] = dict(
-        proposal_no=41,
-        nonce="0C55A1",
-        exp="2026-10-19T13:20:00Z",  # 15:20 Prague
-        payee_name="Beta Servis a.s.",
-        iban=BETA_IBAN,
-        amount_minor=125000_00,
-        currency="CZK",
-        vs="2026104",
-        facts=[
-            fact("F-VAT", severity="INFO", line="VAT acct: YES"),
-            fact("F-MANDATE", severity="WARN", line="above mandate (max 80000)"),
-        ],
+        proposal_no=42, nonce="0C55A1E7", exp="2026-10-19T13:20:00Z", payee_name="Beta Servis a.s.",
+        iban=ACME_IBAN, amount_minor=12500_50, currency="CZK", vs="2026101901", facts=PAY_FACTS,
+        subject_hash=h64("9b1e44c07a2d1f30"),
     )
     base.update(kw)
     return base
 
 
-def test_pay_exact():
-    text = R.render_pay(**pay_kwargs())
-    assert text == (
-        "AIRGAP PAY #41 n:0C55A1\n"
-        "Beta Servis a.s.\n"
-        "CZ62 0300 0000 0001 2345 6789\n"
-        "125000 CZK VS 2026104\n"
-        "[F] above mandate (max 80000)\n"
-        "[F] VAT acct: YES\n"
-        "exp 15:20"
+def mandate_kwargs(**kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = dict(
+        mandate_no=3, nonce="91BC02E1", max_per_payment_minor=80000_00, max_total_minor=250000_00, max_count=20,
+        payee_scope="existing_only", valid_from="2026-10-19T10:00:00Z", valid_until="2026-10-20T16:00:00Z",
+        currency="CZK", require_vop=["MTCH"], payee_count=12, payee_registry_version=31,
+        policy_hash=h64("1f3a9c0e7d2b4a61"), subject_hash=h64("3e0d9a1c55b2e7f0"), role="clerk", sig_index=1,
+        sig_total=2,
     )
-    assert_contract(text)
+    base.update(kw)
+    return base
 
 
-def test_pay_without_vs_and_exp_last():
-    text = R.render_pay(**pay_kwargs(vs=None, facts=[]))
-    ls = text.split("\n")
-    assert ls[3] == "125000 CZK"
-    assert ls[-1] == "exp 15:20"
-
-
-def test_pay_h_lines_after_f_before_exp():
-    facts = pay_kwargs()["facts"] + [fact("H-UI", kind="H", line="ui: ok")]
-    ls = R.render_pay(**pay_kwargs(facts=facts)).split("\n")
-    assert ls[-2] == "[H] ui: ok"
-    assert ls[-1] == "exp 15:20"
-    assert ls.index("[F] VAT acct: YES") < ls.index("[H] ui: ok")
-
-
-def test_long_title_drops_airgap_prefix():
-    ls = R.render_change(**change_kwargs(change_no=12)).split("\n")
-    assert ls[0] == "CHG #12 n:4F2A9C exp:14:05"
-    assert R.render_change(**change_kwargs(change_no=7)).startswith("AIRGAP CHG #7 ")
-
-
-def test_pay_bad_vs_rejected():
-    with pytest.raises(R.RenderError):
-        R.render_pay(**pay_kwargs(vs="12a"))
-
-
-# ----------------------------------------------------------------- VENDOR ATTEST
+def chg_kwargs(**kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = dict(
+        change_no=7, nonce="7C11A0E2", vendor_name="ACME s.r.o.", vendor_ico="12345678", old_iban=ACME_IBAN,
+        old_since="2024-03-01", new_iban=NEW_IBAN, facts=CHG_FACTS, subject_hash=h64("4f2a9c1e0b7d3a55"),
+        role="treasury", sig_index=2, sig_total=2,
+    )
+    base.update(kw)
+    return base
 
 
 def attest_kwargs(**kw: Any) -> dict[str, Any]:
     base: dict[str, Any] = dict(
-        vendor_name="ACME s.r.o.",
-        ico="12345678",
-        version=5,
-        nonce="7D11E0",
-        iban=ACME_IBAN,
-        valid_from="2026-10-20",
-        signer_role="director",
-        role_basis="OR",
-        threshold=2,
-        signer_count=3,
+        change_no=7, nonce="7D11E0A2", vendor_name="ACME s.r.o.", ico="12345678", iban=NEW_IBAN,
+        valid_from="2026-10-20", signer_role="director", role_basis="OR", threshold=2, signer_count=3, version=5,
+        subject_hash=h64("5a0c7e19d3b4f286"),
     )
     base.update(kw)
     return base
 
 
-def test_vendor_attest_exact():
-    text = R.render_vendor_attest(**attest_kwargs())
-    assert text == (
-        "VENDOR ATTEST ACME s.r.o.\n"
-        "ICO 12345678 v:5 n:7D11E0\n"
-        "ACCT CZ65 0800 0000\n"
-        "     1920 0014 5399\n"
-        "valid from 2026-10-20\n"
-        "signer: stat. director (OR)\n"
-        "quorum 2/3"
-    )
-    assert_contract(text)
+def assert_s11(text: str) -> list[list[str]]:
+    """S11: ASCII + LF, <=18 cols, page 1 exactly 7 lines, <=2 pages, line 1 starts AG1/, break lines <=15."""
+    ls = text.split("\n")
+    assert not text.endswith("\n")
+    assert all(" " <= c <= "~" or c == "\n" for c in text)
+    assert all(1 <= len(line) <= 18 for line in ls), ls
+    assert ls[0].startswith("AG1/")
+    assert len(ls) <= 14
+    if len(ls) > 7:
+        assert len(ls[6]) <= R.BREAK_LINE_MAX and len(ls[7]) <= R.BREAK_LINE_MAX
+    return R.render_pages(text)
 
 
-def test_vendor_attest_role_lines_differ_per_signer():
-    a = R.render_vendor_attest(**attest_kwargs())
-    b = R.render_vendor_attest(**attest_kwargs(signer_role="accountant", role_basis="POA"))
-    assert a != b
-    assert "signer: accountant (POA)" in b
+# ----------------------------------------------------------------- goldens (ARCHITECTURE §3.4)
 
+PAY_GOLDEN = (
+    "AG1/DEMO PAY 42\n"
+    "12500.50 CZK\n"
+    "CZ65 0800 0000\n"
+    "1920 0014 5399\n"
+    "BETA SERVIS A.S.\n"
+    "VS 2026101901\n"
+    "EXP 10-19 15:20\n"
+    "0 BLOCK 1 WARN\n"
+    "OVER MANDATE CAP\n"
+    "VOP MTCH\n"
+    "ADIS ACCT YES\n"
+    "ROLE CLERK 1/1\n"
+    "N 0C55A1E7\n"
+    "H 9b1e44c07a2d1f30"
+)
 
-def test_vendor_attest_unknown_role_passthrough():
-    assert "signer: auditor (POA)" in R.render_vendor_attest(**attest_kwargs(signer_role="auditor", role_basis="POA"))
+MANDATE_GOLDEN = (
+    "AG1/DEMO MANDATE\n"
+    "NO 3 CZK\n"
+    "PER PAY 80000\n"
+    "TOTAL 250000\n"
+    "MAX 20 PAYMENTS\n"
+    "EXISTING PAYEES\n"
+    "TO 10-20 18:00\n"
+    "ROLE CLERK 1/2\n"
+    "FROM 10-19 12:00\n"
+    "REQ VOP MTCH\n"
+    "PAYEES 12 REG V31\n"
+    "N 91BC02E1\n"
+    "P 1f3a9c0e7d2b4a61\n"
+    "H 3e0d9a1c55b2e7f0"
+)
 
+CHG_GOLDEN = (
+    "AG1/DEMO CHG 7\n"
+    "ACME S.R.O.\n"
+    "ICO 12345678\n"
+    "OLD ..5399 2024-03\n"
+    "NEW CZ62 0300 0000\n"
+    "    0001 2345 6789\n"
+    "BANK 0300 CZ\n"
+    "0 BLOCK 1 WARN\n"
+    "ATT 2/3 ERP BANK\n"
+    "VOP CMTC\n"
+    "COOLOFF DONE\n"
+    "ROLE TREASURY 2/2\n"
+    "N 7C11A0E2\n"
+    "H 4f2a9c1e0b7d3a55"
+)
 
-def test_vendor_attest_bad_threshold():
-    with pytest.raises(R.RenderError):
-        R.render_vendor_attest(**attest_kwargs(threshold=4))
-
-
-# ----------------------------------------------------------------- IBAN grouping
-
-
-def test_iban_full_grouping():
-    assert R.format_iban("cz65 0800 0000 1920 0014 5399") == "CZ65 0800 0000 1920 0014 5399"
-    assert R.format_iban(FRAUD_IBAN) == "LT48 3999 0000 0000 1234"
-    # 34-char max IBAN, last group short
-    long_iban = "MT84MALT011000012345MTLCAST001S"
-    assert R.format_iban(long_iban) == "MT84 MALT 0110 0001 2345 MTLC AST0 01S"
-
-
-def test_iban_balanced_wrap_never_truncates():
-    long_iban = "MT84MALT011000012345MTLCAST001S"
-    ls = R.format_iban_lines("NEW", long_iban, 24)
-    assert "".join(l.strip().removeprefix("NEW").replace(" ", "") for l in ls) == long_iban
-    assert all(len(l) <= 24 for l in ls)
-    assert ls[1].startswith("    ") and not ls[1].startswith("     ")
-
-
-def test_bad_iban_rejected():
-    for bad in ["", "CZ65", "1234567890123456", "CZ65 0800 0000 1920 0014 539é"]:
-        with pytest.raises(R.RenderError):
-            R.format_iban(bad)
-
-
-# ----------------------------------------------------------------- ASCII + limits
-
-
-def test_sanitize_diacritics_and_homoglyphs():
-    assert R.sanitize("Česká Výroba s.r.o.") == "Ceska Vyroba s.r.o."
-    assert R.sanitize("АСМЕ") == "????"  # Cyrillic lookalike is visibly different
-    assert R.sanitize("a\tb\n\nc  d") == "a b c d"
-    assert R.sanitize("[x]", hint=True) == "(x)"
-
-
-def test_non_ascii_names_render_ascii():
-    text = R.render_pay(**pay_kwargs(payee_name="Šťastná Žluťoučká a.s.", facts=[]))
-    assert text.split("\n")[1] == "Stastna Zlutoucka a.s."
-    assert_contract(text)
-
-
-def test_width_too_small_and_bad_nonce():
-    with pytest.raises(R.RenderError):
-        R.render_pay(**pay_kwargs(), width=10)
-    with pytest.raises(R.RenderError):
-        R.render_pay(**pay_kwargs(nonce="0c55a1"))
-    with pytest.raises(R.RenderError):
-        R.render_pay(**pay_kwargs(nonce="0C55A"))
-
-
-def test_dispatch_render_matches_direct_and_unknown_template():
-    p = pay_kwargs()
-    assert R.render("PAY", p) == R.render_pay(**p)
-    assert R.render("CHG", change_kwargs(), width=34) == R.render_change(**change_kwargs(), width=34)
-    with pytest.raises(R.RenderError):
-        R.render("NOPE", {})
-    with pytest.raises(R.RenderError):
-        R.render("PAY", {"nonce": "0C55A1"})
-
-
-def test_text_sha256_stable():
-    t = R.render_mandate(**mandate_kwargs())
-    assert R.text_sha256(t) == R.text_sha256(R.render_mandate(**mandate_kwargs()))
-    assert len(R.text_sha256(t)) == 64
-
-
-# ----------------------------------------------------------------- property tests
-
-printable = st.text(min_size=0, max_size=80)
-fact_st = st.builds(
-    lambda i, k, s, line: {"id": i if k == "F" else "H-AGENT", "kind": k,
-                           "severity": s if k == "F" else "INFO", "label": "l", "display_line": line},
-    st.sampled_from(list(R.FACT_ORDER[:12]) + ["F-OTHER"]),
-    st.sampled_from(["F", "H"]),
-    st.sampled_from(["INFO", "WARN", "BLOCK"]),
-    printable,
+ATTEST_GOLDEN = (
+    "AG1/DEMO ATTEST\n"
+    "ACME S.R.O.\n"
+    "ICO 12345678\n"
+    "PAY TO ACCOUNT\n"
+    "CZ62 0300 0000\n"
+    "0001 2345 6789\n"
+    "FROM 2026-10-20\n"
+    "SIGNER DIR (OR)\n"
+    "QUORUM 2/3 V5\n"
+    "CHANGE 7\n"
+    "N 7D11E0A2\n"
+    "H 5a0c7e19d3b4f286"
 )
 
 
+def test_pay_golden():
+    text = R.render_pay(**pay_kwargs())
+    assert text == PAY_GOLDEN
+    assert [len(p) for p in assert_s11(text)] == [7, 7]
+
+
+def test_mandate_golden():
+    text = R.render_mandate(**mandate_kwargs())
+    assert text == MANDATE_GOLDEN
+    assert [len(p) for p in assert_s11(text)] == [7, 7]
+
+
+def test_chg_golden():
+    text = R.render_change(**chg_kwargs())
+    assert text == CHG_GOLDEN
+    assert [len(p) for p in assert_s11(text)] == [7, 7]
+
+
+def test_attest_golden():
+    text = R.render_vendor_attest(**attest_kwargs())
+    assert text == ATTEST_GOLDEN
+    assert [len(p) for p in assert_s11(text)] == [7, 5]
+
+
+@pytest.mark.parametrize("template,kw,golden", [
+    ("PAY", pay_kwargs(), PAY_GOLDEN),
+    ("MANDATE", mandate_kwargs(), MANDATE_GOLDEN),
+    ("CHG", chg_kwargs(), CHG_GOLDEN),
+    ("VENDOR_ATTEST", attest_kwargs(), ATTEST_GOLDEN),
+])
+def test_rerender_from_params(template, kw, golden):
+    assert R.render(template, kw) == golden
+    assert R.render(template, kw, profile=R.PROFILE_SAFE5, deployment="DEMO") == golden
+
+
+def test_profile_constants():
+    p = R.PROFILES["safe5-mono-18x7"]
+    assert (p.width, p.lines_per_page, p.max_pages, p.break_line_max) == (18, 7, 2, 15)
+    assert R.DEFAULT_PROFILE == "safe5-mono-18x7" and R.DEFAULT_WIDTH == 18 and R.MAX_LINES == 14
+    assert R.MIN_WIDTH["safe5-mono-18x7"] == 18
+
+
+# ----------------------------------------------------------------- general rules
+
+
+def test_deployment_tag_in_title():
+    text = R.render_pay(**pay_kwargs(deployment="PROD1"))
+    assert text.split("\n")[0] == "AG1/PROD1 PAY 42"
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(deployment="demo"))
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(deployment="TOOLONG"))
+
+
+def test_title_never_dropped():
+    with pytest.raises(R.RenderError) as e:
+        R.render_pay(**pay_kwargs(deployment="ABCDE", proposal_no=12345))  # 'AG1/ABCDE PAY 12345' = 19
+    assert e.value.code == "WIDTH"
+
+
+@pytest.mark.parametrize("nonce", ["0C55A1", "0c55a1e7", "0C55A1E7F", "GGGGGGGG"])
+def test_nonce_is_8_uppercase_hex(nonce):
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(nonce=nonce))
+
+
+def test_hints_never_on_device():
+    hint = fact("H-AGENT", line="agent: CFO approved", kind="H")
+    text = R.render_pay(**pay_kwargs(facts=PAY_FACTS + [hint]))
+    assert text == PAY_GOLDEN
+    assert "[H]" not in text and "[F]" not in text and "AGENT" not in text
+
+
+def test_r0_block_fact_cannot_render():
+    with pytest.raises(R.RenderError) as e:
+        R.render_pay(**pay_kwargs(facts=PAY_FACTS + [fact("F-DOMAIN", "BLOCK", "LOOKALIKE DOMAIN")]))
+    assert e.value.code == "R0_BLOCK"
+    with pytest.raises(R.RenderError):
+        R.render_change(**chg_kwargs(facts=[fact("F-ATTEST", "BLOCK", "ATT 0/3")]))
+
+
+def test_fact_lines_uppercased_and_truncated():
+    long = fact("F-PSP", "WARN", "psp unknown in any list")
+    text = R.render_pay(**pay_kwargs(facts=[long]))
+    assert "PSP UNKNOWN IN AN~" in text.split("\n")
+
+
+def test_fact_display_line_must_be_ascii():
+    with pytest.raises(R.RenderError) as e:
+        R.render_pay(**pay_kwargs(facts=[fact("F-VAT", line="ÚČET ZVEŘEJNĚN")]))
+    assert e.value.code == "NON_ASCII"
+
+
+def test_fact_order_v2():
+    ids = [f.id for f in R.order_facts([fact("F-BANK"), fact("F-VAT"), fact("F-PSP"), fact("F-VOP"),
+                                        fact("F-SANCTION"), fact("F-WARNLIST"), fact("F-ATTEST"),
+                                        fact("F-ZZZ"), fact("H-AGENT", kind="H")])]
+    assert ids == ["F-ATTEST", "F-WARNLIST", "F-SANCTION", "F-VOP", "F-PSP", "F-VAT", "F-BANK", "F-ZZZ"]
+
+
+def test_fact_overflow_keeps_warns_and_counts():
+    facts = [fact("F-BANK", line="BANK INFO"), fact("F-VAT", line="ADIS ACCT YES"), fact("F-VOP", line="VOP MTCH"),
+             fact("F-PSP", "WARN", "PSP UNKNOWN"), fact("F-FIRSTSEEN", "WARN", "FIRST SEEN 2H")]
+    text = R.render_pay(**pay_kwargs(facts=facts))
+    page2 = assert_s11(text)[1]
+    assert page2 == ["0 BLOCK 2 WARN", "PSP UNKNOWN", "FIRST SEEN 2H", "+3 MORE 0 BLOCK", "ROLE CLERK 1/1",
+                     "N 0C55A1E7", "H 9b1e44c07a2d1f30"]
+
+
+def test_no_facts_page2_is_short():
+    text = R.render_pay(**pay_kwargs(facts=[]))
+    assert assert_s11(text)[1] == ["0 BLOCK 0 WARN", "ROLE CLERK 1/1", "N 0C55A1E7", "H 9b1e44c07a2d1f30"]
+
+
+def test_amount_whole_major_units():
+    text = R.render_pay(**pay_kwargs(amount_minor=12500000))
+    assert text.split("\n")[1] == "125000 CZK"
+
+
+@pytest.mark.parametrize("bad", [1.5, -1, True, "100"])
+def test_amount_must_be_int_minor(bad):
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(amount_minor=bad))
+
+
+def test_times_are_prague_mmdd_hhmm():
+    winter = R.render_pay(**pay_kwargs(exp="2026-12-01T13:20:00Z"))
+    assert "EXP 12-01 14:20" in winter.split("\n")
+    dt = datetime(2026, 10, 19, 13, 20, tzinfo=timezone.utc)
+    assert R.render_pay(**pay_kwargs(exp=dt)) == PAY_GOLDEN
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(exp="2026-10-19T13:20:00"))  # naive
+
+
+# ----------------------------------------------------------------- page-1 fill and overflow
+
+
+def test_pay_without_vs_fills_page1_with_bank():
+    text = R.render_pay(**pay_kwargs(vs=None))
+    p1 = assert_s11(text)[0]
+    assert p1[-2:] == ["EXP 10-19 15:20", "BANK 0800 CZ"]
+
+
+def test_pay_lt_iban():
+    text = R.render_pay(**pay_kwargs(iban=FRAUD_IBAN))
+    p1 = assert_s11(text)[0]
+    assert p1[2:4] == ["LT48 3999 0000", "0000 1234"]
+
+
+def test_pay_34_char_iban_moves_exp_to_page2():
+    text = R.render_pay(**pay_kwargs(iban=LONG_IBAN))
+    p1, p2 = assert_s11(text)
+    assert p1 == ["AG1/DEMO PAY 42", "12500.50 CZK", "LC14 BOSL 1234", "5678 9012 3456", "7890 1234 56",
+                  "BETA SERVIS A.S.", "VS 2026101901"]
+    assert p2[:2] == ["0 BLOCK 1 WARN", "EXP 10-19 15:20"]
+    assert p2[-3:] == ["ROLE CLERK 1/1", "N 0C55A1E7", "H 9b1e44c07a2d1f30"]
+    assert "".join(p1[2:5]).replace(" ", "") == LONG_IBAN  # IBAN in full
+
+
+def test_chg_34_char_iban_keeps_break_rule():
+    text = R.render_change(**chg_kwargs(new_iban=LONG_IBAN))
+    p1, p2 = assert_s11(text)
+    assert p1[3:] == ["NEW LC14 BOSL 1234", "    5678 9012 3456", "    7890 1234 56", "BANK BOSL LC"]
+    assert p2[1] == "OLD ..5399 2024-03"
+
+
+def test_chg_lt_iban():
+    p1 = assert_s11(R.render_change(**chg_kwargs(new_iban=FRAUD_IBAN)))[0]
+    assert p1[4:] == ["NEW LT48 3999 0000", "    0000 1234", "BANK 39990 LT"]
+
+
+def test_attest_34_char_iban_moves_from_to_page2():
+    p1, p2 = assert_s11(R.render_vendor_attest(**attest_kwargs(iban=LONG_IBAN)))
+    assert p1[-1] == "7890 1234 56"
+    assert "FROM 2026-10-20" in p2
+
+
+@pytest.mark.parametrize("name,line", [
+    ("Dodavatel Servis s", "DODAVATEL SERVIS S"),          # 18 chars, fits
+    ("Dodavatel Servis sro", "DODAVATEL SERVIS ~"),        # truncated with ~
+    ("Řemeslná dílna Žďár", "REMESLNA DILNA ZD~"),         # transliterated, then truncated
+    ("Straße & Søn", "STRASSE & SON"),
+])
+def test_names_uppercase_translit_truncate(name, line):
+    text = R.render_pay(**pay_kwargs(payee_name=name))
+    assert assert_s11(text)[0][4] == line
+
+
+def test_name_that_cannot_be_transliterated_fails_closed():
+    with pytest.raises(R.RenderError) as e:
+        R.render_pay(**pay_kwargs(payee_name="ООО Ромашка"))
+    assert e.value.code == "NON_ASCII"
+
+
+def test_mandate_treasury_role_line_respects_page_break():
+    p2 = assert_s11(R.render_mandate(**mandate_kwargs(role="treasury", sig_index=2)))[1]
+    assert p2[0] == "REQ VOP MTCH"
+    assert set(p2) >= {"ROLE TREASURY 2/2", "FROM 10-19 12:00", "PAYEES 12 REG V31"}
+
+
+def test_attest_long_signer_line_respects_page_break():
+    p2 = assert_s11(R.render_vendor_attest(**attest_kwargs(signer_role="accountant", role_basis="POA")))[1]
+    assert p2[0] == "QUORUM 2/3 V5" and "SIGNER ACCT (POA)" in p2
+
+
+def test_mandate_single_payment_noun():
+    assert "MAX 1 PAYMENT" in R.render_mandate(**mandate_kwargs(max_count=1)).split("\n")
+
+
+def test_enroll_and_reject_single_page():
+    e = R.render_enroll(role="clerk", nonce="0C55A1E7")
+    assert e == "AG1/DEMO ENROLL\nROLE CLERK\nN 0C55A1E7"
+    r = R.render_chg_reject(change_no=7, nonce="1A2B3C4D", vendor_name="ACME s.r.o.", vendor_ico="12345678",
+                            new_iban=FRAUD_IBAN, subject_hash=h64("0123456789abcdef"))
+    assert r == ("AG1/DEMO REJECT 7\nACME S.R.O.\nICO 12345678\nNEW ..1234\nROLE CLERK\nN 1A2B3C4D\n"
+                 "H 0123456789abcdef")
+    assert len(assert_s11(r)) == 1
+
+
+# ----------------------------------------------------------------- negative goldens (S11 validator)
+
+
+def test_negative_diacritics_rejected():
+    with pytest.raises(R.RenderError) as e:
+        R.check_text("AG1/DEMO PAY 1\nDODAVATEL ŘEMESLA")
+    assert e.value.code == "NON_ASCII"
+
+
+def test_negative_19_char_line_rejected():
+    with pytest.raises(R.RenderError) as e:
+        R.check_text("AG1/DEMO PAY 1\n" + "X" * 19)
+    assert e.value.code == "WIDTH"
+
+
+def test_negative_three_pages_rejected():
+    with pytest.raises(R.RenderError) as e:
+        R.check_text("\n".join(["AG1/DEMO PAY 1"] + ["LINE"] * 14))
+    assert e.value.code == "PAGES"
+
+
+def test_negative_long_line_at_page_break_rejected():
+    text = "\n".join(["AG1/DEMO PAY 1"] + ["L"] * 5 + ["X" * 16] + ["N 0C55A1E7"])
+    with pytest.raises(R.RenderError) as e:
+        R.check_text(text)
+    assert e.value.code == "PAGE_BREAK"
+
+
+def test_negative_missing_tag_and_trailing_newline():
+    with pytest.raises(R.RenderError):
+        R.check_text("PAY 1\nX")
+    with pytest.raises(R.RenderError):
+        R.check_text("AG1/DEMO PAY 1\n")
+
+
+# ----------------------------------------------------------------- profiles, width, hashes
+
+
+def test_ui_preview_profile_is_wider_and_not_for_device():
+    text = R.render_pay(**pay_kwargs(profile=R.PROFILE_UI))
+    ls = text.split("\n")
+    assert ls[2] == "CZ65 0800 0000 1920 0014 5399" and all(len(x) <= 32 for x in ls)
+    with pytest.raises(R.RenderError):
+        R.check_text(text)  # does not fit the device profile
+
+
+def test_width_parameter():
+    text = R.render_pay(**pay_kwargs(width=20))
+    assert all(len(x) <= 20 for x in text.split("\n"))
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(width=17))
+    with pytest.raises(R.RenderError):
+        R.render_pay(**pay_kwargs(profile="nope"))
+
+
+def test_subject_hash_deterministic_and_drives_h_line():
+    params = {k: v for k, v in pay_kwargs().items() if k != "subject_hash"}
+    subj = R.subject_object(deployment="DEMO", purpose="PAY", role="clerk", subject_id="prp_42",
+                            nonce="0C55A1E7", params=params, facts_digest="ab" * 32, policy_hash="cd" * 32)
+    sh = R.subject_hash(subj)
+    assert len(sh) == 64 and sh == R.subject_hash(dict(subj))
+    assert "nonce" not in subj["params"] and "subject_hash" not in subj["params"]
+    text = R.render_pay(**pay_kwargs(subject_hash=sh))
+    assert text.split("\n")[-1] == f"H {sh[:16]}"
+
+
+def test_translit_table_hash_stable():
+    assert len(R.translit_table_hash()) == 64
+    assert R.display_name("ACME s.r.o.") == "ACME S.R.O."
+
+
+def test_deterministic():
+    assert R.render_pay(**pay_kwargs()) == R.render_pay(**pay_kwargs())
+    assert R.text_sha256(PAY_GOLDEN) == R.text_sha256(R.render_pay(**pay_kwargs()))
+
+
+# ----------------------------------------------------------------- S11 property test
+
+
+_hex = st.text(alphabet="0123456789ABCDEF", min_size=8, max_size=8)
+_name = st.text(alphabet=st.characters(min_codepoint=0x20, max_codepoint=0x17F), min_size=1, max_size=40).filter(
+    lambda s: s.strip() != "")
+_line = st.text(alphabet=st.characters(min_codepoint=0x20, max_codepoint=0x7E), min_size=1, max_size=30).filter(
+    lambda s: s.strip() != "")
+_fact = st.builds(lambda i, s, ln: fact(i, s, ln), st.sampled_from(R.FACT_ORDER), st.sampled_from(["INFO", "WARN"]),
+                  _line)
+_iban = st.sampled_from([ACME_IBAN, NEW_IBAN, FRAUD_IBAN, LONG_IBAN, "DE89370400440532013000",
+                         "SK3112000000198742637541"])
+
+
 @settings(max_examples=300, deadline=None)
-@given(facts=st.lists(fact_st, max_size=10), width=st.integers(30, 48), name=printable, no=st.integers(1, 99999))
-def test_property_contract_and_determinism(facts, width, name, no):
-    kw = change_kwargs(facts=facts, vendor_name=name or "X", change_no=no)
-    t1 = R.render_change(**kw, width=width)
-    t2 = R.render_change(**dict(kw, facts=list(reversed(facts))), width=width)
-    assert t1 == t2  # input order of facts never matters
-    assert_contract(t1, width)
-    # IBANs always complete
-    flat = t1.replace(" ", "").replace("\n", "")
-    assert ACME_IBAN in flat and FRAUD_IBAN in flat
-    # every BLOCK fact is either shown or counted in the overflow line
-    n_block = sum(1 for f in facts if f["severity"] == "BLOCK" and f["kind"] == "F")
-    shown_block = sum(1 for f in R.order_facts(facts) if f.severity == "BLOCK"
-                      and R._fact_line(f, width) in t1.split("\n"))
-    last = t1.split("\n")[-1]
-    hidden = int(last.split("(")[1].split(" ")[0]) if "more facts" in last else 0
-    assert shown_block + hidden >= n_block
-
-
-@settings(max_examples=200, deadline=None)
-@given(facts=st.lists(fact_st, max_size=10), amount=st.integers(1, 10**12))
-def test_property_pay(facts, amount):
-    t = R.render_pay(**pay_kwargs(facts=facts, amount_minor=amount))
-    assert_contract(t)
-    assert t.split("\n")[-1] == "exp 15:20"
+@given(no=st.integers(1, 99999), nonce=_hex, name=_name, iban=_iban, amount=st.integers(0, 10**12),
+       vs=st.one_of(st.none(), st.from_regex(r"^[0-9]{1,10}$", fullmatch=True)),
+       facts=st.lists(_fact, max_size=8))
+def test_s11_grid(no, nonce, name, iban, amount, vs, facts):
+    """S11: every PAY/CHG the renderer accepts obeys the 18x7 grid; anything else raises RenderError."""
+    try:
+        text = R.render_pay(**pay_kwargs(proposal_no=no, nonce=nonce, payee_name=name, iban=iban,
+                                         amount_minor=amount, vs=vs, facts=facts))
+    except R.RenderError:
+        return
+    pages = assert_s11(text)
+    assert len(pages[0]) == 7
+    assert pages[1][0].startswith("0 BLOCK ")
+    try:
+        text = R.render_change(**chg_kwargs(change_no=no, nonce=nonce, vendor_name=name, new_iban=iban,
+                                            facts=facts))
+    except R.RenderError:
+        return
+    assert len(assert_s11(text)[0]) == 7
