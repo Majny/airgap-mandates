@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import base64
 import dataclasses
-import email
 import hashlib
 import json
 import re
@@ -75,7 +74,7 @@ class World:
         self.emails: dict[str, str] = {}
         for path in sorted(EMAILS.glob("*.eml")):
             raw = path.read_bytes()
-            received = seed_data._received_at(email.message_from_bytes(raw), T0)
+            received = seed_data.fixture_received_at(path, T0)
             st_, r = self.call("POST", "/ingest", {"raw_b64": base64.b64encode(raw).decode("ascii"),
                                                     "received_at": received}, "ingest")
             assert st_ == 201, r

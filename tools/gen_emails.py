@@ -282,8 +282,9 @@ def generate(data_dir: Path) -> list[dict[str, Any]]:
         (emails_dir / fx.file).write_bytes(raw)
         email_id = "eml_" + hashlib.sha256(raw).hexdigest()[:16]
         from_domain = fx.from_addr.rsplit("@", 1)[1].rstrip(">").lower()
+        # received_at: when the fixture reached the inbox (tools/seed_data.py seeds it; never the Date header)
         row: dict[str, Any] = {"file": fx.file, "email_id": email_id, "from_domain": from_domain,
-                               "scenario": fx.scenario, "attack": fx.attack,
+                               "received_at": fx.date, "scenario": fx.scenario, "attack": fx.attack,
                                "vendor_id": VENDORS[fx.vendor]["vendor_id"] if fx.vendor else None,
                                "expected_facts": fx.expected_facts}
         if fx.invoice:

@@ -201,7 +201,6 @@ def test_warnlist_hit(snap: Path, name: str, domains: list[str], match: str) -> 
 @pytest.mark.parametrize("name,domains", [
     ("Capital Nepravda Group", []),  # first token differs
     ("Some Vendor", ["gmail.com"]),  # shared mailbox provider never counts
-    ("Ghost Warning Firm", []),  # only in truncated / shifted (record_ok = 0) rows
     ("Some Vendor", ["fictiveinvest.test.example"]),  # the listed domain is not a parent
 ])
 def test_warnlist_no_false_positive(snap: Path, name: str, domains: list[str]) -> None:
@@ -230,13 +229,15 @@ def test_sanction_hit(snap: Path, name: str, ico: str, match: str) -> None:
     assert f["evidence"]["hit"]["match"] == match
 
 
-def test_record_ok_zero_rows_are_indexed_but_never_match(snap: Path) -> None:
-    # guards the ghost cases against passing vacuously: the names ARE in the index under a valid record_type
+def test_record_ok_zero_sanction_and_warning_rows_still_match(snap: Path) -> None:
+    # truncated / shifted rows that are still a sanction or a warning fail closed: a listed entity never comes out
+    # CLEAR because its row did not line up (the shifted fragment 9f... names 'warning' as its source_list)
     got = _rows(snap, "SELECT r.record_type, r.record_ok FROM names n JOIN records r ON r.seq = n.seq "
                       "WHERE n.core IN ('ghost warning firm', 'ghost sanctioned holding') ORDER BY 1, 2")
     assert ("sanction", 0) in got and ("warning", 0) in got and all(ok == 0 for _, ok in got)
-    assert sanction_fact("Ghost Sanctioned Holding", "", mr_path=snap)["display_line"] == "SANCTIONS CLEAR"
-    assert warnlist_fact("Ghost Warning Firm", [], mr_path=snap)["display_line"] == "WARNLIST CLEAR"
+    assert sanction_fact("Ghost Sanctioned Holding", "", mr_path=snap)["display_line"] == "EU SANCTION HIT"
+    assert warnlist_fact("Ghost Warning Firm", [], mr_path=snap)["display_line"] == "WARNLIST HIT"
+    assert mr.unclassified_rows(snap) == 0
 
 
 @pytest.mark.parametrize("name", ["Orlo s.r.o.", "Fiktivni Zbrojovka", "Orel", "ACME s.r.o."])

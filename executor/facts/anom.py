@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from executor.config import iso
 from executor.facts import _util
 from executor.models import Fact
 
@@ -26,6 +27,36 @@ TZ = ZoneInfo("Europe/Prague")
 
 WEIGHTS = {"untrusted_read_before_action": 40, "proposal_burst": 20, "just_below_cap": 20, "round_amount": 10,
            "off_hours": 10}
+
+
+def normalize_log(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """tool_calls rows as executor/tools/handler.py stores them (`sk` = zero-padded step, `at` = timestamp) or
+    already-normalised rows -> [{session_id, step, tool, untrusted_read, ts}], sorted by (session_id, step). A row
+    whose step cannot be read keeps step 0 and still counts as a read (never drops an untrusted read)."""
+    out: list[dict[str, Any]] = []
+    for r in rows or []:
+        step = r.get("step", r.get("sk", 0))
+        try:
+            step = int(step)
+        except (TypeError, ValueError):
+            step = 0
+        out.append({"session_id": str(r.get("session_id", "")), "step": step, "tool": r.get("tool"),
+                    "untrusted_read": bool(r.get("untrusted_read")), "ts": r.get("ts", r.get("at"))})
+    return sorted(out, key=lambda r: (r["session_id"], r["step"]))
+
+
+def session_log(session_id: str, *, store: Any, action: str | None = None, step: int | None = None,
+                now: datetime | None = None) -> list[dict[str, Any]]:
+    """The executor's own tool-call log of one agent session (the `tool_calls` table, written by the tools λ), plus
+    the in-flight action as a synthetic row: the tools λ logs payment.propose / payee.request_change only after the
+    executor answered, so without it F-ANOM could never see the action it scores."""
+    log = normalize_log(store.query("tool_calls", ("session_id", session_id)))
+    if action is not None:
+        last = max((r["step"] for r in log), default=0)
+        log.append({"session_id": str(session_id), "step": int(step) if step is not None else last + 1,
+                    "tool": action, "untrusted_read": False,
+                    "ts": iso(now) if now else None})
+    return log
 
 
 def _untrusted_before_action(log: list[dict[str, Any]]) -> bool:
@@ -61,7 +92,8 @@ def _amount(subject: dict[str, Any]) -> int | None:
 
 def features(subject: dict[str, Any], tool_log: list[dict[str, Any]], *, mandate: dict[str, Any] | None,
              now: datetime) -> list[str]:
-    """Names of the fired features, in WEIGHTS order."""
+    """Names of the fired features, in WEIGHTS order. `tool_log`: tool_calls rows (stored or normalised form)."""
+    tool_log = normalize_log(tool_log)
     fired: set[str] = set()
     if _untrusted_before_action(tool_log):
         fired.add("untrusted_read_before_action")
@@ -83,11 +115,12 @@ def features(subject: dict[str, Any], tool_log: list[dict[str, Any]], *, mandate
 def anom_fact(subject: dict[str, Any], tool_log: list[dict[str, Any]], *, payee: dict[str, Any],
               mandate: dict[str, Any] | None, now: datetime) -> Fact:
     """F-ANOM; prov = digest(tool_log). `payee` is accepted for future features (same-vendor splitting)."""
-    log = list(tool_log or [])
+    raw = list(tool_log or [])
+    log = normalize_log(raw)
     fired = features(subject, log, mandate=mandate, now=now)
     score = min(100, sum(WEIGHTS[f] for f in fired))
     severity = "WARN" if score >= WARN_AT else "INFO"
     evidence = {"score": score, "features": ",".join(fired), "tool_calls": len(log),
                 "vendor_id": payee.get("vendor_id")}
     return _util.make_fact("F-ANOM", severity, f"{LABEL}: {score}/100", f"ANOM {score}/100", evidence=evidence,
-                           prov=_util.digest(log))
+                           prov=_util.digest(raw))

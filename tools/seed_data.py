@@ -11,7 +11,8 @@ backend in dev/CI) or a store object passed in. Natural keys only (executor.stor
   payee_registry_hash from executor.policy.mandate.registry_snapshot.
 * enrolled_signers: data/enrollment.json as written by tools/enroll.py (the ceremony transcript is not stored).
 * inbox: data/emails/*.eml through executor.facts.dkim.ingest (inbox row + ingest-time DKIM verdict + `ingest` leaf);
-  direct rows when ingest() is unavailable (DKIM "none": fails closed, F-DKIM BLOCK).
+  direct rows when ingest() is unavailable (DKIM "none": fails closed, F-DKIM BLOCK). received_at is the fixture time
+  from data/emails/manifest.json, else the seeding clock; never the sender-controlled Date header.
 """
 from __future__ import annotations
 
@@ -115,27 +116,45 @@ def seed_signers(path: Path, *, store: Any, settings: Any = None) -> int:
     return n
 
 
-def _received_at(msg: email.message.Message, now: datetime) -> str:
+def _manifest_times(emails_dir: Path) -> dict[str, str]:
+    """file name -> fixture `received_at` from emails_dir/manifest.json (our own fixture data, never the message)."""
+    path = emails_dir / "manifest.json"
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {str(m["file"]): str(m["received_at"]) for m in doc if isinstance(m, dict) and m.get("file")
+            and isinstance(m.get("received_at"), str)} if isinstance(doc, list) else {}
+
+
+def fixture_received_at(path: Path, now: datetime) -> str:
+    """When a fixture email reached the inbox: its manifest.json `received_at`, else the seeding clock `now`.
+
+    Never the message's own Date header: that is sender-controlled, and a backdated Date would age the sender domain
+    (F-DOMAIN-AGE first seen). A fixture time later than `now` is clamped to `now`. In production received_at comes
+    from the MTA / ingest clock only (POST /ingest ignores the override on aws)."""
     received = now
-    if msg.get("Date"):
+    fixed = _manifest_times(path.parent).get(path.name)
+    if fixed:
         try:
-            received = email.utils.parsedate_to_datetime(msg["Date"])
-            if received.tzinfo is None:
-                received = received.replace(tzinfo=timezone.utc)
-        except (TypeError, ValueError):
+            ts = datetime.fromisoformat(fixed.replace("Z", "+00:00"))
+            received = min(ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc), now)
+        except ValueError:
             received = now
     return iso(received.replace(microsecond=0))
 
 
-def inbox_row(raw: bytes, *, now: datetime) -> dict[str, Any]:
+def inbox_row(raw: bytes, *, now: datetime, received_at: str | None = None) -> dict[str, Any]:
     """Direct `inbox` row (email_id = eml_<16 hex of sha256(raw)>) for when ingest() is unavailable: no DKIM
-    verdict ("none"), so F-DKIM fails closed."""
+    verdict ("none"), so F-DKIM fails closed. received_at: the fixture time, else `now` (never the Date header)."""
     sha = hashlib.sha256(raw).hexdigest()
     msg = email.message_from_bytes(raw)
     from_addr = email.utils.parseaddr(msg.get("From", ""))[1].lower()
     email_id = f"eml_{sha[:16]}"
     from_domain = from_addr.rpartition("@")[2]
-    received_at = _received_at(msg, now)
+    received_at = received_at or iso(now.replace(microsecond=0))
     return {
         "email_id": email_id, "s3_key": f"inbox-raw/{email_id}.eml", "sha256": sha, "from_addr": from_addr,
         "from_domain": from_domain, "subject": str(msg.get("Subject", "")), "received_at": received_at,
@@ -152,12 +171,12 @@ def seed_inbox(emails_dir: Path, *, store: Any, settings: Any, now: datetime) ->
     n = 0
     for path in sorted(emails_dir.glob("*.eml")):
         raw = path.read_bytes()
+        received_at = fixture_received_at(path, now)
         if ingest is not None:
-            received_at = _received_at(email.message_from_bytes(raw), now)
             ingest({"raw_b64": base64.b64encode(raw).decode("ascii"), "received_at": received_at},
                    store=store, settings=settings)
         else:
-            store.put("inbox", inbox_row(raw, now=now))
+            store.put("inbox", inbox_row(raw, now=now, received_at=received_at))
         n += 1
     return n
 

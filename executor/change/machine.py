@@ -11,7 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -21,6 +21,7 @@ from executor.change import ports
 from executor.config import iso
 from executor.errors import HTTP_STATUS, ApiError, ErrorCode
 from executor.facts import compute as _compute
+from executor.facts.anom import normalize_log as anom_log
 from executor.facts import inbox as _inbox
 from executor.models import (TERMINAL_STATES, AuditEventType, Change, ChangeEvent, ChangeEventKind, ChangeState,
                              Decision, DeviceAuthenticity, Fact, FactSet)
@@ -205,9 +206,11 @@ def _attest_results(change_id: str, store: Any, revoked: set[str] | None = None)
 
 
 def compute_change_facts(req: dict[str, Any], vendor: dict[str, Any], *, store: Any, settings: Any, now: datetime,
-                         change: dict[str, Any] | None = None) -> FactSet:
+                         change: dict[str, Any] | None = None,
+                         tool_log: list[dict[str, Any]] | None = None) -> FactSet:
     """Build the compute() state for a payee change (CONTRACTS §2.1) and return its FactSet. Before the change
-    exists (change=None) F-ATTEST / F-CALLBACK come out BLOCK (ATT 0/3, CALLBACK MISSING)."""
+    exists (change=None) F-ATTEST / F-CALLBACK come out BLOCK (ATT 0/3, CALLBACK MISSING). `tool_log`: the agent
+    session's tool calls (executor.facts.anom.session_log) for F-ANOM; a caller without one scores an empty log."""
     in_network = bool(vendor.get("in_network"))
     provisional = {"in_network": in_network, "break_glass": False,
                    "callback": {"status": "none" if in_network else "pending", "code_exp": None, "attempts": 0}}
@@ -217,7 +220,7 @@ def compute_change_facts(req: dict[str, Any], vendor: dict[str, Any], *, store: 
         "payee": vendor, **_inbox.email_state(req.get("email_id"), store=store),
         "change": change or provisional,
         "attest_results": _attest_results(change["change_id"], store, _revoked(settings)) if change else [],
-        "tool_log": [], "data_dir": settings.data_dir,
+        "tool_log": anom_log(tool_log), "data_dir": settings.data_dir,
     }
     return _compute.compute(subject, state, now)
 
@@ -606,12 +609,14 @@ def _activate(change: Change, *, expect: dict[str, Any], store: Any, settings: A
     vendor = _vendor(store, change["vendor_id"])
     if vendor["iban"] != change["old_iban"]:
         raise ApiError(ErrorCode.STATE_CONFLICT, "registry IBAN changed since the request", {"state": change["state"]})
-    today = now.astimezone(timezone.utc).date().isoformat()
+    # Full ISO timestamp, never a bare date: a mandate signed earlier the same day pinned a registry snapshot that
+    # did not hold this IBAN, and a day-granular `from` would sort before its created_at (I-REGISTRY fail-open).
+    at = iso(now)
     history = [dict(h) for h in vendor.get("iban_history") or []]
     for h in history:
         if h.get("iban") == vendor["iban"] and h.get("to") is None:
-            h["to"] = today
-    history.append({"iban": change["new_iban"], "from": today, "to": None, "change_id": change["change_id"]})
+            h["to"] = at
+    history.append({"iban": change["new_iban"], "from": at, "to": None, "change_id": change["change_id"]})
     meta = store.get("registry", {"vendor_id": META_KEY})
     version = int((meta or {}).get("registry_version", 0))
     active = [[r["vendor_id"], change["new_iban"] if r["vendor_id"] == vendor["vendor_id"] else r["iban"]]
