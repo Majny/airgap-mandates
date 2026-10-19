@@ -1,0 +1,52 @@
+executor https://ehhxkpbfcc.execute-api.eu-central-1.amazonaws.com/prod: 200 backend=aws profile=safe3-mono-16x4
+clerk    0x6a7438740dc3289067175efda02459170dc1317d  GENUINE
+treasury 0xfa01a39f8abaeb660c3137f14a310d0b414b2a15  EMULATOR
+
+mandate mnd_1: sig_required=2
+AG1/DEMO MANDATE
+NO 1 CZK
+PER PAY 80000
+TOTAL 250000
+MAX 20 PAYMENTS
+EXISTING PAYEES
+TO 10-20 15:34
+ROLE CLERK 1/2
+FROM 10-19 15:34
+REQ VOP MTCH
+PAYEES 3 REG V1
+N F33AFE77
+P 3909f806c26877
+H 8fa19ce6580b89
+
+--> CLERK on Safe 3 GENUINE: read every page, then HOLD the right button
+clerk signed -> PENDING_SIG_TREASURY
+--> TREASURY on Safe 3 EMULATOR: auto-confirm (simulated human)
+treasury signed -> ACTIVE (mnd_1)
+
+invoice 1: 14500.00 CZK -> allow under mnd_1, tx_aaa77024e314701a rail ACTC
+invoice 2: 20000.00 CZK -> allow under mnd_1, tx_ac20dd23052bed32 rail ACTC
+invoice 3: 30000.00 CZK -> allow under mnd_1, tx_682ed5d048518652 rail ACTC
+
+invoice 4: 125000.50 CZK -> challenge ['F-MANDATE', 'F-SPLIT', 'I-PER', 'I-SPLIT', 'I-WARN']; device shows:
+AG1/DEMO PAY 4
+125000.50 CZK
+CZ62 0300 0000
+0001 2345 6789
+BETA SERVIS A.S.
+VS 1334069
+EXP 10-19 15:39
+0 BLOCK 2 WARN
+OVER MANDATE CAP
+SPLIT 24H
++7 MORE 0 BLOCK
+ROLE CLERK 1/1
+N 7096D389
+H 77c9c54b4697cb
+
+--> CLERK on Safe 3 GENUINE: read every page, then HOLD the right button
+clerk held to confirm -> payment_executed tx_be3f0c5e464cd37e
+--> CLERK: replaying the captured signature (no device interaction)
+replay of the same signature -> 403 nonce_reused
+mandate spent 64500.00 CZK in 3 payments (the step-up is outside it)
+
+S1 WITH DEVICES OK
