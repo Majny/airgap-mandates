@@ -1,0 +1,12 @@
+{
+ "git_sha": "462ade534575",
+ "model": "scripted",
+ "a3_gate": {
+  "proposals": "executor.handler.dispatch (memory backend)",
+  "facts": "executor.facts.compute (WS-D, real)",
+  "changes": "executor.change.machine via POST /changes (WS-D, real)",
+  "attestations": "DEMO-ONLY issuers supplier-erp + supplier-bank (real SD-JWT VCs, simulated organisations)",
+  "inbox": "POST /ingest (executor computes the DKIM verdict over the DNS snapshot)"
+ },
+ "note": "H2-H6 scripted compromised host, model-independent. A0-A2 rows are by construction (no control at that layer). H6 on AWS additionally rests on the agent VPC having no route (WS-E S10 proof)."
+}
