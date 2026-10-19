@@ -79,3 +79,23 @@ preflight:  ## stage-laptop checklist: Safe 3 GENUINE + unlocked, treasury emula
 
 offline-demo: .local/bin/noteverify  ## "Wi-Fi off" stage check of docs/audit/demo (build noteverify while online)
 	bash tools/offline_demo.sh docs/audit/demo
+
+# ---------------------------------------------------------------- live demo on AWS (WS-F; scenes refuse non-AWS)
+.PHONY: demo-reset demo-s1 demo-s2 demo-s3 demo-s5
+DEMO_URL ?= $(shell $(PY) -c "import json;print(json.load(open('infra/evidence/post_deploy.json'))['api_url'])" 2>/dev/null)
+DEMO_ENV = AIRGAP_BACKEND=aws AWS_REGION=eu-central-1 AIRGAP_EXECUTOR_URL=$(DEMO_URL)
+
+demo-reset:  ## AWS OWNER ONLY (docs/STAGE.md T-60): = infra.reset_state --yes (wipes the airgap-* tables, re-seeds)
+	$(DEMO_ENV) $(PY) -m infra.reset_state --yes
+
+demo-s1:  ## live S1 on AWS (WS-A e2e beat via SigV4 per principal)
+	$(DEMO_ENV) $(PY) -m demo.scene_s1
+
+demo-s2:  ## live S2 on AWS (lookalike BEC, escalation, exfil)
+	$(DEMO_ENV) $(PY) -m demo.scene_s2
+
+demo-s3:  ## live S3 on AWS (takeover -> ATT 0/3 -> tripwire reject; legit 2/3 VCs -> 2/2 -> ACTIVE; waits 20 s cooling)
+	$(DEMO_ENV) $(PY) -m demo.scene_s3
+
+demo-s5:  ## seal the audit export from AWS (auditor role, read-only) + tampered copy, for the offline beat
+	$(DEMO_ENV) $(PY) -m demo.scene_s5
