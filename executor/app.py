@@ -6,7 +6,6 @@ the caller checks are skipped. memory backend seeds the canonical demo registry 
 
 Owner: WS-A.
 """
-from __future__ import annotations
 
 import json
 from typing import Any
