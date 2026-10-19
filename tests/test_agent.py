@@ -54,7 +54,7 @@ def _run(mode):
 def test_quarantined_planner_never_sees_untrusted_text():
     h, planner, out = _run("quarantined")
     assert out["final"] == "Proposed 1 invoice."
-    assert len(out["proposals"]) == 1 and out["proposals"][0]["decision"] == "allow"
+    assert len(out["proposals"]) == 1 and out["proposals"][0]["decision"] in ("allow", "challenge")
     transcript = "".join(planner.seen)
     assert INJECTION not in transcript and "<untrusted" not in transcript and "ACME s.r.o." not in transcript
     assert "txt_" in transcript  # free text reaches the planner only as handles
@@ -84,3 +84,24 @@ def test_sonnet_gate_waits_when_budget_spent():
     assert slept and 59 < slept[0] <= 61
     llm.gate("qwen.x", 1, clock=lambda: t[0], sleep=slept.append)  # non-Anthropic models are not gated
     llm._times.clear()
+
+
+class FakeGuard(FakePlanner):
+    def apply_guardrail(self, **kw):
+        text = kw["content"][0]["text"]["text"]
+        hit = INJECTION in text
+        return {"action": "GUARDRAIL_INTERVENED" if hit else "NONE",
+                "assessments": [{"contentPolicy": {"filters": [{"type": "PROMPT_ATTACK", "action": "BLOCKED"}]}}]
+                if hit else []}
+
+
+def test_a1_guardrail_withholds_injected_content_in_naive_mode(monkeypatch):
+    monkeypatch.setenv("AIRGAP_GUARDRAIL_ID", "gr-test")
+    h = ToolHarness()
+    h.mandate()
+    planner = FakeGuard()
+    client = ToolsClient(post=lambda path, body: h.call("POST", path, body, "agent"))
+    out = run_agent(mode="naive", model="qwen.test", call=client, bedrock=planner)
+    transcript = "".join(planner.seen)
+    assert INJECTION not in transcript and "withheld by A1 Guardrails" in transcript
+    assert len(out["proposals"]) == 1

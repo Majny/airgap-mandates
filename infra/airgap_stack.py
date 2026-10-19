@@ -21,6 +21,7 @@ from pathlib import Path
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
 from aws_cdk import aws_apigateway as apigw
+from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_dynamodb as ddb
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam as iam
@@ -128,6 +129,19 @@ class AirgapStack(Stack):
         k_log = ed_key("log", r_ckpt, [r_exec, r_w1, r_host, r_auditor, r_relay])
         k_w1 = ed_key("w1", r_w1, [r_exec, r_host, r_auditor, r_relay])
 
+        # ------------------------------------------------------------ Guardrails (A1 input + egress 2nd opinion)
+        iban_rx = r"[A-Z]{2}[0-9]{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,4})?"
+        guard = bedrock.CfnGuardrail(
+            self, "Guardrail", name=f"{PREFIX}a1",
+            blocked_input_messaging="Blocked by A1 Guardrails.", blocked_outputs_messaging="Blocked by Guardrails.",
+            content_policy_config=bedrock.CfnGuardrail.ContentPolicyConfigProperty(filters_config=[
+                bedrock.CfnGuardrail.ContentFilterConfigProperty(type="PROMPT_ATTACK", input_strength="HIGH",
+                                                                 output_strength="NONE")]),
+            sensitive_information_policy_config=bedrock.CfnGuardrail.SensitiveInformationPolicyConfigProperty(
+                regexes_config=[
+                    bedrock.CfnGuardrail.RegexConfigProperty(name="IBAN", pattern=iban_rx, action="BLOCK"),
+                    bedrock.CfnGuardrail.RegexConfigProperty(name="ICO", pattern=r"\b[0-9]{8}\b", action="BLOCK")]))
+
         # ------------------------------------------------------------ code + functions
         code = lambda_.Code.from_asset(str(LAMBDA_ZIP)) if LAMBDA_ZIP.exists() else \
             lambda_.Code.from_inline("def handler(e, c):\n    raise RuntimeError('run infra/build_lambda.sh')\n")
@@ -146,7 +160,8 @@ class AirgapStack(Stack):
                                     environment={**base_env, **(env or {})},
                                     log_retention=logs.RetentionDays.ONE_WEEK, **extra)
 
-        f_exec = fn("executor", "executor.handler.lambda_handler", r_exec)
+        f_exec = fn("executor", "executor.handler.lambda_handler", r_exec,
+                    env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id})  # egress E-GUARDRAILS 2nd opinion
         f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1,
                   env={"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""})
         f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60)
@@ -213,7 +228,8 @@ class AirgapStack(Stack):
         tools_url = f"https://{papi.rest_api_id}.execute-api.{self.region}.amazonaws.com/prod"
 
         f_agent = fn("agent", "agent.lambda_handler.handler", r_agent, timeout=300, memory=512,
-                     env={"AIRGAP_TOOLS_URL": tools_url, "AGENT_MODE": "quarantined", "AIRGAP_SONNET_BUDGET": "20"},
+                     env={"AIRGAP_TOOLS_URL": tools_url, "AGENT_MODE": "quarantined", "AIRGAP_SONNET_BUDGET": "20",
+                          "AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id},
                      vpc=vpc, vpc_subnets=isolated, security_groups=[sg_agent])
 
         # ------------------------------------------------------------ grants
@@ -262,6 +278,8 @@ class AirgapStack(Stack):
             "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0",
             "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6",
             *[f"arn:aws:bedrock:{self.region}::foundation-model/{m}" for m in QWEN]]))
+        for r in (r_agent, r_exec):
+            r.add_to_policy(iam.PolicyStatement(actions=["bedrock:ApplyGuardrail"], resources=[guard.attr_guardrail_arn]))
         r_agent.add_to_policy(iam.PolicyStatement(actions=["execute-api:Invoke"],
                                                   resources=[invoke("POST", "/tools/*", papi)]))
         deny = iam.Effect.DENY
