@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airgap-mandates"
+version = "0.1.0"
+description = "AirGap Mandates: hardware-signed payment mandates for AI agents (FinTechers Hackathon 2026, Track 3)"
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+dependencies = [
+  "trezorlib",
+  "eth-account",
+  "dkimpy",
+  "dnspython",
+  "zeep",
+  "boto3",
+  "schwifty",
+  "rapidfuzz",
+  "confusable_homoglyphs",
+  "hypothesis",
+  "lxml",
+  "rfc3161ng",
+  "fastapi",
+  "uvicorn",
+  "streamlit",
+  "pytest",
+  "moto",
+  "jsonschema",
+  "tzdata",
+  "cryptography",
+  "httpx",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["executor*", "host*", "vendor*", "witness*", "bench*", "tools*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

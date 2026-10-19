@@ -6,3 +6,8 @@ __pycache__/
 .aws-sam/
 node_modules/
 .DS_Store
+.local/
+bench/results/*.jsonl
+*.egg-info/
+.pytest_cache/
+.hypothesis/
