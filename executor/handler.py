@@ -12,7 +12,6 @@ Owner: WS-A.
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -613,6 +612,22 @@ def get_checkpoint(ctx: Context, p: dict, q: dict, body: Any, principal: str | N
     return 200, Body(rows[0]["note"])
 
 
+def post_cosignature(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
+    """Row 22b: the W2 relay uploads W2's cosignature line(s); WS-B verifies against AIRGAP_W2_VKEY and appends."""
+    from executor.audit import checkpoint
+
+    try:
+        size = int(q.get("size", ""))
+    except ValueError:
+        raise ApiError(ErrorCode.INVALID_REQUEST, "size must be an integer") from None
+    raw = body if isinstance(body, (bytes, str)) else b""
+    text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    fn = getattr(checkpoint, "add_cosignature", None)
+    if fn is None:
+        raise NotImplementedError("checkpoint.add_cosignature (WS-B)")
+    return 200, Body(fn(q.get("log_id", "audit"), size, text, store=ctx.store, settings=ctx.settings))
+
+
 def post_witness(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
     from witness import witness
 
@@ -669,39 +684,28 @@ def get_inbox_raw(ctx: Context, p: dict, q: dict, body: Any, principal: str | No
 
 # ------------------------------------------------------------------ health
 
-_CODE_SHA: str | None = None
-
-
 def code_sha256() -> str:
-    """AIRGAP_CODE_SHA256 (Lambda CodeSha256 as hex, set at deploy) or a hash over the executor sources."""
-    global _CODE_SHA
-    if _CODE_SHA is None:
-        import os
+    """Code identity in the checkpoint `code` line and /health (WS-B owns the derivation)."""
+    from executor.audit import checkpoint
 
-        env = os.environ.get("AIRGAP_CODE_SHA256", "")
-        if re.fullmatch(r"[0-9a-f]{64}", env):
-            _CODE_SHA = env
-        else:
-            h = hashlib.sha256()
-            root = Path(__file__).resolve().parent
-            for f in sorted(root.rglob("*.py")):
-                h.update(str(f.relative_to(root)).encode() + b"\0" + f.read_bytes())
-            _CODE_SHA = h.hexdigest()
-    return _CODE_SHA
+    return checkpoint.code_sha256()
 
 
 def get_health(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
+    import os
+
     s = ctx.settings
     try:
         from executor.audit import checkpoint, kms
 
-        origin = config.log_origin(s)
-        key_id = checkpoint.key_id(origin, kms.public_key(settings=s)).hex()
-    except Exception:  # noqa: BLE001 - WS-B not landed / key not configured
-        key_id = ""
+        key_id = checkpoint.key_id(config.log_origin(s), kms.public_key(settings=s)).hex()
+        vk = checkpoint.vkeys(s)
+    except Exception:  # noqa: BLE001 - log key not configured
+        key_id, vk = "", {}
     return 200, {"status": "ok", "backend": s.backend, "deployment": s.deployment_id, "demo_profile": s.demo_profile,
                  "policy_hash": rules.policy_hash(), "render_profile": s.render_profile,
-                 "code_sha256": code_sha256(), "log_origin": config.log_origin(s), "log_pubkey_id": key_id}
+                 "code_sha256": code_sha256(), "log_origin": config.log_origin(s), "log_pubkey_id": key_id,
+                 "log_vkey": vk.get("log"), "w1_vkey": vk.get("w1"), "w2_vkey": os.environ.get("AIRGAP_W2_VKEY")}
 
 
 # ------------------------------------------------------------------ routing
@@ -738,6 +742,7 @@ _route("POST", "/tools/{name}", post_tool, {"agent", "tools"})
 _route("GET", "/audit/export", get_audit_export, {"auditor", "host"})
 _route("GET", "/receipts/{tx_id}", get_receipt)
 _route("GET", "/checkpoint", get_checkpoint)
+_route("POST", "/checkpoint/cosignature", post_cosignature, {"relay"})
 _route("POST", "/witness/add-checkpoint", post_witness, {"checkpointer"})
 _route("GET", "/export/pain001/{tx_id}", get_pain001, {"auditor", "host"})
 _route("GET", "/vendors", get_vendors)
@@ -783,7 +788,7 @@ def dispatch(method: str, path: str, query: dict[str, str] | None = None, body: 
 
 # ------------------------------------------------------------------ Lambda adapter
 
-ROLE_PRINCIPALS = ("vendor-portal", "vendor_portal", "checkpointer", "auditor", "ingest", "issuer", "agent",
+ROLE_PRINCIPALS = ("relay", "vendor-portal", "vendor_portal", "checkpointer", "auditor", "ingest", "issuer", "agent",
                    "tools", "host")
 
 

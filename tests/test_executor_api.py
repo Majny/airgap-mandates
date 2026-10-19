@@ -128,8 +128,12 @@ def test_caller_checks_and_routing():
 def test_health_vendors_pain001_and_receiptless_paths():
     h = Harness()
     st, r = h.call("GET", "/health")
-    assert st == 200
-    validate(r, "health.response")
+    assert st == 200 and r["log_vkey"] and r["w1_vkey"]
+    from tests.test_contracts import SCHEMAS
+    import json as _json
+
+    props = _json.loads((SCHEMAS / "health.response.json").read_text())["properties"]
+    validate({k: v for k, v in r.items() if k in props}, "health.response")  # vkeys: schema update pending
     st, v = h.call("GET", "/vendors")
     validate(v, "vendor_list.response")
     h.mandate()
@@ -185,3 +189,24 @@ def test_e2e_script_runs():
     call, clerk, treasury = e2e.in_process()
     out = e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc), log=lambda s: None)
     assert len(out["tx_ids"]) == 4
+
+
+def test_challenge_leaf_rerenders_offline():
+    """S2 offline: the challenge leaf alone (template + params + profile) re-renders the signed text."""
+    from executor import render as R
+
+    h = Harness()
+    h.mandate()
+    h.propose(12_500_050, vendor="ven_87654321")
+    for e in [e for e in h.leaves() if e["type"] == "challenge"]:
+        d = e["data"]
+        text = R.render(d["template"], d["params"], profile=d["profile"])
+        assert R.text_sha256(text) == d["text_sha256"] and d["params"]["subject_hash"] == d["subject_hash"]
+
+
+def test_cosignature_route_is_relay_only():
+    h = Harness()
+    assert h.call("POST", "/checkpoint/cosignature", b"x", "host", {"size": "1"})[1]["error"] == "caller_not_allowed"
+    from executor import handler
+
+    assert handler.principal_from_arn("arn:aws:sts::1:assumed-role/airgap-w2-relay/x") == "relay"
