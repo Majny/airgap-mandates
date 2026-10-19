@@ -1,0 +1,68 @@
+{
+  "checkpoint_note": "airgap.example/demo/audit\n33\nN7hFWSxClCEXpXEMooVMtncqRwoyRmPiyjI1Cu9KVog=\npolicy sha256:66ff32397eaad0d326c9ca06201fd510b83d96b10c67363ed213a76496452683\ncode sha256:bd87a5ad671610f06eb1dd77f1d4e349c2501ed966935d3571a9128dbf0b761a pcr0 -\n\n\u2014 airgap.example/demo/audit YY/p5exAO88kiRdBs5UQLOrtQDYXMybuxgAhAxizk1KWx/ZLdCDUlPaY6JsuRwoXjLa+BfnwqKxxr2eQYvvTjlaGaAI=\n\u2014 airgap.example/demo/w1 uo8ZxAAAAABq1hJLoO1yzsffMsYHhl/9penRIJgGZQf7usK+V3dFZ3SvnXNfQvFh0JPlh8zrMeJt1J2eCwSj57F9gdy7HA/erNAaAQ==\n",
+  "entry": {
+    "actor": "executor",
+    "data": {
+      "amount_minor": 12500050,
+      "authorization": {
+        "kind": "stepup",
+        "nonce": "F41D9625",
+        "signer_address": "0xf963525c8d7884afbf752920c75aabe3417e8395"
+      },
+      "currency": "CZK",
+      "iban": "CZ6203000000000123456789",
+      "proposal_id": "prp_4",
+      "tx_id": "tx_2cc0fae250c4c3cf",
+      "vendor_id": "ven_87654321"
+    },
+    "facts_digest": "46d122ef9f19af1f564dedbed66e37839fe8ed5054307d76c8df3e6f2f819ed8",
+    "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+    "inputs_digest": "32260cdd1f1f09f6d318645c37e0145587a9fc871aa3e594b4fd03f4383ab2ff",
+    "log_id": "audit",
+    "policy_hash": "66ff32397eaad0d326c9ca06201fd510b83d96b10c67363ed213a76496452683",
+    "seq": 29,
+    "subject_id": "prp_4",
+    "ts": "2026-10-19T12:00:00.000Z",
+    "type": "execution",
+    "v": 2
+  },
+  "inclusion_proof": [
+    "80c6207d696949064243a7350ccb42697b4032b67c6475e879d4ce26c018a44a",
+    "f4ed6d30f4170b449cbd8b4eb7edfeeda693189aa0d4e00e385d9ac75b83a967",
+    "9372cd1283138bda7ca4cd0019bb8ad67ecf4ef6a23be42d50e0cfa5f361b661",
+    "fe8cb8792a3377bbb010ad61b44eae537a7e15597b041629b2c23f746a8bbbc5",
+    "ebf279e8709444dff5f0bd43330a8c55d8f9f92095231b37c0fc96573e307e9b",
+    "8433a2c7418477ecca367a76b1e9375e87a9fbbc8b87d320e2a4f5c0f56e6b36"
+  ],
+  "key_ids": {
+    "log": "618fe9e5",
+    "w1": "ba8f19c4"
+  },
+  "leaf_hash": "51de10bf3f9762c674f277735f9dd3176723751c71634c7ddc784d40ee5b27f4",
+  "seq": 29,
+  "tree_size": 33,
+  "tx": {
+    "amount_minor": 12500050,
+    "authorization": {
+      "kind": "stepup",
+      "nonce": "F41D9625",
+      "signer_address": "0xf963525c8d7884afbf752920c75aabe3417e8395"
+    },
+    "currency": "CZK",
+    "executed_at": "2026-10-19T12:00:00Z",
+    "iban": "CZ6203000000000123456789",
+    "proposal_id": "prp_4",
+    "rail": {
+      "status": "ACTC",
+      "xml_c14n_sha256": "76772d93c3f3a8729d316bbb5cb74225d89a8e1ba4549c2a1ce26a942d762116"
+    },
+    "seq": 29,
+    "tx_id": "tx_2cc0fae250c4c3cf",
+    "vendor_id": "ven_87654321",
+    "vs": "1200009"
+  },
+  "vkeys": {
+    "log": "airgap.example/demo/audit+618fe9e5+AW8yLrwqNioTc5FRQJL40E2BtqEgc6sKGkkf0IgNi6tf",
+    "w1": "airgap.example/demo/w1+ba8f19c4+BBROWKFhi2WEdRp2srWRHz4fht/GBi/h+YhW/kcFnBcO"
+  }
+}

@@ -57,3 +57,12 @@ deploy:  ## deploy to AWS eu-central-1 (the demo runs here; WS-E)
 
 teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
 	@echo "TODO WS-E: teardown" && exit 1
+
+.PHONY: demo-bundle offline-demo
+
+demo-bundle:  ## pre-seal the offline demo bundle into docs/audit/demo (refuses unless it verifies green)
+	$(PY) -m tools.demo_bundle
+
+offline-demo:  ## "Wi-Fi off" stage check of docs/audit/demo (builds .local/bin/noteverify first)
+	cd tools/noteverify && CGO_ENABLED=0 go build -mod=readonly -o ../../.local/bin/noteverify .
+	bash tools/offline_demo.sh docs/audit/demo
