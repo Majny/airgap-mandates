@@ -756,7 +756,8 @@ def get_health(ctx: Context, p: dict, q: dict, body: Any, principal: str | None)
     return 200, {"status": "ok", "backend": s.backend, "deployment": s.deployment_id, "demo_profile": s.demo_profile,
                  "policy_hash": rules.policy_hash(), "render_profile": s.render_profile,
                  "code_sha256": code_sha256(), "log_origin": config.log_origin(s), "log_pubkey_id": key_id,
-                 "log_vkey": vk.get("log"), "w1_vkey": vk.get("w1"), "w2_vkey": os.environ.get("AIRGAP_W2_VKEY")}
+                 "log_vkey": vk.get("log"), "w1_vkey": vk.get("w1"), "w2_vkey": os.environ.get("AIRGAP_W2_VKEY"),
+                 "git_rev": os.environ.get("AIRGAP_GIT_REV") or None}
 
 
 # ------------------------------------------------------------------ routing

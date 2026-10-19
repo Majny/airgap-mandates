@@ -399,7 +399,9 @@ SCHEMA_FILES = {
     "health.response": obj({"status": {"const": "ok"}, "backend": {"enum": ["memory", "moto", "aws"]},
                             "deployment": DEPLOY, "demo_profile": {"enum": ["demo", "prod"]}, "policy_hash": HEX64,
                             "render_profile": DEVICE_PROFILE, "code_sha256": nullable(HEX64),
-                            "log_origin": STR, "log_pubkey_id": STR, "log_vkey": STR, "w1_vkey": STR, "w2_vkey": nullable(STR)}),
+                            "log_origin": STR, "log_pubkey_id": STR, "log_vkey": STR, "w1_vkey": STR, "w2_vkey": nullable(STR),
+                            # origin/main commit the deployed code was built from (null when not deployed by CDK)
+                            "git_rev": nullable({"type": "string", "pattern": "^[0-9a-f]{40}$"})}),
     "bench_case": obj({"id": STR, "arm": {"enum": ["A0", "A1", "A2", "A3"]}, "attacker_level": {"enum": ATTACKER_LEVELS},
                        "vector": STR, "goal": STR, "seed": NNINT,
                        "expected": obj({"money_moved_minor": MINOR, "blocked_by": nullable(STR)})}),
@@ -1166,7 +1168,8 @@ FIXTURES_SPEC = {
     "health": [("ok", "GET /health", 200, None, {
         "status": "ok", "backend": "aws", "deployment": DEPLOY_ID, "demo_profile": "demo", "policy_hash": POLICY_HASH,
         "render_profile": R.DEFAULT_PROFILE, "code_sha256": _h("lambda-code"), "log_origin": LOG_NAME,
-        "log_pubkey_id": KEY_IDS["log"], "log_vkey": VKEYS["log"], "w1_vkey": VKEYS["w1"], "w2_vkey": None})],
+        "log_pubkey_id": KEY_IDS["log"], "log_vkey": VKEYS["log"], "w1_vkey": VKEYS["w1"], "w2_vkey": None,
+        "git_rev": "e151870" + "0" * 33})],
 }
 
 OBJECTS = {

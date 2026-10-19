@@ -14,6 +14,7 @@
     "log_pubkey_id": "2d5baf14",
     "log_vkey": "airgap.example/demo/audit+2d5baf14+AQQzKJb+VXe/PPMhqBpOn8y0GLsgCjWJx6okyDc+RM94",
     "w1_vkey": "airgap.example/demo/w1+7027bc92+BK9SczXGetw4uo3y3vLMdyi878u1dn8lofnocYvdxJ04",
-    "w2_vkey": null
+    "w2_vkey": null,
+    "git_rev": "e151870000000000000000000000000000000000"
   }
 }

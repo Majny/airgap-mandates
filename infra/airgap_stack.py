@@ -51,6 +51,21 @@ TABLES: dict[str, tuple[tuple[str, str], tuple[str, str] | None, list[tuple[str,
 }
 
 
+def git_rev() -> str:
+    """The commit being deployed (deploy only from a clean origin/main worktree): /health git_rev, so the stage
+    laptop can refuse to run when its checkout differs from what AWS runs."""
+    import subprocess
+
+    try:
+        rev = subprocess.run(["git", "-C", str(ROOT.parent), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "-C", str(ROOT.parent), "status", "--porcelain", "--untracked-files=no"],
+                               capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    return "" if dirty else rev  # a dirty tree is not a commit: publish nothing rather than a misleading rev
+
+
 def code_sha256_hex() -> str:
     """Lambda CodeSha256 is base64(sha256(zip)); the zip is uploaded as-is, so this is the deployed code hash."""
     return hashlib.sha256(LAMBDA_ZIP.read_bytes()).hexdigest() if LAMBDA_ZIP.exists() else "0" * 64
@@ -149,7 +164,7 @@ class AirgapStack(Stack):
         base_env = {"AIRGAP_BACKEND": "aws", "AIRGAP_DEMO_PROFILE": "demo", "AIRGAP_DEPLOYMENT_ID": deployment_id,
                     "AIRGAP_TABLE_PREFIX": PREFIX, "AIRGAP_INBOX_BUCKET": inbox.bucket_name,
                     "AIRGAP_ANCHOR_BUCKET": anchor.bucket_name, "AIRGAP_KMS_KEY_ID": k_log.key_id,
-                    "AIRGAP_CODE_SHA256": code_sha256_hex(), "AIRGAP_DATA_DIR": "data",
+                    "AIRGAP_CODE_SHA256": code_sha256_hex(), "AIRGAP_DATA_DIR": "data", "AIRGAP_GIT_REV": git_rev(),
                     # only the checkpointer holds kms:Sign on the log key: no inline checkpoints anywhere else
                     # (log.checkpoint_due is also true when no checkpoint exists yet; the first tick creates one)
                     "AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "1000000000", "AIRGAP_CHECKPOINT_MAX_SECONDS": "1000000000"}

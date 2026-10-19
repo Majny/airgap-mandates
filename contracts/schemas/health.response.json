@@ -66,6 +66,17 @@
           "type": "null"
         }
       ]
+    },
+    "git_rev": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -80,7 +91,8 @@
     "log_pubkey_id",
     "log_vkey",
     "w1_vkey",
-    "w2_vkey"
+    "w2_vkey",
+    "git_rev"
   ],
   "additionalProperties": false
 }
