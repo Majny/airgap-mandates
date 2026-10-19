@@ -299,7 +299,8 @@ class AirgapStack(Stack):
         r_tools.add_to_policy(iam.PolicyStatement(actions=["execute-api:Invoke"], resources=[
             invoke("POST", "/proposals"), invoke("POST", "/changes"), invoke("POST", "/egress"),
             invoke("GET", "/vendors"), invoke("GET", "/vendors/*"), invoke("GET", "/inbox"), invoke("GET", "/inbox/*"),
-            invoke("GET", "/mandates/active")]))
+            invoke("GET", "/mandates/active"),
+            invoke("GET", "/proposals")]))  # read-only: cumulative PARTIAL cap per email / invoice
         # checkpointer: log key (key policy), audit/main read+write (checkpoints), anchor bucket put
         t["audit"].grant_read_write_data(r_ckpt)
         main_rw(r_ckpt, ["checkpoint"])
