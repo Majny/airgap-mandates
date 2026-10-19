@@ -176,21 +176,14 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
                 "remaining_minor": m["max_total_minor"] - m.get("spent_minor", 0),
                 "remaining_count": m["max_count"] - m.get("count", 0), "valid_until": m["valid_until"]}
     if name == "payment.propose":
-        inv: dict[str, Any] = {k: args[k] for k in ("vendor_id", "invoice_no", "invoice_ref", "amount_minor",
-                                                     "currency", "reason_code") if k in args}
-        if args.get("vs"):
-            inv["vs"] = args["vs"]
-        if args.get("due"):
-            inv["due_date"] = args["due"]
-        # issue_date is not a tool argument (manifest v2); take it from the provenance-hashed document.
         email_id, doc = _find_doc(args["invoice_ref"], store=store, settings=settings)
-        draft = extract.extract_draft(doc)
-        inv["issue_date"] = args.get("issue_date") or draft["fields"]["issue_date"] or args.get("due") \
-            or now(settings).strftime("%Y-%m-%d")
+        vendor = ex("GET", f"/vendors/{args['vendor_id']}")
+        inv, warn = invoice_from_document(args, extract.extract_draft(doc), vendor, settings=settings)
         inv["email_id"] = email_id
         out = ex("POST", "/proposals", {"invoice": inv, "hints": hints})
         return {"proposal_id": out["proposal"]["proposal_id"], "decision": out["decision"]["decision"],
-                "rule_ids": out["decision"].get("rule_ids", []), "tx_id": (out.get("tx") or {}).get("tx_id")}
+                "rule_ids": out["decision"].get("rule_ids", []), "tx_id": (out.get("tx") or {}).get("tx_id"),
+                "_warn": warn}
     if name == "payee.request_change":
         body = {"vendor_id": args["vendor_id"], "new_iban": re.sub(r"\s", "", args["new_iban"]).upper(),
                 "evidence_ids": args.get("evidence_ids", []), "hints": hints}
@@ -212,6 +205,60 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         out = ex("POST", "/egress", {"tool": "send_email", "target": args["to"], "content": content})
         return {"sent": out["decision"] == "allow", "simulated": True}
     raise ApiError(ErrorCode.NOT_FOUND, f"tool {name}")
+
+
+class DocMismatch(ApiError):
+    """payment.propose args disagree with the provenance-hashed document (P3 extended to amounts)."""
+
+    def __init__(self, rule_ids: list[str], detail: str) -> None:
+        super().__init__(ErrorCode.CALLER_NOT_ALLOWED, detail, {"rule_ids": rule_ids})
+        self.rule_ids = rule_ids
+
+
+def invoice_from_document(args: dict[str, Any], draft: dict[str, Any], vendor: dict[str, Any], *,
+                          settings: Any) -> tuple[dict[str, Any], list[str]]:
+    """Build the proposal invoice from the document, never from the agent (P3 for amounts, VS, dates).
+
+    The agent's amount/currency/vs/due/invoice_no only have to *agree* with the document: any disagreement raises
+    DocMismatch (T-AMOUNT-MISMATCH for the amount, T-DOC-MISMATCH otherwise) and nothing reaches the executor.
+    amount_minor below the document amount is allowed only with reason_code PARTIAL. A document without an amount
+    fails closed (T-DOC-MISSING). Returns (invoice, WARN rule ids for fallbacks).
+    """
+    f = draft["fields"]
+    forbid: list[str] = []
+    why: list[str] = []
+    if f["amount_minor"] is None or f["currency"] is None:
+        raise DocMismatch(["T-DOC-MISSING"], "document has no machine-readable amount/currency")
+    amount = int(args["amount_minor"])
+    if amount > f["amount_minor"] or (amount < f["amount_minor"] and args.get("reason_code") != "PARTIAL"):
+        forbid.append("T-AMOUNT-MISMATCH")
+        why.append(f"amount {amount} != document {f['amount_minor']}")
+    for arg, field in (("currency", "currency"), ("vs", "vs"), ("due", "due_date"), ("invoice_no", "invoice_no")):
+        if args.get(arg) and f[field] and str(args[arg]) != str(f[field]):
+            forbid.append("T-DOC-MISMATCH")
+            why.append(f"{arg} {args[arg]!r} != document {f[field]!r}")
+    if f["supplier_ico"] and f["supplier_ico"] != vendor.get("ico"):
+        forbid.append("T-DOC-MISMATCH")
+        why.append("document supplier ICO is not this vendor")
+    if forbid:
+        raise DocMismatch(sorted(set(forbid)), "; ".join(why)[:200])
+
+    warn: list[str] = []
+    issue = f["issue_date"]
+    if not issue:  # I-DUP uses issue_date: a fallback is visible in the leaf
+        warn.append("T-ISSUEDATE-FALLBACK")
+        issue = f["due_date"] or now(settings).strftime("%Y-%m-%d")
+    inv: dict[str, Any] = {"vendor_id": args["vendor_id"], "invoice_ref": draft["doc_id"],
+                           "invoice_no": f["invoice_no"] or args["invoice_no"], "issue_date": issue,
+                           "amount_minor": amount, "currency": f["currency"], "reason_code": args["reason_code"],
+                           "attachment_sha256": draft["sha256"]}
+    if not f["invoice_no"]:
+        warn.append("T-INVOICENO-AGENT")
+    if f["vs"]:
+        inv["vs"] = f["vs"]
+    if f["due_date"]:
+        inv["due_date"] = f["due_date"]
+    return inv, warn
 
 
 class _Strict(dict):
@@ -253,9 +300,13 @@ def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) 
     try:
         _validate_args(name, args)
         result = _run(name, args, hints, store=store, settings=settings)
+    except DocMismatch as e:
+        seq = log("forbidden", rule_ids + e.rule_ids)
+        raise ApiError(e.code, e.message, {"rule_ids": e.rule_ids, "seq": seq}) from e
     except ApiError:
         log("error", rule_ids)
         raise
+    rule_ids = rule_ids + (result.pop("_warn", None) or [])
     seq = log("ok", rule_ids)
     return {"result": result, "seq": seq}
 
