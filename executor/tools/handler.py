@@ -146,8 +146,9 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         hdr = extract.headers(raw)
         return {"email_id": args["email_id"], "from": hdr["From"], "subject": hdr["Subject"],
                 "documents": [{"doc_id": d["doc_id"], "kind": d["kind"], "name": d["name"]} for d in docs],
-                "content": _untrusted(f"email:{args['email_id']}",
-                                      "\n\n".join(d["text"] for d in docs if d["kind"] == "body"))}
+                "content": _untrusted(f"email:{args['email_id']}", "\n\n".join(
+                    d["text"] if d["kind"] == "body" else f"--- attachment {d['name']} ({d['doc_id']}) ---\n{d['text']}"
+                    for d in docs))}
     if name == "invoice.extract":
         email_id, doc = _find_doc(args["doc_id"], store=store, settings=settings)
         return {"email_id": email_id, "draft": extract.extract_draft(doc)}
