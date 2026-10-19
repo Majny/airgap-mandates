@@ -80,7 +80,8 @@ class TrezorDriver:
     """SignerDriver over trezorlib. `path` = 'usb' / None (autodetect USB) or 'udp:host:port' (emulator)."""
 
     def __init__(self, path: str | None = None, *, app_name: str = "airgap-mandates"):
-        self.path = None if path in (None, "", USB) else path
+        # 'usb' means the physical device: prefix-match WebUSB so a running emulator is never picked by autodetect.
+        self.path = "webusb" if path in (None, "", USB) else path
         self.app_name = app_name
         self._client: Any = None
         self._session: Any = None
@@ -136,7 +137,7 @@ class TrezorDriver:
             "passphrase_protection": f.passphrase_protection,
             "device": self.device_label,
             "profile": self.profile,
-            "transport": self.path or USB,
+            "transport": USB if self.path == "webusb" else self.path,
         }
 
     # -- SignerDriver -------------------------------------------------------------------------------------------
