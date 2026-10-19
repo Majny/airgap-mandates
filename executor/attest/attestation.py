@@ -4,7 +4,10 @@ Owner: WS-D.
 """
 from __future__ import annotations
 
+import hashlib
 from typing import Any
+
+from executor.canonical import canonical_json
 
 
 def propose(req: dict[str, Any], *, store: Any, settings: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -29,4 +32,6 @@ def valid_attestation_for(ico: str, iban: str, *, store: Any) -> dict[str, Any] 
 
 def commitment(body: dict[str, Any], commit_nonce: bytes) -> str:
     """SHA256(canonical_json(body) || nonce128) hex — never a bare IBAN hash."""
-    raise NotImplementedError("TODO WS-D")
+    if len(commit_nonce) != 16:
+        raise ValueError("commit_nonce must be 16 bytes (128 bit)")
+    return hashlib.sha256(canonical_json(body) + commit_nonce).hexdigest()

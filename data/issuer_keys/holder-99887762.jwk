@@ -1,0 +1,10 @@
+{
+  "crv": "P-256",
+  "d": "MFA9b0oX6nwwwRtOQ9ozQbfqmvN9uRqvXjp_PdEqO5Q",
+  "demo_only": true,
+  "holder_of": "99887762",
+  "kid": "BM7gckKHOvXm_aaPPSABy93qAiIwqFGinw-GXwbWAwo",
+  "kty": "EC",
+  "x": "8jnJj2APZ_Bnh2ilp0QvPeqASS20pkiPKWtsy0kFiHc",
+  "y": "UmGlSpYqmUhp5LPIVpEvDRjWq_v4_ULVrVkwaP2IvcQ"
+}

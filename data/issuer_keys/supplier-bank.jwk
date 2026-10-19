@@ -1,0 +1,11 @@
+{
+  "crv": "P-256",
+  "d": "BDki_9uWXfaDoEA5MqwYMhqMOjWEwWj3k5uLFPLMiy0",
+  "demo_only": true,
+  "iss": "https://issuer.bank0300.example/accounts",
+  "issuer_class": "supplier-bank",
+  "kid": "4Bcnh32Jkw2Lkk2-aqLUzXB1bWRnO4_fv0WP_UYtO4o",
+  "kty": "EC",
+  "x": "Q0Vcek-aQp8i_yFiikb0dR1js7qSZ8dj_keTRmWinIo",
+  "y": "z1MKz35VBTtcqODTHoqUJlVpXoevcDxnNsGQvccAHHU"
+}
