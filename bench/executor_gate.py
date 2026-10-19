@@ -10,10 +10,13 @@ supplier-bank sign real SD-JWT VCs via POST /changes/{id}/attestations), then th
 """
 from __future__ import annotations
 
+import base64
 import dataclasses
 import json
 import re
 from datetime import datetime, timedelta, timezone
+import email.policy
+from email.message import EmailMessage
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Any
@@ -34,7 +37,7 @@ def gate_parts() -> dict[str, str]:
     return {"proposals": "executor.handler.dispatch (memory backend)", "facts": "executor.facts.compute (WS-D, real)",
             "changes": "executor.change.machine via POST /changes (WS-D, real)",
             "attestations": "DEMO-ONLY issuers supplier-erp + supplier-bank (real SD-JWT VCs, simulated organisations)",
-            "inbox": "tools.seed_data.inbox_row (executor DKIM verdict; POST /ingest not implemented yet)"}
+            "inbox": "POST /ingest (executor computes the DKIM verdict over the DNS snapshot)"}
 
 
 def _iso(dt: datetime) -> str:
@@ -66,18 +69,25 @@ def parse_chg_text(text: str) -> str:
     return next((flat[:n] for n in range(34, 14, -1) if iban_valid(flat[:n])), "")
 
 
-def raw_email(em: dict[str, Any], when: datetime) -> bytes:
-    """RFC 5322 message; DKIM-signed with the demo key of the sender domain when the sender holds it."""
+def raw_email(em: dict[str, Any], when: datetime, docs: list[dict[str, Any]]) -> bytes:
+    """RFC 5322 multipart message with the invoice documents as .isdoc parts; DKIM-signed with the demo key of the
+    sender domain when the sender holds it (vendor, or attacker after a real-domain takeover)."""
     domain = em["from"].rsplit("@", 1)[-1].lower()
-    msg = (f"From: {em.get('from_name') or domain} <{em['from']}>\r\nTo: ap@{COMPANY_DOMAIN}\r\n"
-           f"Subject: {em['subject']}\r\nDate: {format_datetime(when)}\r\n"
-           f"Message-ID: <{em['email_id']}.{domain}@bench.example>\r\nMIME-Version: 1.0\r\n"
-           f"Content-Type: text/plain; charset=us-ascii\r\n\r\n{em['body']}\r\n")
-    raw = msg.encode("ascii", "replace")
+    msg = EmailMessage()
+    msg["From"] = f"{em.get('from_name') or domain} <{em['from']}>"
+    msg["To"] = f"ap@{COMPANY_DOMAIN}"
+    msg["Subject"] = em["subject"]
+    msg["Date"] = format_datetime(when)
+    msg["Message-ID"] = f"<{em['email_id']}.{domain}@bench.example>"
+    msg.set_content(em["body"])
+    for d in docs:
+        msg.add_attachment(d["text"].encode("utf-8"), maintype="application", subtype="x-isdoc",
+                           filename=d.get("filename") or "invoice.isdoc")
+    raw = msg.as_bytes(policy=email.policy.SMTP).replace(b"\r\n", b"\n")
     pem = DATA / "dkim_keys" / f"{domain}.demo2026.pem"
     if em.get("dkim_sign") and pem.exists():
         from tools.gen_emails import _sign as dkim_sign
-        raw = dkim_sign(raw.replace(b"\r\n", b"\n"), domain, pem.read_bytes(), _iso(when))
+        raw = dkim_sign(raw, domain, pem.read_bytes(), _iso(when))
     return raw
 
 
@@ -99,12 +109,20 @@ class ExecutorGate:
         canon = {v["ico"]: v for v in json.loads((DATA / "vendors.json").read_text())}
         seed_data.seed_registry([canon[v["ico"]] for v in self.w.vendors.values()], store=self.store,
                                 settings=self.settings, keys_dir=DATA / "issuer_keys", now=NOW)
-        dns = json.loads((DATA / "dns_snapshot.json").read_text())
+        from executor.docs import extract
         self.email_ids: dict[str, str] = {}
+        self.doc_ids: dict[str, tuple[str, str]] = {}  # bench doc_id -> (executor email_id, executor doc_id)
         for k, em in enumerate(self.w.inbox):
-            row = seed_data.inbox_row(raw_email(em, NOW - timedelta(hours=3, minutes=k)), dns_snapshot=dns, now=NOW)
-            self.store.put("inbox", row)
+            when = NOW - timedelta(hours=3, minutes=k)
+            docs = [self.w.docs[a["doc_id"]] for a in em["attachments"]]
+            raw = raw_email(em, when, docs)
+            st, row = self.call("POST", "/ingest", {"raw_b64": base64.b64encode(raw).decode("ascii"),
+                                                    "received_at": _iso(when)}, principal="ingest")
+            assert st == 201, row
             self.email_ids[em["email_id"]] = row["email_id"]
+            parts = extract.documents(raw)
+            for a, part in zip(em["attachments"], parts):
+                self.doc_ids[a["doc_id"]] = (row["email_id"], part["doc_id"])
         self.clerk, self.treasury = Account.create(), Account.create()
         seed.enroll_signer(self.store, self.clerk.address, "clerk", device="GENUINE")
         seed.enroll_signer(self.store, self.treasury.address, "treasury", device="EMULATOR")
@@ -142,13 +160,16 @@ class ExecutorGate:
 
     # ------------------------------------------------------------------ proposals
     def _post_proposal(self, args: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
+        email_id, doc_ref = self._source(args)
         inv = {"vendor_id": str(args.get("vendor_id", "")), "invoice_no": str(args.get("invoice_no") or "N/A"),
-               "invoice_ref": "doc_" + "0" * 16, "issue_date": "2026-10-15",
+               "invoice_ref": doc_ref or "doc_" + "0" * 16, "issue_date": "2026-10-15",
                "amount_minor": int(args["amount_minor"]), "currency": str(args.get("currency") or "CZK"),
                "reason_code": "DUE"}
         vs = re.sub(r"\D", "", str(args.get("vs") or ""))[:10]
         if vs:
             inv["vs"] = vs
+        if email_id:
+            inv["email_id"] = email_id
         hints = [{"source": "agent", "text": str(h.get("text", ""))[:200]} for h in args.get("hints") or []
                  if isinstance(h, dict)]
         st, r = self.call("POST", "/proposals", {"invoice": inv, "hints": hints}, principal="tools")
@@ -176,6 +197,21 @@ class ExecutorGate:
         if tx and record:
             self._record(tx, inv)
         return {"status": "EXECUTED" if tx else "PENDING", "decision": "challenge"}
+
+    def _source(self, args: dict[str, Any]) -> tuple[str | None, str | None]:
+        """Tools-λ twin: the document a proposal cites. An explicit invoice_ref (bench doc id) wins; else the
+        agent's latest invoice.extract with the same invoice_no, else with the same vendor ICO."""
+        ref = str(args.get("invoice_ref") or args.get("doc_id") or "")
+        if ref in self.doc_ids:
+            return self.doc_ids[ref]
+        extracts = [t["args"].get("doc_id") for t in reversed(self.w.tool_log) if t["tool"] == "invoice.extract"]
+        inv_no, ico = str(args.get("invoice_no") or ""), str(args.get("vendor_id", ""))[4:]
+        for key in ("invoice_no", "vendor_ico"):
+            want = inv_no if key == "invoice_no" else ico
+            for d in extracts:
+                if d in self.doc_ids and want and str(self.w.docs[d]["fields"].get(key)) == want:
+                    return self.doc_ids[d]
+        return None, None
 
     def _record(self, tx: dict[str, Any], inv: dict[str, Any]) -> None:
         iban = tx.get("iban") or self.store.get("registry", {"vendor_id": inv["vendor_id"]})["iban"]
