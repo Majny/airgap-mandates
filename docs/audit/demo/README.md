@@ -37,13 +37,7 @@ still online to warm the cache.
 
 ## Current status
 
-`make demo-bundle` refuses to seal while two upstream (WS-A) gaps are open, so the files here were written with
-`--allow-red` and `RED-BUNDLE.txt` lists the problems:
-
-- `executor/handler.py` logs accepted signature leaves with `sig=""`, so the offline EIP-191 check cannot run
-  (`accepted signature leaf carries no sig`).
-- `seed.enroll_signer` writes no `enroll` leaf, so the verifier cannot see the signers' enrolment
-  (`not enrolled before it`).
-
-Steps 1, 3 and 4 pass today; step 2 fails on exactly these problems. Once both fixes land, rerun
-`make demo-bundle` (it then seals and deletes `RED-BUNDLE.txt`) and `make offline-demo`.
+Sealed green on 2026-10-19 (`make demo-bundle`): 36 leaves, 4 cosigned checkpoints. Pinned keys, decide() replay,
+re-render + EIP-191 recovery and the receipt all verify. `make offline-demo` passes all four steps using only the
+stock macOS userland (`/usr/bin:/bin`); `tests/test_demo_bundle.py::test_offline_demo_all_steps` checks this.
+Build `noteverify` once while online (`make .local/bin/noteverify`). After that the stage check needs no network.

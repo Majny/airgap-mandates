@@ -60,9 +60,12 @@ teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
 
 .PHONY: demo-bundle offline-demo
 
+# Built once while online; never touches the network afterwards (GOPROXY=off: a cold module cache fails fast).
+.local/bin/noteverify: tools/noteverify/main.go tools/noteverify/go.mod tools/noteverify/go.sum
+	cd tools/noteverify && CGO_ENABLED=0 GOPROXY=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -o ../../.local/bin/noteverify .
+
 demo-bundle:  ## pre-seal the offline demo bundle into docs/audit/demo (refuses unless it verifies green)
 	$(PY) -m tools.demo_bundle
 
-offline-demo:  ## "Wi-Fi off" stage check of docs/audit/demo (builds .local/bin/noteverify first)
-	cd tools/noteverify && CGO_ENABLED=0 go build -mod=readonly -o ../../.local/bin/noteverify .
+offline-demo: .local/bin/noteverify  ## "Wi-Fi off" stage check of docs/audit/demo (build noteverify while online)
 	bash tools/offline_demo.sh docs/audit/demo

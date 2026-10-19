@@ -103,12 +103,13 @@ def build(*, fake_now: str = FAKE_NOW, key_dir: str | None = None) -> Sealed:
     from executor.store.memory import MemoryStore
 
     # Same context as executor.e2e.in_process(), but with our own local_key_dir (throwaway log/W1 keys).
-    s = Settings(backend="memory", fake_now=fake_now, local_key_dir=key_dir)
+    s = Settings(backend="memory", fake_now=fake_now, local_key_dir=key_dir, data_dir=seed.dev_data_dir())
     ctx = handler.Context(s, MemoryStore(s))
     seed.seed_registry(ctx.store)
     clerk, treasury = Account.create(), Account.create()
-    seed.enroll_signer(ctx.store, clerk.address, "clerk", device="GENUINE", label="clerk (software key, demo bundle)")
-    seed.enroll_signer(ctx.store, treasury.address, "treasury", label="treasury (software key, demo bundle)")
+    seed.enroll_signer(ctx.store, clerk.address, "clerk", device="GENUINE", label="clerk (software key, demo bundle)",
+                       settings=s)
+    seed.enroll_signer(ctx.store, treasury.address, "treasury", label="treasury (software key, demo bundle)", settings=s)
 
     def call(m: str, p: str, b: Any, who: str) -> tuple[int, Any]:
         return handler.dispatch(m, p, None, b, principal=who, ctx=ctx)

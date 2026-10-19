@@ -18,18 +18,16 @@ from tools import demo_bundle as db
 from tools import verify_audit as va
 
 ROOT = Path(__file__).resolve().parents[1]
-GAPS = ("not enrolled before it", "accepted signature leaf carries no sig")
-GAP_REASON = ("WS-A gaps: executor/handler.py logs accepted signature leaves with sig='' and seed.enroll_signer "
-              "writes no 'enroll' leaf, so the real run cannot seal green; remove this marker when both land")
 
 
 @pytest.fixture(scope="module")
 def made(tmp_path_factory):
-    """(sealed, out_dir, key_dir): one real S1 run written with --allow-red semantics."""
+    """(sealed, out_dir, key_dir): one real S1 run, sealed (refuses unless green)."""
     base = tmp_path_factory.mktemp("demo")
     key_dir, out = base / "keys", base / "out"
     sealed = db.build(key_dir=str(key_dir))
-    assert db.write(sealed, out, allow_red=True) == 0
+    assert sealed.ok, sealed.problems
+    assert db.write(sealed, out, allow_red=False) == 0
     return sealed, out, key_dir
 
 
@@ -70,13 +68,15 @@ def test_write_refuses_to_leak_a_seed(made, tmp_path):
     assert not (tmp_path / "leak").exists()
 
 
-def test_bundle_structurally_green_receipt_green(made):
-    """Integrity (hashes, roots, quorum, coverage) is green; only the known WS-A gaps remain."""
+def test_bundle_green_with_replay_receipt_green(made):
+    """Pinned keys, decide() replay, re-render + EIP-191 recovery: all green on the real S1 run."""
     sealed, out, _ = made
     bundle = json.loads((out / "bundle.json").read_text())
     keys = json.loads((out / "trust-keys.json").read_text())
-    rep = va.verify(bundle, replay=False, trusted_vkeys=keys)
-    assert [p for p in rep.problems if not any(g in p for g in GAPS)] == []
+    rep = va.verify(bundle, replay=True, trusted_vkeys=keys)
+    assert rep.ok and rep.problems == [], rep.problems
+    assert rep.checked.get("replayed", 0) >= 4 and rep.checked.get("signer_recovered", 0) >= 3, rep.checked
+    assert not (out / db.RED).exists()
     c = rep.checked
     assert c["leaf_hashes"] == c["leaves"] == len(bundle["leaves"])
     assert c["checkpoint_quorum"] == c["checkpoints"] == len(bundle["checkpoints"]) and c["uncovered_leaves"] == 0
@@ -86,12 +86,11 @@ def test_bundle_structurally_green_receipt_green(made):
 
 
 def test_refuses_to_seal_when_red(made, tmp_path):
-    sealed, _, _ = made
-    code = db.write(sealed, tmp_path / "x", allow_red=False)
-    if sealed.problems:
-        assert code == 1 and not (tmp_path / "x").exists()
-    else:
-        assert code == 0 and not (tmp_path / "x" / db.RED).exists()
+    from dataclasses import replace
+
+    red = replace(made[0], problems=["seq 3: something wrong"])
+    assert db.write(red, tmp_path / "x", allow_red=False) == 1 and not (tmp_path / "x").exists()
+    assert db.write(red, tmp_path / "y", allow_red=True) == 0 and (tmp_path / "y" / db.RED).exists()
 
 
 def test_tamper_flips_one_byte_and_names_the_seq(made):
@@ -109,12 +108,6 @@ def test_tamper_flips_one_byte_and_names_the_seq(made):
     assert all(f"seq {seq}" in p or "checkpoint" in p for p in set(rep.problems) - before), rep.problems
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_REASON)
-def test_bundle_seals_green(made):
-    sealed, _, _ = made
-    assert sealed.ok, sealed.problems
-
-
 # --- tools/offline_demo.sh end to end ----------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -123,18 +116,25 @@ def stage(made, tmp_path_factory):
         pytest.skip("go not on PATH")
     _, out, _ = made
     nv = tmp_path_factory.mktemp("nv") / "noteverify"
-    subprocess.run(["go", "build", "-mod=readonly", "-o", str(nv), "."], cwd=ROOT / "tools" / "noteverify",
-                   env={**os.environ, "CGO_ENABLED": "0"}, check=True, capture_output=True, timeout=300)
-    env = {**os.environ, "PY": sys.executable, "NOTEVERIFY": str(nv)}
+    b = subprocess.run(["go", "build", "-o", str(nv), "."], cwd=ROOT / "tools" / "noteverify", capture_output=True,
+                       env={**os.environ, "CGO_ENABLED": "0", "GOPROXY": "off", "GOTOOLCHAIN": "local",
+                            "GOFLAGS": "-mod=readonly"}, timeout=300)
+    if b.returncode:
+        pytest.skip(f"noteverify does not build offline (cold Go module cache?): {b.stderr.decode()[-300:]}")
+    # stock macOS userland only (POSIX cmp etc.): the stage laptop has no Homebrew GNU tools on PATH
+    env = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", "/tmp"), "PY": sys.executable,
+           "NOTEVERIFY": str(nv)}
     return subprocess.run(["bash", str(ROOT / "tools" / "offline_demo.sh"), str(out)], env=env, capture_output=True,
                           text=True, timeout=300)
 
 
-def test_offline_demo_steps_that_work_today(stage):
+def test_offline_demo_all_steps(stage):
     out = stage.stdout
     assert "PASS  ########  1 checkpoint signed by the log" in out, out
+    assert "PASS  ########  2 bundle verifies" in out, out
     assert "PASS  ########  3 receipt verifies" in out, out
     assert "bytes changed: 1" in out and "PASS  ########  4 tamper caught at seq " in out, out
+    assert stage.returncode == 0 and "ALL PASS" in out, out
     assert [line for line in out.splitlines() if len(line) > 80] == [], "keep projector lines short"
 
 
@@ -146,8 +146,3 @@ def test_offline_demo_missing_noteverify_fails_clearly(made, tmp_path):
     assert r.returncode == 1 and "noteverify binary not found" in r.stdout
     assert "FAIL  !!!!!!!!  1 checkpoint (noteverify missing)" in r.stdout
 
-
-@pytest.mark.xfail(strict=True, reason=GAP_REASON)
-def test_offline_demo_all_green(stage):
-    assert stage.returncode == 0, stage.stdout
-    assert "ALL PASS" in stage.stdout

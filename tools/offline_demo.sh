@@ -74,6 +74,8 @@ fi
 
 # 2. full bundle, pinned keys, decide() replay on
 banner "2/4 audit bundle - pinned keys, replay on"
+echo "keys pinned from trust-keys.json (shipped with the bundle;"
+echo "in real use the auditor gets them out of band, e.g. /health)"
 set +e
 "$PY" -m tools.verify_audit "$DIR/bundle.json" --trust-keys "$DIR/trust-keys.json" >"$WORK/b.out" 2>&1
 rc=$?
@@ -82,9 +84,10 @@ short "$WORK/b.out"
 if [ "$rc" -eq 0 ]; then verdict PASS "2 bundle verifies"; else verdict FAIL "2 bundle (verifier exit $rc)"; fi
 
 # 3. receipt of the last payment, pinned keys
-banner "3/4 payment receipt - pinned keys"
+banner "3/4 payment receipt - pinned keys, matches bundle"
 set +e
-"$PY" -m tools.verify_audit --receipt "$DIR/receipt.json" --trust-keys "$DIR/trust-keys.json" >"$WORK/r.out" 2>&1
+"$PY" -m tools.verify_audit "$DIR/bundle.json" --receipt "$DIR/receipt.json" --trust-keys "$DIR/trust-keys.json" \
+  >"$WORK/r.out" 2>&1
 rc=$?
 set -e
 grep -E '^receipt:' "$WORK/r.out" | sed "s#$DIR/##g" | fold -s -w 72 || true
@@ -102,7 +105,7 @@ if [ "$rc" -ne 0 ]; then
   verdict FAIL "4 tamper (could not edit the bundle)"
 else
   seq="$(echo "$info" | awk '{print $2}')"
-  nbytes="$(cmp -l "$DIR/bundle.json" "$WORK/tampered.json" | wc -l | tr -d ' ')"
+  nbytes="$("$PY" -c 'import sys; a, b = (open(p, "rb").read() for p in sys.argv[1:]); print(sum(x != y for x, y in zip(a, b)) + abs(len(a) - len(b)))' "$DIR/bundle.json" "$WORK/tampered.json")"
   echo "edited: $info"
   echo "bytes changed: $nbytes"
   set +e
