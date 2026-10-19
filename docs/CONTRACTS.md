@@ -254,7 +254,7 @@ The v1 `sth` table is dropped (replaced by `checkpoints` holding note text).
 `query(table, pk, index=None, sk_range=None, limit=None, reverse=False) -> list[dict]` · `scan(table) -> list[dict]` ·
 `transact(ops: list[Op], client_request_token: str | None = None) -> bool` (Put / UpdateIf / IncrementBounded).
 `table` is always a **logical** name (`config.LOGICAL_TABLES`); `config.physical_table()` maps it to the physical table
-and the backend wraps `main` entity keys as `pk=<entity>#<id>`.
+and the backend wraps `main` entity keys as `pk=<entity>#<id>`. **Callers always pass natural keys** (e.g. `get("checkpoints", {"log_id": "audit", "sk": "000000001288"})`); only the backend builds and strips physical `pk`/`sk` (`KEY_SCHEMA` in `executor/store/__init__.py`; `sk` = `str(<sort attr>)` or `"0"`). Audit head = `{"log_id": "head#<log_id>", "seq": 0, "next_seq": N}`; leaf row = `{log_id, seq, event (canonical JSON str), leaf_hash, ts}`; appends use `store.leaf_ops` (leaf Put `attribute_not_exists(seq)` + head update `next_seq == expected`) inside one `store.transact`. Execution leaves are written by WS-A's `tx_execute`, which then calls `executor.audit.checkpoint.maybe_checkpoint(log_id, *, store, settings)` (WS-B). Every `decision` leaf carries `data.inputs = {subject, facts, state}` so `verify_audit --replay` can re-run `decide(**inputs, policy)` (S12).
 **`tx_execute(store, *, leaf_event, expected_seq, ledger_row, proposal_id, mandate_debit) -> int`** builds §3.2 steps 1–5,
 returns the leaf `seq`, raises `TxConflict` (nothing written) on any failed condition.
 Backends: `memory` (dicts + one lock; dev/CI), `dynamo` (boto3; `moto` in CI, real DynamoDB in the demo).
