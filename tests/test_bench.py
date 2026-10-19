@@ -92,3 +92,13 @@ def test_a3_real_executor_pays_registry_iban_only():
     out = ep2.call("payment_propose", {"vendor_id": vendor_id(ACME["ico"]), "invoice_no": "FV9",
                                        "amount_minor": 9_000_000, "currency": "CZK"})
     assert out["status"] == "PENDING_SIG" and ep2.world.challenges[0]["channel"] == "device"
+
+
+def test_scripted_h2_h6_fail_on_a3():
+    from bench.scripted import LEVELS, _a3
+    expect = {"H2": "render_mismatch", "H3": "unknown_signer", "H4": "unknown_signer", "H5": "caller_not_allowed",
+              "H6": "T-EGRESS-ALLOW"}
+    for level in LEVELS:
+        r = _a3(level, 0, "rubber_stamp")
+        assert not r["attack_success"] and r["money_moved_minor"] == 0, (level, r)
+        assert expect[level] in r["rule_ids"], (level, r)
