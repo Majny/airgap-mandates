@@ -19,7 +19,7 @@
     "max_anom": 40,
     "payee_registry_version": 31,
     "payee_registry_hash": "54294c749c0715b2bf15e4e85413584e0b2fd8c2c3bd1f6c5541994fe7595f19",
-    "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+    "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
     "sig_required": 2,
     "signers": [
       {

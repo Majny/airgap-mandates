@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from executor import render as R
 from executor.canonical import canonical_json
+from executor.policy import rules
 from executor.errors import ERROR_CODES
 from executor.models import (ATTACKER_LEVELS, DECISION_RELEVANT_EVENTS, FACT_ORDER, AuditEventType, ChangeEvent,
                              ChangeEventKind, ChangeState, EffectType, EgressRule, MandateStatus, Purpose, Role)
@@ -486,7 +487,8 @@ def _digest(x) -> str:
 DEPLOY_ID = "DEMO"
 CLERK, TREASURY = _addr("clerk"), _addr("treasury")
 JED, UCT, FIN = _addr("acme-director"), _addr("acme-accountant"), _addr("acme-finance")
-POLICY_HASH = "1f3a9c0e7d2b4a61" + _h("policy")[16:]  # synthetic (matches the MANDATE golden P line)
+# Frozen at the Tue 06:00 policy freeze: the real hash of executor.policy.rules.policy_material().
+POLICY_HASH = rules.policy_hash()
 ACME_IBAN, FRAUD_IBAN, BETA_IBAN = "CZ6508000000192000145399", "LT483999000000001234", "CZ6203000000000123456789"
 NEW_LEGIT_IBAN = "CZ8601000000000099887766"
 NOW = "2026-10-19T12:00:00Z"

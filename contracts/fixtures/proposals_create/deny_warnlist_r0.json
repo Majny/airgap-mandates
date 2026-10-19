@@ -143,7 +143,7 @@
         ],
         "facts_digest": "8dbf11bb4092df22712ce8309fa7df424f34d5a2dd16c8732805512bdb9e2f5f",
         "mandate_id": "mnd_3",
-        "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd"
       },
       "challenge_nonce": null,
       "tx_id": null,
@@ -208,7 +208,7 @@
       ],
       "facts_digest": "8dbf11bb4092df22712ce8309fa7df424f34d5a2dd16c8732805512bdb9e2f5f",
       "mandate_id": "mnd_3",
-      "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
+      "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd"
     },
     "tx": null
   }
