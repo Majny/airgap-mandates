@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2
+.PHONY: help venv data test test-render dev ui ui-visual bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -34,8 +34,12 @@ ci: data  ## contracts (must be up to date) -> ruff -> pytest; run on every merg
 dev: data  ## run executor locally (in-memory backend, development only) on :8000
 	AIRGAP_BACKEND=memory .venv/bin/uvicorn executor.app:app --reload --port 8000
 
-ui:  ## run Streamlit host UI
-	.venv/bin/streamlit run host/ui.py
+ui:  ## operations console against AWS (AWS_PROFILE=hackathon); UI_URL=memory: for seeded local data
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} AIRGAP_EXECUTOR_URL=$(or $(UI_URL),$(DEMO_URL)) .venv/bin/streamlit run host/ui.py
+
+ui-visual:  ## visual test: headless Chromium clicks every console tab on seeded data, screenshots in .local/ui-visual/
+	$(PY) -m playwright install chromium >/dev/null
+	$(PY) -m tools.ui_visual
 
 bench:  ## run AgentPayBench
 	$(PY) -m bench.run_bench --out bench/results

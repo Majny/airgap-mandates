@@ -1,8 +1,10 @@
-"""Streamlit ops console (`make ui`): agent activity, facts [F] vs [H], decisions + rule IDs, COMPROMISED switch,
-payee-change FSM, receipts, audit, AWS evidence, bench table. CONTRACTS.md §4, ARCHITECTURE §14. Owner: WS-F.
+"""AirGap Mandates operations console (`make ui`): what the agent proposed, what the executor decided and why,
+what waits for a hardware signature, payee changes, approvals, the signed mandate, audit and reports.
+CONTRACTS.md §4. Owner: WS-F.
 
 Untrusted host (TB3): it only reads the public executor API (`AIRGAP_EXECUTOR_URL`) and the frozen bench files.
-With COMPROMISED on, every view model goes through `host.compromised.lie()` - the device text is the only truth.
+`AIRGAP_EXECUTOR_URL=memory:` runs a seeded in-process executor (visual test, no AWS). The COMPROMISED switch
+(`AIRGAP_UI_DEMO_TOOLS=1`) sends every view model through `host.compromised.lie()`: the device text is the only truth.
 """
 from __future__ import annotations
 
@@ -17,34 +19,55 @@ from urllib.parse import urlencode
 # `streamlit run host/ui.py` puts only host/ on sys.path; infra/ (SigV4 signing) is not an installed package
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from host import compromised  # noqa: E402
+from host import compromised, story  # noqa: E402
 
+ROOT = Path(__file__).resolve().parent.parent
 EXECUTOR = os.environ.get("AIRGAP_EXECUTOR_URL", "http://127.0.0.1:8000")
+DEMO_TOOLS = os.environ.get("AIRGAP_UI_DEMO_TOOLS") == "1"
+REFRESH_S = int(os.environ.get("AIRGAP_UI_REFRESH_S", "5"))
 FSM_STATES = ["PENDING_ATTEST", "CALLBACK_PENDING", "COOLING", "SIG_CLERK", "SIG_TREASURY", "ACTIVE"]
-# Beat order and cues from docs/STAGE.md (WS-C runbook) / ARCHITECTURE §14.
-BEATS = [
-    ("0:00 Hook", "Activity", "This agent is compromised right now. It still can't move a koruna."),
-    ("0:15 S1 normal day", "Activity", "Invoices pay under the signed mandate; the over-cap one lights the Safe 3. "
-                                       "Line 1 of the device = line 1 here."),
-    ("0:45 S2 lookalike + escalation + exfil", "Payee changes",
-     "Facts go red; the device stays dark (R0: nothing to approve). Escalations refused, exfil blocked."),
-    ("1:35 S3 takeover + deepfake, then legit", "Payee changes",
-     "DKIM green, ATT 0/3 = BLOCK: there is no button. Legit path: 2 of 3 attestations, cooling-off, clerk + treasury."),
-    ("2:30 S5 offline audit", "Audit", "Wi-Fi off. Stock Go noteverify + verify_audit green; one flipped byte is red."),
-    ("3:20 Bench + real vs simulated", "Bench", "Money to the attacker (frozen run): A0 571,077 CZK, A3 0 CZK, "
-                                             "also with a rubber-stamp human."),
-]
+FSM_PLAIN = {"PENDING_ATTEST": "waiting for 2 of 3 confirmations", "CALLBACK_PENDING": "waiting for callback",
+             "COOLING": "cooling-off", "SIG_CLERK": "waiting for clerk", "SIG_TREASURY": "waiting for treasury",
+             "ACTIVE": "active", "REJECTED": "rejected", "EXPIRED": "expired"}
 SEV_COLOUR = {"BLOCK": "#b42318", "WARN": "#b54708", "INFO": "#067647"}
 CSS = """<style>
-html, body, [class*="css"] { font-size: 20px; }
-.device { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 26px; line-height: 1.25; background: #111;
-          color: #f5f5f5; padding: 14px 18px; border-radius: 10px; white-space: pre; display: inline-block; }
-.fact { display: inline-block; padding: 4px 10px; margin: 3px; border-radius: 6px; color: white; font-weight: 600; }
-.hint { display: inline-block; padding: 4px 10px; margin: 3px; border-radius: 6px; border: 2px dashed #98a2b3;
-        color: #475467; }
-.banner-local { background: #b42318; color: white; padding: 8px 14px; border-radius: 8px; font-weight: 700; }
-.banner-aws { background: #067647; color: white; padding: 8px 14px; border-radius: 8px; font-weight: 700; }
+html, body, [class*="css"] { font-size: 18px; }
+.block-container { padding-top: 3.2rem; max-width: 1400px; }
+.device { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 22px; line-height: 1.25; background: #111;
+          color: #f5f5f5; padding: 12px 16px; border-radius: 10px; white-space: pre; display: inline-block; }
+.fact { display: inline-block; padding: 3px 9px; margin: 2px; border-radius: 6px; color: white; font-weight: 600;
+        font-size: 15px; }
+.hint { display: inline-block; padding: 3px 9px; margin: 2px; border-radius: 6px; border: 2px dashed #98a2b3;
+        color: #98a2b3; font-size: 15px; }
+.banner-local { background: #b42318; color: white; padding: 6px 12px; border-radius: 8px; font-weight: 700; }
+.banner-aws { background: #067647; color: white; padding: 6px 12px; border-radius: 8px; font-weight: 700; }
+.card { border-left: 6px solid var(--c); padding: 10px 16px; margin: 0 0 10px 0; border-radius: 6px;
+        background: rgba(127,127,127,0.08); }
+.card .t { font-weight: 700; font-size: 20px; }
+.card .b { opacity: 0.85; margin-top: 2px; }
+.status { display: inline-block; padding: 2px 10px; border-radius: 999px; color: white; font-weight: 700; }
 </style>"""
+STATUS = {  # proposal status -> (plain label, colour)
+    "EXECUTED": ("Paid", "#067647"), "CHALLENGED": ("Waiting for Trezor", "#1d4ed8"),
+    "DENIED": ("Blocked", "#b42318"), "EXPIRED": ("Expired", "#475467"), "REJECTED": ("Rejected", "#b42318"),
+}
+
+
+def _memory_call() -> Any:
+    """In-process executor on the memory backend, seeded and run through a normal day, a lookalike BEC with agent
+    escalation, a mailbox takeover and a legitimate payee change (executor.scenes). Cached per Streamlit server."""
+    import streamlit as st
+
+    @st.cache_resource
+    def env() -> Any:
+        from executor import e2e, scenes
+        e = scenes.DemoEnv()
+        e2e.run(e.call, e.clerk, e.treasury, now=e.now, log=lambda s: None)
+        scenes.scene_s2(e, log=lambda s: None)
+        scenes.scene_s3(e, log=lambda s: None)
+        return e
+
+    return env().call
 
 
 _CALL: Any = None
@@ -54,8 +77,11 @@ def _call() -> Any:
     """SigV4 to the AWS regional API as the principal's IAM role (host.signer.executor_call); plain HTTP locally."""
     global _CALL
     if _CALL is None:
-        from host.signer import executor_call
-        _CALL = executor_call(EXECUTOR)
+        if EXECUTOR.startswith("memory:"):
+            _CALL = _memory_call()
+        else:
+            from host.signer import executor_call
+            _CALL = executor_call(EXECUTOR)
     return _CALL
 
 
@@ -65,6 +91,11 @@ def api(path: str, who: str = "host", **query: Any) -> tuple[int, Any]:
         return _call()("GET", path + ("?" + urlencode(q) if q else ""), None, who)
     except Exception as exc:  # noqa: BLE001 - unreachable executor, expired SSO credentials: show, never crash
         return 0, {"error": "unreachable", "message": f"{type(exc).__name__}: {exc}"[:300]}
+
+
+def _list(path: str, key: str, **query: Any) -> list[dict[str, Any]]:
+    code, body = api(path, **query)
+    return body.get(key, []) if code == 200 and isinstance(body, dict) else []
 
 
 def export_bundle() -> dict[str, Any] | None:
@@ -109,60 +140,106 @@ def fact_chips(facts: list[dict[str, Any]]) -> str:
     chips = []
     for f in facts:
         if f.get("kind") == "H":
-            chips.append(f'<span class="hint">[H] {f.get("display_line", "")[:60]}</span>')
+            chips.append(f'<span class="hint">agent claim (ignored): {f.get("display_line", "")[:60]}</span>')
         else:
             colour = SEV_COLOUR.get(f.get("severity", "INFO"), "#475467")
-            chips.append(f'<span class="fact" style="background:{colour}">[F] {f.get("display_line", f.get("id"))}</span>')
+            title = str(f.get("label", "")).replace('"', "'")
+            chips.append(f'<span class="fact" title="{title}" style="background:{colour}">'
+                         f'{f.get("display_line", f.get("id"))}</span>')
     return " ".join(chips)
 
 
-def proposal_view(p: dict[str, Any]) -> dict[str, Any]:
+def _ts(v: Any) -> str:
+    return str(v or "")[:16].replace("T", " ")
+
+
+def status_chip(label: str, colour: str) -> str:
+    return f'<span class="status" style="background:{colour}">{label}</span>'
+
+
+def proposal_view(p: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
     dec = p.get("decision", {})
-    return {"kind": "pay", "id": p["proposal_id"], "vendor_id": p["vendor_id"], "vendor_name": p["vendor_id"],
+    return {"kind": "pay", "id": p["proposal_id"], "vendor_id": p["vendor_id"],
+            "vendor_name": names.get(p["vendor_id"], p["vendor_id"]),
             "amount_minor": p["invoice"]["amount_minor"], "expected_amount_minor": p["invoice"]["amount_minor"],
             "status": p.get("status"), "decision": dec.get("decision"), "rule_ids": dec.get("rule_ids", []),
             "facts": p.get("facts", []), "challenge": dec.get("challenge")}
 
 
-def tab_activity(st: Any) -> None:
-    code, body = api("/proposals", limit=30)
-    if code != 200:
-        st.info(f"executor: {body}")
-        return
-    for p in body.get("proposals", []):
-        v = view(proposal_view(p))
+def render_cards(st: Any, cards: list[dict[str, Any]]) -> None:
+    for c in cards:
+        icon, colour = story.TONES[c["tone"]]
+        body = f'<div class="b">{c["body"]}</div>' if c["body"] else ""
+        st.markdown(f'<div class="card" style="--c:{colour}"><div class="t">{icon} {c["title"]}</div>{body}</div>',
+                    unsafe_allow_html=True)
+        if c.get("device"):
+            st.markdown(f'<div class="device">{c["device"]}</div>', unsafe_allow_html=True)
+
+
+def tab_overview(st: Any, data: dict[str, Any]) -> None:
+    if not data["cards"]:
+        st.info("No activity yet.")
+    render_cards(st, data["cards"])
+
+
+def tab_payments(st: Any, data: dict[str, Any]) -> None:
+    if not data["proposals"]:
+        st.info("No payment proposals yet.")
+    for p in data["proposals"]:
+        v = view(proposal_view(p, data["names"]))
+        label, colour = STATUS.get(v.get("status") or "", (str(v.get("status")), "#475467"))
+        if v.get("status") == "EXECUTED":
+            label += " · confirmed on Trezor" if v.get("decision") == "challenge" else " · within mandate"
+        inv = p.get("invoice") or {}
         with st.container(border=True):
-            c1, c2 = st.columns([3, 2])
-            c1.markdown(f"**{v['id']}** · {v['vendor_id']} · **{v['amount_minor'] / 100:,.2f} CZK**")
-            decision = v.get("decision") or "-"
-            c2.markdown(f"decision **{decision.upper()}** · rules `{', '.join(v.get('rule_ids') or []) or '-'}`")
-            st.markdown(fact_chips(v.get("facts", [])), unsafe_allow_html=True)
-            ch = p.get("decision", {}).get("challenge")
-            if ch:
-                st.caption("Device text (rendered by the executor; the host cannot change what the device signs)")
+            c1, c2 = st.columns([4, 2])
+            c1.markdown(f"**{v['vendor_name']}** · invoice {inv.get('invoice_no', '-')} · "
+                        f"**{story.czk(v['amount_minor'])}**")
+            c2.markdown(status_chip(label, colour), unsafe_allow_html=True)
+            blocks = story._reasons(v.get("facts", []), ("BLOCK", "WARN"))
+            if blocks and v.get("status") == "EXECUTED":
+                st.markdown(f"{blocks}: the clerk confirmed the exact amount and account on the Trezor.")
+            elif blocks:
+                st.markdown(f"Why: {blocks}")
+            ch = v.get("challenge")
+            if ch and v.get("status") == "CHALLENGED":
+                st.caption("Exactly this text is on the clerk's Trezor. The device signs what it shows, "
+                           "not what this screen shows.")
                 st.markdown(f'<div class="device">{ch["text"]}</div>', unsafe_allow_html=True)
-            if decision == "deny":
-                st.caption("R0: nothing to approve - the device stays dark.")
+            with st.expander("Facts checked by the executor"):
+                st.markdown(fact_chips(v.get("facts", [])), unsafe_allow_html=True)
+                st.caption(f"{v['id']} · rules {', '.join(v.get('rule_ids') or []) or '-'}")
 
 
-def tab_changes(st: Any) -> None:
-    code, body = api("/changes")
-    if code != 200:
-        st.info(f"executor: {body}")
-        return
-    for c in body.get("changes", []):
-        v = view({"kind": "change", "vendor_id": c.get("vendor_id"), "vendor_name": c.get("vendor_id"),
+def tab_changes(st: Any, data: dict[str, Any]) -> None:
+    if not data["changes"]:
+        st.info("No payee changes yet.")
+    for c in data["changes"]:
+        v = view({"kind": "change", "vendor_id": c.get("vendor_id"),
+                  "vendor_name": c.get("vendor_name") or data["names"].get(c.get("vendor_id"), c.get("vendor_id")),
                   "iban": c.get("new_iban"), "registry_iban": c.get("old_iban"), "facts": c.get("facts", [])})
+        state = c.get("state", "")
+        colour = {"ACTIVE": "#067647", "REJECTED": "#b42318", "EXPIRED": "#475467"}.get(state, "#1d4ed8")
         with st.container(border=True):
-            st.markdown(f"**{c.get('change_id')}** · {v['vendor_id']} → `{v.get('iban')}`")
-            state = c.get("state", "")
-            steps = [f"**[{s}]**" if s == state else s for s in FSM_STATES]
-            st.markdown(" → ".join(steps) + (f" · **{state}**" if state in ("REJECTED", "EXPIRED") else ""))
-            st.markdown(fact_chips(v.get("facts", [])), unsafe_allow_html=True)
+            c1, c2 = st.columns([4, 2])
+            c1.markdown(f"**{v['vendor_name']}** · `{c.get('old_iban')}` → `{v.get('iban')}`")
+            c2.markdown(status_chip(FSM_PLAIN.get(state, state), colour), unsafe_allow_html=True)
+            if state not in ("REJECTED", "EXPIRED"):
+                steps = [f"**{FSM_PLAIN[s]}**" if s == state else FSM_PLAIN[s] for s in FSM_STATES]
+                st.markdown(" → ".join(steps))
+            hist = c.get("history") or []
+            if hist:
+                st.markdown(f"Last step: {story.plain_reason(str(hist[-1].get('reason', '')))}")
+            blocks = story._reasons(v.get("facts", []))
+            if blocks:
+                st.markdown(f"Why blocked: {blocks}")
+            with st.expander("Facts checked by the executor"):
+                st.markdown(fact_chips(v.get("facts", [])), unsafe_allow_html=True)
+                st.caption(f"{c.get('change_id')} · {c.get('attest_count', 0)}/3 confirmations")
 
 
-def tab_approvals(st: Any) -> None:
-    bundle = export_bundle()
+def tab_approvals(st: Any, data: dict[str, Any]) -> None:
+    bundle = data["bundle"]
     if bundle is None:
         st.info("audit export unavailable")
         return
@@ -170,18 +247,42 @@ def tab_approvals(st: Any) -> None:
     sigs = [leaf for leaf in bundle.get("leaves", []) if (leaf.get("event") or {}).get("type") == "signature"]
     if not sigs:
         st.caption("no approvals yet")
-    for leaf in reversed(sigs[-30:]):
+    for leaf in reversed(sigs[-50:]):
         ev = leaf["event"]
         d = ev.get("data") or {}
         addr = str(d.get("signer_address") or "").lower()
         label = labels.get(addr, "NOT ENROLLED" if addr else "-")
-        outcome = "accepted" if d.get("accepted") else f"rejected: {d.get('error')}"
-        st.markdown(f"seq {leaf['seq']} · **{d.get('purpose')}** · {d.get('role')} · `{addr[:10]}…` "
-                    f"{device_chip(label)} · {outcome} · `{ev.get('subject_id')}`", unsafe_allow_html=True)
+        ok = d.get("accepted")
+        outcome = status_chip("accepted", "#067647") if ok else status_chip(f"refused: {d.get('error')}", "#b42318")
+        st.markdown(f"{_ts(ev.get('ts'))} · **{d.get('purpose')}** · {d.get('role')} · "
+                    f"`{addr[:10]}…` {device_chip(label)} {outcome} · `{ev.get('subject_id')}`",
+                    unsafe_allow_html=True)
+
+
+def tab_mandate(st: Any, data: dict[str, Any]) -> None:
+    code, m = api("/mandates/active")
+    if code != 200 or not isinstance(m, dict) or not m.get("mandate_id"):
+        st.info("No active mandate: every payment needs a hardware signature.")
+        return
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Per payment", story.czk(m.get("max_per_payment_minor")))
+    c2.metric("Total", story.czk(m.get("max_total_minor")))
+    c3.metric("Payments", f"{m.get('count', 0)} / {m.get('max_count')}")
+    spent, total = m.get("spent_minor") or 0, m.get("max_total_minor") or 1
+    st.progress(min(spent / total, 1.0), text=f"Spent {story.czk(spent)} of {story.czk(total)}")
+    scope = "existing payees only" if m.get("payee_scope") == "existing_only" else m.get("payee_scope")
+    st.markdown(f"Valid {_ts(m.get('valid_from'))} → {_ts(m.get('valid_until'))} UTC · {scope} · "
+                f"Verification of Payee required: {', '.join(m.get('require_vop') or [])}")
+    labels = device_labels(data["bundle"])
+    for s in m.get("signers") or []:
+        st.markdown(f"Signed by **{s.get('role')}** `{s.get('address', '')[:10]}…` "
+                    f"{device_chip(labels.get(str(s.get('address', '')).lower(), 'NOT ENROLLED'))} "
+                    f"at {_ts(s.get('signed_at'))} UTC", unsafe_allow_html=True)
+    st.caption(f"{m.get('mandate_id')} · policy {str(m.get('policy_hash'))[:16]}")
 
 
 def tab_receipts(st: Any) -> None:
-    tx_id = st.text_input("tx_id")
+    tx_id = st.text_input("Transaction ID (tx_...)")
     if not tx_id:
         return
     code, r = api(f"/receipts/{tx_id}")
@@ -190,7 +291,7 @@ def tab_receipts(st: Any) -> None:
         return
     try:  # short URL-form QR (AGR2, ~v8): scans with a stock phone camera; the full AGR1 receipt is file-only
         from executor.audit.receipt import short_qr_payload, short_qr_png
-        st.image(short_qr_png(r), width=480)
+        st.image(short_qr_png(r), width=360)
         st.code(short_qr_payload(r), language="text")
         st.caption("scan → the verifier checks this receipt offline against the signed log")
     except (ImportError, NotImplementedError, RuntimeError) as exc:  # RuntimeError: segno missing
@@ -198,86 +299,128 @@ def tab_receipts(st: Any) -> None:
     st.json(r, expanded=False)
 
 
-def tab_audit(st: Any) -> None:
-    bundle = export_bundle()
-    try:
-        from witness.supervisor import render_html
-        import streamlit.components.v1 as components
-        st.warning("Rendered by the host. Under a compromised host (H1) this view can lie. "
-                   "Verify offline: python -m witness.supervisor bundle.json")
-        if bundle is not None:
-            components.html(render_html(bundle, allow_uncovered_tail=True), height=620, scrolling=True)
-    except ImportError:
-        st.info("supervisor view not merged on this branch yet (WS-B witness.supervisor)")
+def tab_audit(st: Any, data: dict[str, Any]) -> None:
     code, note = api("/checkpoint", log_id="audit")
-    st.markdown("**Latest checkpoint (C2SP signed note)**")
+    st.markdown("**Latest signed checkpoint** (log key + witnesses)")
     st.code(note if code == 200 else f"unavailable: {note}", language="text")
-    if st.button("Verify export bundle now"):
-        code, bundle = api("/audit/export", "auditor", log_id="audit", from_seq=0)
-        if code != 200:
-            st.error(bundle)
-            return
+    if st.button("Verify the full audit log now"):
+        bundle = export_bundle()
+        if bundle is None:
+            st.error("audit export unavailable")
+        else:
+            try:
+                from tools.verify_audit import verify
+                rep = verify(bundle, replay=True)
+                st.success(f"verify_audit: {rep}") if getattr(rep, "ok", False) else st.error(f"verify_audit: {rep}")
+            except NotImplementedError:
+                st.info("verify_audit not available on this build")
+    st.caption("This page is rendered by the host and could lie. The proof is the offline check: "
+               "python -m tools.verify_audit on an exported bundle, with keys obtained out of band.")
+    with st.expander("Supervisor view of the log"):
         try:
-            from tools.verify_audit import verify
-            rep = verify(bundle, replay=True)
-            st.success(f"verify_audit: {rep}") if getattr(rep, "ok", False) else st.error(f"verify_audit: {rep}")
-        except NotImplementedError:
-            st.info("verify_audit not merged yet (WS-B)")
+            from witness.supervisor import render_html
+            import streamlit.components.v1 as components
+            if data["bundle"] is not None:
+                components.html(render_html(data["bundle"], allow_uncovered_tail=True), height=620, scrolling=True)
+        except ImportError:
+            st.info("supervisor view not available on this build")
+    st.markdown("**Receipts**")
+    tab_receipts(st)
 
 
-def tab_evidence(st: Any) -> None:
-    st.caption("AWS evidence (eu-central-1). Files under infra/evidence/ were captured in rehearsal and are labelled so.")
-    ev = Path(__file__).resolve().parent.parent / "infra" / "evidence"
-    files = sorted(f for f in ev.glob("*") if f.suffix in (".json", ".txt")) if ev.exists() else []
-    if not files:
-        st.info("no evidence captured yet (WS-E probes: simulate-principal-policy, AccessDenied, Object Lock, Flow Logs)")
-    for f in files:
-        with st.expander(f.name):
-            if f.suffix == ".json":
-                st.json(json.loads(f.read_text()))
-            else:
-                st.code(f.read_text())
+def tab_reports(st: Any) -> None:
+    with st.expander("Attack benchmark (frozen runs)", expanded=True):
+        st.caption("Frozen runs only (bench/results/FROZEN.md). Simulated humans are a model of a human, "
+                   "not a user study.")
+        # REPORT.md is the frozen page; report("bench/results") would also pull superseded and check-only runs
+        st.markdown((ROOT / "bench" / "results" / "REPORT.md").read_text())
+    with st.expander("AWS deployment evidence"):
+        ev = ROOT / "infra" / "evidence"
+        files = sorted(f for f in ev.glob("*") if f.suffix in (".json", ".txt")) if ev.exists() else []
+        if not files:
+            st.info("no evidence captured yet")
+        for f in files:
+            st.markdown(f"**{f.name}**")
+            st.json(json.loads(f.read_text()), expanded=False) if f.suffix == ".json" else st.code(f.read_text())
 
 
-def tab_bench(st: Any) -> None:
-    st.caption("Frozen runs only (bench/results/FROZEN.md). Simulated humans are a model of a human, not a user study.")
-    # REPORT.md is the frozen page; report("bench/results") would also pull superseded and check-only runs
-    st.markdown((Path(__file__).resolve().parent.parent / "bench" / "results" / "REPORT.md").read_text())
+def load() -> dict[str, Any]:
+    vendors = _list("/vendors", "vendors")
+    proposals = _list("/proposals", "proposals", limit=50)
+    changes = _list("/changes", "changes")
+    bundle = export_bundle()
+    kpis, cards = story.build(bundle, vendors, changes, proposals)
+    return {"vendors": vendors, "names": {v["vendor_id"]: v.get("name") or v["vendor_id"] for v in vendors},
+            "proposals": proposals, "changes": changes, "bundle": bundle, "kpis": kpis, "cards": cards}
+
+
+def body(st: Any) -> None:
+    data = load()
+    k = data["kpis"]
+    waiting = [p for p in data["proposals"] if p.get("status") == "CHALLENGED"]
+    waiting += [c for c in data["changes"] if c.get("state") in ("SIG_CLERK", "SIG_TREASURY")]
+    if waiting:
+        st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Check the text on the Trezor.")
+    m = st.columns(4)
+    m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payments",
+                delta_color="off")
+    m[1].metric("Paid to unregistered accounts", story.czk(k["attacker_minor"]))
+    m[2].metric("Blocked attempts", k["attacks"])
+    m[3].metric("Paid without a human", f"{k['auto_n']} of {k['paid_n']}", "inside the signed mandate",
+                delta_color="off")
+    tabs = st.tabs(["Overview", "Payments", "Payee changes", "Approvals", "Mandate", "Audit", "Reports"])
+    with tabs[0]:
+        tab_overview(st, data)
+    with tabs[1]:
+        tab_payments(st, data)
+    with tabs[2]:
+        tab_changes(st, data)
+    with tabs[3]:
+        tab_approvals(st, data)
+    with tabs[4]:
+        tab_mandate(st, data)
+    with tabs[5]:
+        tab_audit(st, data)
+    with tabs[6]:
+        tab_reports(st)
 
 
 def main() -> None:
     """Streamlit entry point."""
     import streamlit as st
 
-    st.set_page_config(page_title="AirGap Mandates - ops console", layout="wide")
+    st.set_page_config(page_title="AirGap Mandates", layout="wide", initial_sidebar_state="collapsed")
     st.markdown(CSS, unsafe_allow_html=True)
     code, health = api("/health")
     backend = health.get("backend") if isinstance(health, dict) else None
-    cls, label = ("banner-aws", "AWS eu-central-1") if backend == "aws" else ("banner-local", f"LOCAL ({backend or 'executor unreachable'}) - not the demo")
-    st.markdown(f'<span class="{cls}">{label}</span>', unsafe_allow_html=True)
-    with st.sidebar:
-        on = st.toggle("COMPROMISED host", value=compromised.is_compromised(),
-                       help="The UI lies (H1). The device text and the executor are unaffected.")
-        compromised.set_compromised(on)
-        if isinstance(health, dict):
-            st.caption(f"deployment {health.get('deployment')} · policy {str(health.get('policy_hash'))[:16]}")
-        beat = st.radio("Stage beat (docs/STAGE.md)", [b[0] for b in BEATS], index=0)
-        if st.button("refresh"):
-            st.rerun()
-    title, tab_name, cue = next(b for b in BEATS if b[0] == beat)
-    st.markdown(f"### {title}  \n{cue}  \n*look at: {tab_name}*")
-    clip = Path(__file__).resolve().parent.parent / "demo" / "assets" / "synthetic_cfo_call.mp3"
-    if title.startswith("1:35") and clip.exists():
-        st.caption("SYNTHETIC VOICE (Amazon Polly), fictional person: the 'CFO' pressing the clerk")
-        st.audio(clip.read_bytes(), format="audio/mpeg")
+    if backend == "aws":
+        cls, label = "banner-aws", f"AWS eu-central-1 · {health.get('deployment')}"
+    elif EXECUTOR.startswith("memory:") and backend:
+        cls, label = "banner-local", "LOCAL in-process executor (seeded test data)"
+    else:
+        cls, label = "banner-local", f"LOCAL ({backend or 'executor unreachable'})"
+    h1, h2 = st.columns([3, 2])
+    h1.markdown("## AirGap Mandates  \nPayment control for AI agents")
+    policy = str(health.get("policy_hash"))[:16] if isinstance(health, dict) else "-"
+    h2.markdown(f'<div style="text-align:right"><span class="{cls}">{label}</span><br>'
+                f'<small>policy {policy}</small></div>', unsafe_allow_html=True)
+    if code != 200:
+        st.error(f"executor: {health}")
     if emulator_only():
         st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 3 attached)</span>',
                     unsafe_allow_html=True)
-    tabs = st.tabs(["Activity", "Payee changes", "Approvals", "Receipts", "Audit", "AWS evidence", "Bench"])
-    for tab, fn in zip(tabs, (tab_activity, tab_changes, tab_approvals, tab_receipts, tab_audit, tab_evidence,
-                              tab_bench)):
-        with tab:
-            fn(st)
+    if DEMO_TOOLS:
+        with st.sidebar:
+            on = st.toggle("COMPROMISED host", value=compromised.is_compromised(),
+                           help="The UI lies (H1). The device text and the executor are unaffected.")
+            compromised.set_compromised(on)
+    if compromised.is_compromised():
+        st.markdown('<span class="banner-local">COMPROMISED HOST: this screen may lie, trust the device</span>',
+                    unsafe_allow_html=True)
+    if REFRESH_S > 0 and hasattr(st, "fragment"):
+        st.fragment(run_every=REFRESH_S)(body)(st)
+    else:
+        body(st)
 
 
 if __name__ == "__main__":

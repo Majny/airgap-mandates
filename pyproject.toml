@@ -30,7 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis", "moto", "ruff", "fastapi", "uvicorn", "zxing-cpp"]  # zxing-cpp: independent QR decode test
-ui = ["streamlit", "segno"]  # segno: receipt QR PNG/SVG (lazy import; never in the Lambda runtime)
+ui = ["streamlit", "segno", "playwright"]  # segno: receipt QR PNG/SVG; playwright: make ui-visual (both lazy imports, never in the Lambda runtime)
 host = ["trezor", "websocket-client"]  # trezorlib; websocket-client drives trezor-user-env (tests/device)
 tsa = ["rfc3161ng"]
 

@@ -1,0 +1,6 @@
+# Operations console (host/ui.py): no developer toolbar or Deploy button for operators
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
