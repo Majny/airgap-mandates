@@ -178,7 +178,7 @@ def test_fixture_challenge_texts_obey_render_contract():
             assert f"N {ch['nonce']}" in text.split("\n")
             assert text.startswith(f"AG1/{ch['deployment']} ")
             if ch["purpose"] != "ENROLL":
-                assert f"H {ch['subject_hash'][:16]}" in text.split("\n")
+                assert f"H {ch['subject_hash'][:R.PROFILES[ch['profile']].hash_hex]}" in text.split("\n")
             assert "[H]" not in text and "[F]" not in text
     assert n >= 8
 

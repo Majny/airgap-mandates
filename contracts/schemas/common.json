@@ -264,6 +264,7 @@
         },
         "profile": {
           "enum": [
+            "safe3-mono-16x4",
             "safe5-mono-18x7",
             "ui-preview-32"
           ]
@@ -286,15 +287,18 @@
         },
         "width": {
           "type": "integer",
-          "minimum": 18
+          "minimum": 16
         },
         "lines_per_page": {
-          "const": 7
+          "enum": [
+            4,
+            7
+          ]
         },
         "pages": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 2
+          "maximum": 4
         },
         "line_count": {
           "type": "integer",

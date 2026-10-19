@@ -2,7 +2,7 @@
 
 Run: make contracts   (= .venv/bin/python -m contracts.build)
 Source of truth is docs/CONTRACTS.md; this script is its machine-readable mirror.
-Fixture display texts are produced by executor/render.py (profile safe5-mono-18x7) so they are always canonical.
+Fixture display texts are produced by executor/render.py (default profile safe3-mono-16x4) so they are always canonical.
 Checkpoint notes in fixtures carry real Ed25519 signatures from PUBLIC test seeds (sha256 of a label) - test only.
 """
 
@@ -52,6 +52,7 @@ PURPOSE = {"enum": [p.value for p in Purpose]}
 CHANGE_STATE = {"enum": [s.value for s in ChangeState]}
 MANDATE_STATUS = {"enum": [s.value for s in MandateStatus]}
 PROFILE = {"enum": list(R.PROFILES)}
+DEVICE_PROFILE = {"enum": [R.PROFILE_SAFE3, R.PROFILE_SAFE5]}  # profiles a signing device can show (default first)
 VOP = {"enum": ["MTCH", "CMTC", "NMTC", "NOAP"]}
 ISSUER_CLASS = {"enum": ["supplier-erp", "supplier-bank", "registry"]}
 EVENT_TYPES = [t.value for t in AuditEventType]
@@ -112,8 +113,8 @@ DEFS = {
     "challenge_ref": obj({
         "nonce": NONCE, "purpose": PURPOSE, "role": ROLE, "subject_id": STR, "deployment": DEPLOY,
         "profile": PROFILE, "exp": TS, "text": {"type": "string", "pattern": r"^AG1/[A-Z0-9]{1,5} [ -~\n]+$"},
-        "text_sha256": HEX64, "subject_hash": HEX64, "width": {"type": "integer", "minimum": 18},
-        "lines_per_page": {"const": 7}, "pages": {"type": "integer", "minimum": 1, "maximum": 2},
+        "text_sha256": HEX64, "subject_hash": HEX64, "width": {"type": "integer", "minimum": 16},
+        "lines_per_page": {"enum": [4, 7]}, "pages": {"type": "integer", "minimum": 1, "maximum": 4},
         "line_count": {"type": "integer", "minimum": 1, "maximum": 14}, "used": BOOL, "created_at": TS,
     }, required=["nonce", "purpose", "role", "subject_id", "deployment", "profile", "exp", "text", "text_sha256",
                  "subject_hash", "width", "lines_per_page", "pages", "line_count"]),
@@ -375,7 +376,7 @@ SCHEMA_FILES = {
                                                   "params": {"type": "object"}, "policy_v": POSINT})},
         "snapshots": {"type": "object", "propertyNames": {"pattern": "^[0-9a-f]{64}$"},
                       "additionalProperties": STR},
-        "render_profile": {"const": "safe5-mono-18x7"}}),
+        "render_profile": DEVICE_PROFILE}),
     "receipt": obj({"tx": ref("ledger_tx"), "entry": ref("audit_event"), "seq": NNINT, "leaf_hash": HEX64,
                     "tree_size": POSINT, "inclusion_proof": arr(HEX64), "checkpoint_note": NOTE,
                     "key_ids": obj({"log": STR, "w1": STR, "w2": STR}, required=["log", "w1"]),
@@ -391,7 +392,7 @@ SCHEMA_FILES = {
         "email_id": STR, "from_addr": STR, "from_domain": STR, "subject": STR, "received_at": TS}))}),
     "health.response": obj({"status": {"const": "ok"}, "backend": {"enum": ["memory", "moto", "aws"]},
                             "deployment": DEPLOY, "demo_profile": {"enum": ["demo", "prod"]}, "policy_hash": HEX64,
-                            "render_profile": {"const": "safe5-mono-18x7"}, "code_sha256": nullable(HEX64),
+                            "render_profile": DEVICE_PROFILE, "code_sha256": nullable(HEX64),
                             "log_origin": STR, "log_pubkey_id": STR, "log_vkey": STR, "w1_vkey": STR, "w2_vkey": nullable(STR)}),
     "bench_case": obj({"id": STR, "arm": {"enum": ["A0", "A1", "A2", "A3"]}, "attacker_level": {"enum": ATTACKER_LEVELS},
                        "vector": STR, "goal": STR, "seed": NNINT,
@@ -1123,7 +1124,7 @@ FIXTURES_SPEC = {
                                        "policy_v": 2}},
             "snapshots": {SNAP["mostlyright"]: "s3://airgap-log/snapshots/mostlyright.sqlite",
                           SNAP["adis"]: "s3://airgap-log/snapshots/adis.json"},
-            "render_profile": "safe5-mono-18x7"}),
+            "render_profile": R.DEFAULT_PROFILE}),
     ],
     "receipts_get": [
         ("ok", "GET /receipts/{tx_id}", 200, None, RECEIPT),
@@ -1156,7 +1157,7 @@ FIXTURES_SPEC = {
     ],
     "health": [("ok", "GET /health", 200, None, {
         "status": "ok", "backend": "aws", "deployment": DEPLOY_ID, "demo_profile": "demo", "policy_hash": POLICY_HASH,
-        "render_profile": "safe5-mono-18x7", "code_sha256": _h("lambda-code"), "log_origin": LOG_NAME,
+        "render_profile": R.DEFAULT_PROFILE, "code_sha256": _h("lambda-code"), "log_origin": LOG_NAME,
         "log_pubkey_id": KEY_IDS["log"], "log_vkey": VKEYS["log"], "w1_vkey": VKEYS["w1"], "w2_vkey": None})],
 }
 

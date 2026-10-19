@@ -65,7 +65,7 @@ def test_mandate_dual_control_rules():
     st, r1 = h.submit(r["challenge"], h.clerk)
     assert r1["effect"] == {"type": "mandate_signed", "state": "PENDING_SIG_TREASURY"}
     tch = r1["challenge"]
-    assert tch["role"] == "treasury" and "ROLE TREASURY 2/2" in tch["text"]
+    assert tch["role"] == "treasury" and ("ROLE TREASURY 2/2" in tch["text"] or "ROLE TREAS 2/2" in tch["text"])
     st, e = h.submit(tch, h.clerk, role="treasury")  # clerk key in the treasury role
     assert (st, e["error"]) == (403, "unknown_signer")
     st, a = h.submit(tch, h.treasury)

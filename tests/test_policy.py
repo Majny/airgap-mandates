@@ -94,7 +94,7 @@ def test_tool_manifest_has_no_iban_on_propose():
 
 def test_config_v2_env():
     s = Settings.from_env({"AIRGAP_DEPLOYMENT_ID": "DEMO", "AIRGAP_COOLING_SECONDS": "30", "AGENT_MODE": "naive",
-                           "AIRGAP_RENDER_PROFILE": "safe5-mono-18x7"})
+                           "AIRGAP_RENDER_PROFILE": "safe3-mono-16x4"})
     assert s.cooling_seconds == 30 and s.agent_mode == "naive" and s.render_profile == R.DEFAULT_PROFILE
     d = Settings()
     assert (d.cooling_seconds, d.tsa_url, d.checkpoint_every_n_leaves, d.mandate_dual_threshold_minor) == (

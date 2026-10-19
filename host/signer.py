@@ -36,7 +36,7 @@ ROLE_PATHS = {
 }
 
 # internal_model -> display profile its screen matches (H0 measurements). Safe 3 has two hardware revisions.
-DEVICE_PROFILES = {"T3T1": "safe5-mono-18x7", "T2B1": "safe3-mono-18x4", "T3B1": "safe3-mono-18x4"}
+DEVICE_PROFILES = {"T3T1": "safe5-mono-18x7", "T2B1": "safe3-mono-16x4", "T3B1": "safe3-mono-16x4"}
 
 
 class SignerCancelled(RuntimeError):

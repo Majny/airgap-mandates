@@ -31,7 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis", "moto", "ruff", "fastapi", "uvicorn"]
 ui = ["streamlit"]
-host = ["trezor"]  # PyPI name of trezorlib
+host = ["trezor", "websocket-client"]  # trezorlib; websocket-client drives trezor-user-env (tests/device)
 tsa = ["rfc3161ng"]
 
 [tool.setuptools.packages.find]

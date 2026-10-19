@@ -5,7 +5,7 @@
     "nonce": "91BC02E1",
     "role": "clerk",
     "sig": "0x74ca3711f87a29690b82abeced5eae31c7a87a561dcde86aa6eb8c0a7e967cd774ca3711f87a29690b82abeced5eae31c7a87a561dcde86aa6eb8c0a7e967cd71b",
-    "displayed_text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE CLERK 1/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 REG V31\nN 91BC02E1\nP 1f3a9c0e7d2b4a61\nH aaba5fe46a3b68b0"
+    "displayed_text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE CLERK 1/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E1\nP 1f3a9c0e7d2b4a\nH aaba5fe46a3b68"
   },
   "response": {
     "nonce": "91BC02E1",
@@ -55,14 +55,14 @@
       "role": "treasury",
       "subject_id": "mnd_3",
       "deployment": "DEMO",
-      "profile": "safe5-mono-18x7",
+      "profile": "safe3-mono-16x4",
       "exp": "2026-10-19T12:06:00Z",
-      "text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nREQ VOP MTCH\nROLE TREASURY 2/2\nFROM 10-19 12:00\nPAYEES 12 REG V31\nN 91BC02E2\nP 1f3a9c0e7d2b4a61\nH ffc8b17666a973aa",
-      "text_sha256": "1f66d3088ed013359df6e43ce9801a2bf2c787b9c5d737ff81c6b42f67cbbe26",
+      "text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE TREAS 2/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E2\nP 1f3a9c0e7d2b4a\nH ffc8b17666a973",
+      "text_sha256": "e5a0a8365e858450bbbd4da77e98d75c9c4667676006c84bbc3ccd43c1b8e845",
       "subject_hash": "ffc8b17666a973aa0b359bec491e008211dbffd29ffd8de48c644cf4ad955996",
-      "width": 18,
-      "lines_per_page": 7,
-      "pages": 2,
+      "width": 16,
+      "lines_per_page": 4,
+      "pages": 4,
       "line_count": 14
     }
   }

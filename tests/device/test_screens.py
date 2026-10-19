@@ -9,14 +9,16 @@ from pathlib import Path
 
 import pytest
 
+from executor import render as R
+
 pytestmark = pytest.mark.skipif(not os.environ.get("AIRGAP_TREZOR_PATH"), reason="needs trezor-user-env emulator")
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLDEN_DIR = ROOT / "docs" / "device" / "emulator"
 FIXTURES = ROOT / "contracts" / "fixtures" / "challenges_get"
 UPDATE = os.environ.get("AIRGAP_UPDATE_GOLDENS") == "1"
-# Safe 3 (T2B1/T3B1) message screen, measured at H0: 4 lines x 18 columns per page.
-LINES_PER_PAGE = int(os.environ.get("AIRGAP_DEVICE_LINES_PER_PAGE", "4"))
+# Safe 3 (T2B1/T3B1) message screen, measured at H0: 4 lines per page (= the default render profile).
+LINES_PER_PAGE = R.PROFILES[R.DEFAULT_PROFILE].lines_per_page
 
 
 def _udp() -> str:
@@ -35,13 +37,7 @@ def oracle():
     return o
 
 
-# safe5-mono-18x7 texts put an 18-char line at a Safe 3 page break (lines 4k / 4k+1 must be <= 16): the device reflows.
-REFLOWS_ON_SAFE3 = {"chg_treasury", "mandate"}
-
-
-@pytest.mark.parametrize("name", [
-    pytest.param(n, marks=pytest.mark.xfail(reason="safe5 profile text on a Safe 3; needs the safe3 profile", strict=True))
-    if n in REFLOWS_ON_SAFE3 else n for n in sorted(_fixture_texts())])
+@pytest.mark.parametrize("name", sorted(_fixture_texts()))
 def test_goldens_match_emulator_screen(oracle, name):
     text = _fixture_texts()[name]
     cap = oracle.capture(text, udp=_udp())

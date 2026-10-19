@@ -1,4 +1,4 @@
-# AirGap Mandates: Architecture (v2, authoritative)
+# AirGap Mandates: Architecture (v2.1, authoritative; v2.1 = H0 device facts, Trezor Safe 3)
 
 Status: **final design for the FinTechers Hackathon 2026, Track 3 "Securing the agentic bank"**. Hacking runs Mon 19 Oct 12:00 to code freeze Tue 20 Oct 13:30. Demo is 4:00 plus 3:00 Q&A.
 
@@ -7,19 +7,20 @@ How this file relates to the others:
 - `docs/CONTRACTS.md` says the **exact bytes and APIs**. §16 lists every change CONTRACTS v1 needed to match this design; they are applied in CONTRACTS v2, which wins for code.
 
 Markers:
-- **[V]** verified on the T3T1 emulator (firmware 2.12.5) or in this repo.
+- **[V]** verified on the emulator (Safe 3 T3B1 or Safe 5 T3T1, firmware 2.12.5), on the physical Safe 3 (T2B1, firmware 2.12.0; marked [V hardware]) or in this repo.
 - **[S]** read in source or docs, not run.
 - **[U]** unverified. Each [U] has an owner and a go/no-go time in §15.
 
 Evidence for the device claims:
-- `/Users/majny/Desktop/MyProjects/fintechers-hackathon-2026/kickoff/trezor-research/` (`screens/*.png`, `dl.py`, `verify_ident.py`, `ctl.py`).
+- `/Users/majny/Desktop/MyProjects/fintechers-hackathon-2026/kickoff/trezor-research/` (`screens/*.png`, `dl.py`, `verify_ident.py`, `ctl.py`): the earlier Safe 5 study.
+- `docs/device/measurements.md`, `docs/device/h0/*.png`, `docs/device/enroll_*.json` (H0, Safe 3 emulator and physical device).
 
 ---
 
 ## 1. Summary and principles
 
 **Summary.** AirGap Mandates is a payment-authorisation layer for bank back-office AI agents. The accounts-payable agent does real work: it triages the inbox, extracts and matches invoices, finds duplicates and proposes payments. It can only **propose**. Money is moved by an **executor** that runs outside the laptop and outside the agent's AWS role. The executor computes its own facts **[F]** from registries and data it fetched itself, and it treats everything from the agent or host as a hint **[H]**. It executes a payment in one of two cases:
-- the payment fits inside a **mandate** that people signed on a Trezor Safe 5, or
+- the payment fits inside a **mandate** that people signed on a Trezor (Safe 3), or
 - a human holds-to-confirm **exactly the text the device shows**. That text is rendered by the executor and contains only [F].
 
 A new payee account needs both of these:
@@ -35,7 +36,7 @@ Every input, decision, signature and execution goes into a C2SP-format transpare
 | # | Principle | Consequence |
 |---|---|---|
 | P1 | The agent, the host laptop, email, PDFs and phone calls are all assumed compromised | Nothing they say can unlock money (S3 [H] monotonicity) |
-| P2 | The display is the contract | The signed bytes are exactly the 18x7 ASCII text the device shows, rendered by the executor (S2, S11) |
+| P2 | The display is the contract | The signed bytes are exactly the ASCII text the device shows (`safe3-mono-16x4`: 16 cols, 4-line pages), rendered by the executor (S2, S11) |
 | P3 | The agent never supplies the IBAN that gets paid | Proposals carry `vendor_id`. The IBAN comes from a vendor master that changes only through the change flow |
 | P4 | Nothing to approve means nothing to rubber-stamp (**R0**) | If any fact is BLOCK, no challenge is issued and the device stays dark |
 | P5 | Deterministic decisions that can be replayed | Cedar policies via `cedarpy`. `policy_hash` goes in every leaf. `verify_audit.py --replay` reproduces every decision (S12) |
@@ -58,7 +59,7 @@ Every input, decision, signature and execution goes into a C2SP-format transpare
    SPAYD)            HERE → [F])                 ║  │  facts/   F-* from executor-fetched snapshots (§6)           │
                                                  ║  │  policy/  Cedar via cedarpy, policy_hash pinned (§5.3)       │
  ┌─ AGENT VPC (no IGW, no NAT) ───────────────┐  ║  │  change/  payee-change FSM + SD-JWT VC verifier (§5.2, §7)   │
- │ AP-Clerk agent (Lambda container)          │  ║  │  render/  safe5-mono-18x7 renderer, sole display source (§3) │
+ │ AP-Clerk agent (Lambda container)          │  ║  │  render/  safe3-mono-16x4 renderer, sole display source (§3) │
  │  planner  : Sonnet 4.5 (eu.)               │  ║  │  sig/     EIP-191 recover, nonce consume (conditional)       │
  │  extractor: Qwen3-235B, no tools (CaMeL Q) │  ║  │  ledger/  TransactWriteItems: leaf+seq+debit+exec (§5.4)     │
  │  VPCE: bedrock-runtime, execute-api        │  ║  │  rail/    pain.001.001.09 (+pain.002); TSYS if writes [U]    │
@@ -71,7 +72,7 @@ Every input, decision, signature and execution goes into a C2SP-format transpare
   IČO, Guardrails sensitive-info as 2nd opinion) ║                                           own KMS key, own table
                                                  ║                                        W2 unmodified litewitness
  Host laptop (U2): ops console + signer worker   ║                                           (Go) on separate machine
-  can lie: H1..H6 ── USB ──► TB0 TREZOR SAFE 5 (clerk)      tenv emulator T3T1 (treasury, labelled EMULATOR)
+  can lie: H1..H6 ── USB ──► TB0 TREZOR SAFE 3 (clerk)      tenv emulator T3B1 (treasury, labelled EMULATOR)
                                                  ║
  TB4 SUPPLIER SIDE (separate roles/keys): supplier-erp issuer · supplier-bank issuer (pinned) · registry issuer
   (signs ADIS/ARES/MostlyRight snapshot facts) · vendor portal (callback code + tripwire inbox, portal role only)
@@ -81,7 +82,7 @@ Every input, decision, signature and execution goes into a C2SP-format transpare
 
 | TB | Contents | Trusted for | Explicitly not trusted for |
 |---|---|---|---|
-| **TB0** human + Safe 5 | Screen, hold-to-confirm, seed in the secure element. Passphrase off or `passphrase_always_on_device=True` | "This person saw exactly these bytes and held to confirm" | Judging facts the screen does not show. R0 keeps BLOCKed subjects off the screen entirely |
+| **TB0** human + Safe 3 | Screen, hold-to-confirm, seed in the secure element. Passphrase protection on; the host never types a passphrase (standard wallet); another passphrase gives an unenrolled address and fails safe | "This person saw exactly these bytes and held to confirm" | Judging facts the screen does not show. R0 keeps BLOCKed subjects off the screen entirely |
 | **TB1** executor | One Lambda role per function. DynamoDB `ledger`, `mandates`, `audit`, `registry` (separate IAM resources). KMS log key. Secrets Manager (rail key) | Computing [F], deciding, rendering, verifying, executing, logging | Being honest about its own log, which is why TB2 exists. Lambda is Firecracker isolation, **not a TEE** (say this in Q&A; Nitro is the production path, §9) |
 | **TB2** witnesses | W1: separate role, KMS key, table; its key policy denies executor roles. W2: unmodified litewitness on another machine and network | Append-only, no split view (S8) | Decision correctness (covered by replay, S12). W1 is in the same account, so the real independence claim rests on W2 |
 | **TB3** untrusted | Agent and all models, host UI, mailbox, PDFs, callback voice, anything vendor-typed | Nothing. Every value is [H] | — |
@@ -116,7 +117,7 @@ Every input, decision, signature and execution goes into a C2SP-format transpare
 
 ## 3. Signing primitive and device UX
 
-### 3.1 Decision: EIP-191 `ethereum.sign_message` on a Trezor Safe 5
+### 3.1 Decision: EIP-191 `ethereum.sign_message` on a Trezor (Safe 3; the study was done on the Safe 5)
 
 | Criterion | **EIP-191** (chosen) | SLIP-13 SignIdentity | EIP-712 | FIDO2/WebAuthn | SLIP-24 PaymentRequest |
 |---|---|---|---|---|---|
@@ -126,7 +127,7 @@ Every input, decision, signature and execution goes into a C2SP-format transpare
 | Offline verification | Standard `personal_sign` recovery (`eth_account`) | Custom verifier, tested [V] | Standard | — | — |
 | Usable by us in production | Yes | Yes | Not WYSIWYS by default | Approver login only | No: firmware trusts only Trezor/Swapkit keys [S] |
 
-**Why:** EIP-191 is the only primitive that shows every signed byte in a monospace font and needs a hold. It is used **purely as a message-signing primitive**: no chain, no gas, no funded address. Say that in one sentence before anyone asks.
+**Why:** EIP-191 is the only primitive that shows every signed byte in a monospace font and needs a hold. This holds on the Safe 3 too [V hardware]: mono font, every byte shown, CONFIRM only on the last page, hold about 1 s. It is used **purely as a message-signing primitive**: no chain, no gas, no funded address. Say that in one sentence before anyone asks.
 
 Paths and settings:
 - One path per approver: `m/44'/60'/0'/0/i`. The device first shows "Signing address 0x…", so the approver sees which identity signs [V].
@@ -135,24 +136,33 @@ Roles for later:
 - SLIP-13 is reserved for a future `amp-trezor-slip13-v1` profile (full 256-bit hidden-hash binding).
 - SLIP-24 becomes an emulator-only "what firmware support would look like" screen (stretch). The debug build trusts a published key.
 
-### 3.2 Measured Safe 5 display facts (emulator T3T1, fw 2.12.5)
+### 3.2 Measured Safe 3 display facts (H0: emulator T3B1 2.12.5 and physical T2B1 2.12.0)
+
+The approver device is a **Trezor Safe 3** (128x64 mono OLED, two buttons, Optiga secure element). Details and screenshots:
+`docs/device/measurements.md`.
 
 | Fact | Status | Rule we enforce |
 |---|---|---|
-| Message body grid is **18 mono cols x 7 lines = 126 chars/page**; LF is honoured | [V] | Pre-wrap to 18; page 1 is **exactly 7 non-empty lines**, so page 2 starts where we intend |
-| Device auto-wrap splits words with no hyphen | [V] | We wrap ourselves; no line exceeds 18 |
-| Multi-page: line 7 ends with "...", the next page starts with "..." | [V] | **Until H0 measures it:** page-1 line 7 and page-2 line 1 are ≤15 chars (the marker may take columns) [U] |
-| More than 5 pages (≈630 chars) gives a truncated preview, and the user can hold-to-confirm without seeing the rest | [V] | **Maximum 2 pages** |
-| Non-ASCII (ř ž č ů €) renders as boxes while debuglink reports correct text | [V] (`eth_signmsg_czech_diacritics_broken.png`) | ASCII 0x20–0x7E plus LF only. Names come from the registry, transliterated by an executor-owned table whose hash is part of `policy_hash`. Golden tests compare **screenshots**, not only debuglink text |
+| Message body grid is **18 mono cols x 4 lines per page**; LF honoured; device auto-wrap splits words with no hyphen | [V] | We wrap ourselves; profile `safe3-mono-16x4` |
+| Page-break glyphs ("⇣" at page end, "⇒" at the next page start) take **2 columns each**: an 18-char line at line 4k or 4k+1 is split across pages | [V] | **Width 16** for every line, so no line can reflow; the title (line 1, never at a break) may use 18 |
+| CONFIRM (hold) exists **only on the last page**; other pages offer only "next". No ">5 pages" preview: 1300 chars = 24 pages, all shown | [V] | Hard cap anyway: **14 lines = 4 pages** |
+| Non-ASCII (ř ž č ů €) renders wrong (boxes) while debuglink reports the correct text | [V] emulator, [V hardware] | ASCII 0x20–0x7E plus LF only. Names come from the registry, transliterated by an executor-owned table whose hash is part of `policy_hash`. Golden tests compare **screenshots**, not only debuglink text |
 | Non-UTF-8 bytes display as `hex(...)` | [V] | Never send them; the renderer raises `RenderError("NON_ASCII")` |
-| Wire buffer 8 KiB | [S] | Irrelevant under the 2-page cap |
-| Safe 5 negotiates Codec v1, not THP | [V emulator] / [U hardware] | THP is transport hygiene, not part of the trust model |
+| Hold to confirm about **1.0 s** (0.9 s does not sign, 1.1 s does); a tap does nothing | [V] | Operator script: hold ~1 s on the last page |
+| The device waits indefinitely; the host sends Cancel on its timeout and the device returns home | [V], [V hardware] | Signer timeout = challenge TTL |
+| "Signing address 0x…" screen before the message | [V], [V hardware] | Approver sees which identity signs |
+| Codec v1, not THP; WebUSB through libusb, no Bridge (Suite must be closed) | [V hardware] | THP is transport hygiene, not part of the trust model |
+| Wire buffer 8 KiB | [S] | Irrelevant under the 14-line cap |
+| End to end: 5 EIP-191 signatures from the physical device recovered by `eth_account` to the device address (11–24 s per human approval) | [V hardware] | — |
+
+Earlier Safe 5 study (emulator T3T1 2.12.5): 18 mono cols x 7 lines, ">5 pages" truncated preview with hold available
+before the end, same diacritics trap. It is kept as the non-default profile `safe5-mono-18x7` (2 pages, break lines ≤15).
 
 ### 3.3 Device authenticity (enrolment ceremony, one session, `tools/enroll.py`)
 
 Steps:
-1. `trezorlib.authentication.authenticate_device(session, os.urandom(32))`. This checks the Optiga certificate chain against the T3T1 production root and requires an on-device "Allow". It refuses on an unlocked bootloader [S]. Not available on the emulator.
-2. `GetFirmwareHash(challenge)`, compared against the official release hash [S].
+1. `trezorlib.authentication.authenticate_device(session, os.urandom(32))`. This checks the Optiga certificate chain against the Trezor production root and requires an on-device "Allow". It refuses on an unlocked bootloader [S]. Not available on the emulator. On the physical Safe 3 the chain verified against the "Trezor Company / Trezor Safe 3" root (CN `T2B1 Trezor Safe 3`) [V hardware].
+2. `GetFirmwareHash(challenge)`, compared against the hash computed from the official release image (T2B1: blake2s keyed with the challenge over the 13 x 128 KiB firmware area, 0xFF padded). Matches `trezor-t2b1-2.12.0.bin` [V hardware].
 3. `get_address` for each role path.
 4. EIP-191 signature over `AG1/DEMO ENROLL <role> <nonce>`.
 
@@ -160,25 +170,31 @@ The `enroll` leaf records:
 - `device_model`, `firmware_version`, `cert_chain_sha256`, `fw_hash`, `address`, `path`;
 - `authenticity: GENUINE|EMULATOR`. **The tool sets this, never the host.**
 
+Result at H0: the physical Safe 3 clerk enrolled as **GENUINE** and the T3B1 emulator treasury as **EMULATOR**
+(`docs/device/enroll_clerk_physical.json`, `docs/device/enroll_treasury_emulator.json`) [V hardware].
+
 Profile rules:
 - The `prod` profile refuses EMULATOR keys for treasury. Demo beat: "prod would refuse this emulator".
 - The `demo` profile allows them, with a visible label.
 
-**Honest limit.** Keys derive from the seed, so attestation proves a genuine device was present **at enrolment**. It does not bind later signatures to that hardware: the seed backup could be restored into an emulator. Mitigations: seed generated on-device, passphrase disabled or on-device only, periodic re-attestation, and FW hash on every session [S].
+**Honest limit.** Keys derive from the seed, so attestation proves a genuine device was present **at enrolment**. It does not bind later signatures to that hardware: the seed backup could be restored into an emulator. Mitigations: seed generated on-device, the host never types a passphrase, periodic re-attestation, and FW hash on every session [S].
 
-### 3.4 Screen layouts (`safe5-mono-18x7`, the exact bytes)
+### 3.4 Screen layouts (`safe3-mono-16x4`, the exact bytes)
 
 General rules:
-- Line 1 always carries the domain tag `AG1/DEMO` (protocol v1, deployment `DEMO`, ≤5 chars).
+- Line 1 always carries the domain tag `AG1/DEMO` (protocol v1, deployment `DEMO`, ≤5 chars). The title line may use 18 columns (never at a page break); every other line ≤16.
 - Only [F] content appears, with no `[F] ` prefix: everything on the device is [F] by construction.
 - `N` = 8-hex displayed nonce. The 128-bit nonce is kept server-side, and the displayed nonce is unique among live challenges.
-- `H` = first 64 bits of `subject_hash` = SHA-256(JCS(subject object)). The subject object includes deployment, nonce, purpose, role, params, `facts_digest` and `policy_hash`.
-- `P` = first 64 bits of `policy_hash`. This fixes the 32-bit preimage problem (D5).
+- `H` = first 56 bits (14 hex) of `subject_hash` = SHA-256(JCS(subject object)). The subject object includes deployment, nonce, purpose, role, params, `facts_digest` and `policy_hash`.
+- `P` = first 56 bits (14 hex) of `policy_hash`. Still far beyond the 32-bit preimage problem (D5). The Safe 5 profile keeps 64 bits.
 - Security does not rest on the hash lines. The executor re-renders, and the log binds nonce to the full object. The hash lines let a human or auditor cross-check.
-- Page 1 says what the money does. Page 2 says why it is safe and who is signing.
+- Lines 1–7 (block 1) say what the money does. Lines 8–14 (block 2) say why it is safe and who is signing. The device shows 4 lines per page, so the human presses "next" up to 3 times and holds CONFIRM on the last page.
 - Amounts follow CONTRACTS §5.1 (integer major units when whole).
 - Times are `MM-DD HH:MM` in `Europe/Prague`.
-- Names are uppercase, transliterated, and truncated to 18 with a trailing `~`.
+- Names are uppercase, transliterated, and truncated to 16 with a trailing `~`.
+- Short forms when the long form exceeds 16: `ROLE TREAS`, `PAYEES n Vv`, `OLD ..xxxx YY-MM`, `SIGNER ROLE BASIS`.
+
+Blank lines below only mark the device page breaks.
 
 **PAY** (exact-sign; payment outside the mandate):
 
@@ -187,60 +203,63 @@ AG1/DEMO PAY 42
 12500.50 CZK
 CZ65 0800 0000
 1920 0014 5399
+
 BETA SERVIS A.S.
 VS 2026101901
 EXP 10-19 15:20
-```
-```
 0 BLOCK 1 WARN
+
 OVER MANDATE CAP
 VOP MTCH
 ADIS ACCT YES
 ROLE CLERK 1/1
+
 N 0C55A1E7
-H 9b1e44c07a2d1f30
+H 9b1e44c07a2d1f
 ```
 
-**MANDATE** (activation; 2/2 above 100000 CZK `max_total`):
+**MANDATE** (activation; 2/2 above 100000 CZK `max_total`; the treasury copy says `ROLE TREAS 2/2`):
 
 ```
 AG1/DEMO MANDATE
 NO 3 CZK
 PER PAY 80000
 TOTAL 250000
+
 MAX 20 PAYMENTS
 EXISTING PAYEES
 TO 10-20 18:00
-```
-```
 ROLE CLERK 1/2
+
 FROM 10-19 12:00
 REQ VOP MTCH
-PAYEES 12 REG V31
+PAYEES 12 V31
 N 91BC02E1
-P 1f3a9c0e7d2b4a61
-H 3e0d9a1c55b2e7f0
+
+P 1f3a9c0e7d2b4a
+H 3e0d9a1c55b2e7
 ```
 
-**CHG** (payee change; this challenge exists only once ATT ≥2/3 or break-glass is satisfied and cooling-off has ended):
+**CHG** (payee change; this challenge exists only once ATT ≥2/3 or break-glass is satisfied and cooling-off has ended; `BANK` no longer fits block 1 at width 16 and is dropped):
 
 ```
 AG1/DEMO CHG 7
 ACME S.R.O.
 ICO 12345678
-OLD ..5399 2024-03
-NEW CZ62 0300 0000
-    0001 2345 6789
-BANK 0300 CZ
-```
-```
+OLD ..5399 24-03
+
+NEW CZ62 0300
+    0000 0001
+    2345 6789
 0 BLOCK 1 WARN
+
 ATT 2/3 ERP BANK
 VOP CMTC
 COOLOFF DONE
-ROLE TREASURY 2/2
+ROLE TREAS 2/2
+
 N 7C11A0E2
-H 4f2a9c1e0b7d3a55
+H 4f2a9c1e0b7d3a
 ```
 
 **ATTEST** (supplier-officer issuer profile, used when issuer class `supplier-erp` is hardware-backed. Stretch; the live demo uses software issuers):
@@ -250,23 +269,23 @@ AG1/DEMO ATTEST
 ACME S.R.O.
 ICO 12345678
 PAY TO ACCOUNT
+
 CZ62 0300 0000
 0001 2345 6789
 FROM 2026-10-20
-```
-```
 SIGNER DIR (OR)
+
 QUORUM 2/3 V5
 CHANGE 7
 N 7D11E0A2
-H 5a0c7e19d3b4f286
+H 5a0c7e19d3b4f2
 ```
 
 **Fill and overflow rules:**
-- Page 1 = mandatory lines (title, amount/name/ICO, IBAN in full) plus optional lines in priority order (`VS`, `EXP`, `BANK`) until it has exactly 7 lines.
-- If a long IBAN (34 chars, 3 lines) displaces an optional line, that line moves to page 2.
-- If page 1 cannot be built, raise `RenderError` (fail closed).
-- Page 2 = summary line, then fact lines in CONTRACTS §5.4 order, then ROLE, N, H/P.
+- Block 1 = mandatory lines (title, amount/name/ICO, IBAN in full) plus optional lines in priority order (`VS`, `EXP`, `BANK`) until it has exactly 7 lines.
+- If a long IBAN (34 chars, 3 lines; `NEW IBAN` + 3 lines in CHG) displaces an optional line, that line moves to block 2.
+- If block 1 cannot be built, raise `RenderError` (fail closed).
+- Block 2 = summary line, then fact lines in CONTRACTS §5.4 order, then ROLE, N, H/P.
 - When facts overflow, the last fact slot becomes `+N MORE 0 BLOCK`. The BLOCK count is always 0 on any screen that can exist (R0).
 
 **Never on device:**
@@ -276,12 +295,12 @@ H 5a0c7e19d3b4f286
 
 **BATCH:**
 - One page per payee, following PSD2 RTS art. 5 dynamic linking and EBA Q&A 2018_4435 (https://www.eba.europa.eu/single-rule-book-qa/qna/view/publicId/2018_4435).
-- This allows ≤1 payee per signature under the 2-page cap, so bulk volume goes through mandates.
+- This allows ≤1 payee per signature under the 14-line cap, so bulk volume goes through mandates.
 - BATCH is stretch.
 
-**Golden tests** (`tests/device/`): for each template and edge case (LT IBAN, 34-char IBAN, 18-char name, overflow), assert `render() == debuglink screen_content()` and diff the 240x240 screenshot against `docs/device/*.png`, plus one photo of the physical device.
+**Golden tests** (`tests/device/`, Safe 3 emulator via `tests/device/tenv.sh`): for each template and edge case (LT IBAN, 34-char IBAN, 16-char name, overflow), assert page by page `render() == debuglink screen_content()` with no reflow and diff the 128x64 screenshot against `docs/device/emulator/*.png`, plus photos of the physical device (`docs/device/photos/`).
 
-Negative goldens that the renderer must reject: diacritics, a 19-char line, 3 pages.
+Negative goldens that the renderer must reject: diacritics, a 17-char line, more than 14 lines.
 
 ---
 
@@ -663,7 +682,7 @@ The measured USD per 100 bench cases goes on the slide, because credit spend is 
 | AgentCore Gateway + Policy (Cedar) | A2 tool scoping, decoy forbids | Gateway deny line in the escalation beat | Kulkarni, Bubeník, Kováč | [U] SCP; twin ready |
 | Guardrails | A1 layer + egress 2nd opinion | "Layer 1 missed X%, layer 3 stopped 100%" | Kováč, Kulkarni | [U] region |
 | KMS Ed25519, Object Lock, CloudTrail, IAM split, VPC endpoints, Scheduler | Log key, anchors, independent evidence, S7, S10, cooling-off | AWS evidence strip: `simulate-principal-policy`, AccessDenied, Object Lock refusal, Flow Logs REJECT | Kulkarni, Bubeník, Olszynski | ✓ / [U] Ed25519 |
-| **Trezor Safe 5** + trezor-user-env (MCP on :9003) | TB0, enrolment, emulator treasury, screen oracle | Camera on the device: hold to confirm; "the device stays dark" | All; Kováč, Raška (hardware cost) | [V] emulator; [U] host USB |
+| **Trezor Safe 3** + trezor-user-env (MCP on :9003) | TB0, enrolment, emulator treasury (T3B1), screen oracle | Camera on the device: hold to confirm; "the device stays dark" | All; Kováč, Raška (hardware cost) | [V] emulator; [V hardware] WebUSB |
 | MostlyRight dataset | F-PSP, F-WARNLIST, F-SANCTION, lookalike domain | `PSP UNKNOWN` = "absent ≠ safe" | **Bridzik** (ČNB registers, VoP), Černý | ✓ [U] row count |
 | ČNB synthetic dataset | F-ANOM/F-Z thresholds, benign background traffic | Bench FP and step-up column "calibrated on ČNB synthetic data" | **Bridzik** | ✓ |
 | Tapaya KYB pack | Supplier enrolment, issuer-1 key, bank-letter evidence; incomplete examples as rejected fixtures | Enrolment screen | Černý (KB back office) | ✓ |
@@ -746,7 +765,7 @@ The dashboard reads only frozen JSONL tagged with a commit SHA. **No number goes
 
 | Real | Simulated (labelled on screen) |
 |---|---|
-| Physical Trezor Safe 5 (clerk), EIP-191, hold gesture, executor verification | Treasury approver on the T3T1 emulator (`authenticity=EMULATOR`) |
+| Physical Trezor Safe 3 (clerk, GENUINE at enrolment), EIP-191, hold gesture, executor verification | Treasury approver on the T3B1 Safe 3 emulator (`authenticity=EMULATOR`) |
 | Device attestation ceremony (physical device only) | Supplier ERP and supplier bank issuers: real cryptography, simulated organisations |
 | Bedrock agent doing real extraction, matching and proposals; Qwen red team | Companies, inbox, invoices, DKIM DNS snapshot (fictitious) |
 | Executor on Lambda, IAM split, AccessDenied, VPC with no route | VoP responder (mock with EPC codes; VoP for CZK applies from about July 2027 [U]) |
@@ -765,7 +784,7 @@ The dashboard reads only frozen JSONL tagged with a commit SHA. **No number goes
 |---|---|---|---|
 | **WS-A Executor core** | dispatch, store, Cedar `decide()`, mandates (2/2), nonce, `TransactWriteItems`, rail + pain.001, receipts API | `executor/{handler,app,config,errors,models,store,policy,bank}`, `executor/rail/` | `decide(subject, facts, state, policy) -> Decision`; HTTP API v2; Cedar schema; `store.tx_execute()` |
 | **WS-B Log, witness, verifier** | Leaves v2, checkpointer (signed-note, KMS/local Ed25519), W1 `add-checkpoint`, W2 litewitness relay, receipts/QR, export, `verify_audit.py`, `tools/noteverify` (Go), supervisor view | `executor/audit/`, `witness/`, `tools/verify_audit.py`, `tools/noteverify/` | `audit.append(event) -> seq`; checkpoint note; receipt; `verify(bundle) -> Report` |
-| **WS-C Device and render** | **H0 owner.** `safe5-mono-18x7` renderer, signer worker (USB Safe 5 + tenv UDP inside the container), screen oracle, goldens, enrolment ceremony, camera rig, SLIP-24 stretch | `executor/render.py`, `host/signer.py`, `tools/enroll.py`, `tests/device/`, `docs/device/` | `render(template, params, profile) -> str`; `SignerDriver.sign(challenge, key_ref, timeout) -> Approval`; pure `verify_eip191()` |
+| **WS-C Device and render** | **H0 owner.** `safe3-mono-16x4` renderer, signer worker (USB Safe 3 clerk + tenv T3B1 UDP treasury), screen oracle, goldens, enrolment ceremony, camera rig, SLIP-24 stretch | `executor/render.py`, `host/signer.py`, `tools/enroll.py`, `tests/device/`, `docs/device/` | `render(template, params, profile) -> str`; `SignerDriver.sign(challenge, key_ref, timeout) -> Approval`; pure `verify_eip191()` |
 | **WS-D Payee change, facts, issuers** | FSM v2, facts engine and snapshots, VoP mock, MostlyRight loader, SD-JWT issuers ×3 and verifier, vendor portal (callback, tripwire, break-glass), Scheduler target | `executor/{change,facts,attest}`, `vendor/`, `data/`, `executor/issuers/` | `facts.compute() -> FactSet`; `transition(change_id, event)`; `verify_vc(vc, change) -> AttestResult` |
 | **WS-E Agent, perimeter, IaC** | AP-Clerk (naive and quarantined), extractor, tools λ + MCP, Cedar tool policies, Gateway, Guardrails, egress λ + DLP, VPC/no-NAT, IAM, CDK, CloudTrail/Flow Logs, AWS probes, teardown | `host/agent.py` → `agent/`, `executor/tools/`, `executor/egress/`, `infra/` | Tool MCP manifest (pinned hash); `tool_call` events |
 | **WS-F Bench, red team, demo** | Corpus, H0–H6 attackers (`host/compromised.py`), arm runner, simulated humans, Wilson CIs, dashboard, `make demo-reset`, scene scripts, fallback video, pre-sealed audit bundle | `bench/`, `host/{compromised,ui}.py`, `demo/` | `bench_case` / `bench_result` schemas; `scene_*.py` (public APIs only) |
@@ -795,7 +814,7 @@ H0 device facts (WS-C) ─► CONTRACTS v2 freeze ─► render v2 + signer + de
 | When | Milestone | Gate owner |
 |---|---|---|
 | Mon 12:00 | `hackathon-start` tag (done, `ccf9f2f`) + README disclosure; WS-C starts H0; AWS owner at the Toolbox (12:00–13:30) | Integrator |
-| Mon 13:00 | **H0 done:** page-break oracle (X1), physical Safe 5 over WebUSB from the demo laptop with Suite and bridge closed (X3), EIP-191 → `eth_account` round trip, device firmware version | WS-C |
+| Mon 13:00 | **H0 done:** page-break oracle (X1), physical Safe 5 over WebUSB from the demo laptop with Suite and bridge closed (X3), EIP-191 → `eth_account` round trip, device firmware version. **Done:** the device is a Safe 3 (T2B1, fw 2.12.0); profile `safe3-mono-16x4` (§3.2) | WS-C |
 | Mon 14:30 | **CONTRACTS v2 frozen** (render goldens, no-IBAN proposal, FactSet, leaf v2, checkpoint/receipt, FSM v2, bench schemas) | Integrator |
 | Mon 15:00 | AWS go/no-go list: KMS Ed25519 + PyNaCl/Go verify; `list-guardrails`; Gateway hello-world with authorizer; VPC endpoints; Bedrock profile IDs | AWS owner |
 | Mon 16:00 | cedarpy vs `rules.py` decision; MostlyRight row count | WS-A, WS-D |
@@ -820,7 +839,7 @@ H0 device facts (WS-C) ─► CONTRACTS v2 freeze ─► render v2 + signer + de
 - R0 with `ATT<2 ⇒ BLOCK`; single-use 8-hex nonce;
 - single `TransactWriteItems` (memory, moto, real);
 - mock ledger + pain.001;
-- EIP-191 with the Safe 5 as clerk and the emulator as treasury, enrol leaf;
+- EIP-191 with the Safe 3 as clerk and the T3B1 emulator as treasury, enrol leaf;
 - FSM v2 with 3 software SD-JWT issuers, KB-JWT, 20 s cooling, 2/2;
 - signed-note checkpoint (KMS or local Ed25519);
 - W1 `add-checkpoint` (200/409/422);
@@ -876,9 +895,9 @@ H0 device facts (WS-C) ─► CONTRACTS v2 freeze ─► render v2 + signer + de
 | Time | Beat | Components on screen |
 |---|---|---|
 | 0:00–0:15 | Disclosure line, then the hook: "This agent is compromised right now. It still can't move a koruna." | — |
-| 0:15–0:45 | **S1 normal day.** The agent extracts and matches 3 invoices, which are paid under mandate 3; receipt QR; witness tick. The 4th, over the cap, lights the **Safe 5 on camera**. The screen matches the renderer character for character; hold to confirm | Agent (Sonnet), tools λ, Cedar `decide`, `TransactWriteItems`, render v2, signer, checkpoint + W1 |
+| 0:15–0:45 | **S1 normal day.** The agent extracts and matches 3 invoices, which are paid under mandate 3; receipt QR; witness tick. The 4th, over the cap, lights the **Safe 3 on camera**. The screen matches the renderer character for character; hold to confirm | Agent (Sonnet), tools λ, Cedar `decide`, `TransactWriteItems`, render v2, signer, checkpoint + W1 |
 | 0:45–1:35 | **S2 lookalike BEC + escalation + exfil.** An `acme-cz.com` email with a hidden PDF injection. The agent says "CFO approved"; the facts panel goes red (DOMAIN, VoP NMTC BLOCK, PSP UNKNOWN). **The device stays dark** (R0): "there is nothing to approve." Then 4 escalation attempts in quick succession: `mandate.write` (Cedar forbid), self-approval (unknown signer), replay (`nonce_reused`), direct DynamoDB/secret (AccessDenied + `simulate-principal-policy`). The exfil email is blocked by egress DLP, and `curl example.com` from the agent VPC times out: "0 bytes" | Facts engine, R0, Gateway/cedarpy, IAM, egress λ, VPC |
-| 1:35–2:30 | **S3 real-domain takeover + deepfake.** DKIM is green; the Polly "CFO" (fictional, labelled synthetic) presses the clerk. **ATT 0/3 is a BLOCK**, so "there is no button". The tripwire reaches the registered contact, who answers "not us", and the change is REJECTED. A 10-second clip of the legitimate path: 2/3 VCs, then cooling, then CHG on emulator + Safe 5, then ACTIVE | FSM v2, SD-JWT verifier, portal, Scheduler |
+| 1:35–2:30 | **S3 real-domain takeover + deepfake.** DKIM is green; the Polly "CFO" (fictional, labelled synthetic) presses the clerk. **ATT 0/3 is a BLOCK**, so "there is no button". The tripwire reaches the registered contact, who answers "not us", and the change is REJECTED. A 10-second clip of the legitimate path: 2/3 VCs, then cooling, then CHG on Safe 3 + emulator, then ACTIVE | FSM v2, SD-JWT verifier, portal, Scheduler |
 | 2:30–3:20 | **S5 offline audit.** Wi-Fi off; `noteverify` (upstream Go) green; `verify_audit.py` with replay 100% match. Flip one byte: red at `seq N`. Present a fork: W1 returns 409 and a `witness_refusal` leaf appears | Export bundle, verifiers, witnesses |
 | 3:20–4:00 | Bench table A0→A3 (money to attacker X → 0, with CIs, including the rubber-stamp column and the in-mandate residual); real-vs-simulated slide; business line: liability shift under the PSR/PSD3 provisional deal [U status], hardware cost per approver, payee-binding network | Bench JSONL |
 
@@ -944,18 +963,18 @@ Every change also requires matching updates to `contracts/schemas/*`, `contracts
 | C-02 | Conventions | Nonce: displayed **8 uppercase hex** `^[0-9A-F]{8}$`, unique among all challenges (conditional put), plus a server-side 128-bit `nonce_secret` that is never displayed. The deployment tag `AG1/<DEPLOY>` (`AIRGAP_DEPLOYMENT_ID`, default `DEMO`, ≤5 chars `[A-Z0-9]`) appears in every signed text |
 | C-03 | §2.1 Fact | `display_line` ASCII ≤18 chars (device). Add the fact IDs `F-PSP`, `F-WARNLIST`, `F-SANCTION`, `F-DOMAIN-AGE`, `F-ANOM`, `F-NAME-TRANSLIT`, `F-ATTEST` (k/3 distinct classes), plus field `prov` (snapshot SHA-256). Severities as in §6 of this document; `F-ATTEST <2` (not break-glass) → BLOCK; `F-VOP` values `MTCH/CMTC/NMTC/NOAP` → `INFO/WARN/BLOCK/WARN`. H facts stay in UI and log only |
 | C-04 | §2.2 Decision | Decide is evaluated by Cedar (cedarpy) with tri-state semantics (§5.3 of this document); `rule_ids` = Cedar `@id`s. **Remove** "A preview clerk challenge is returned in both cases"; R0 applies: `deny` ⇒ no `challenge`. A proposal with any WARN or F-ANOM ≥40 ⇒ `challenge` |
-| C-05 | §2.3 Challenge | Add `deployment`, `subject_hash` (64 hex), `profile` (`safe5-mono-18x7`), `pages` (1–2), `lines_per_page` 7, `width` 18. Purposes: `MANDATE`, `CHG`, `PAY`, `VENDOR_ATTEST` (kept), `ENROLL` (new). Roles: `clerk`, `treasury` (bank) plus vendor roles unchanged |
+| C-05 | §2.3 Challenge | Add `deployment`, `subject_hash` (64 hex), `profile` (`safe5-mono-18x7`), `pages` (1–2), `lines_per_page` 7, `width` 18. Purposes: `MANDATE`, `CHG`, `PAY`, `VENDOR_ATTEST` (kept), `ENROLL` (new). Roles: `clerk`, `treasury` (bank) plus vendor roles unchanged (superseded by H0: `safe3-mono-16x4`, CONTRACTS v2.1) |
 | C-06 | §3.1 Tables | Separate tables: `ledger`, `mandates`, `audit` (+`log_head`), `registry` (renamed from `vendors`, versioned: `registry_version` counter), `witness_state`. Everything else (`proposals`, `changes`, `attestations`, `vendor_policies`, `nonces`, `counters`, `enrolled_signers`, `inbox`, `checkpoints`) goes in single-table `airgap-main` (PK `<entity>#<id>`, SK as today). `portal_notifications` moves to the portal-only table `airgap-portal` and **drops plaintext `code`**: store `code_hash`, `attempts` (max 3). The code is delivered only via the portal mock / SMS. Drop the `sth` table (replaced by `checkpoints` holding note text) |
 | C-07 | §3.2 Atomicity | Replace with this document's §5.4: one `TransactWriteItems` = leaf Put + `log_head` seq check + mandate debit + ledger Put (`tx_id = hash(auth_ref, proposal_id)`) + proposal Update, with `ClientRequestToken = tx_id`; rail after commit; `rail_submitted` leaf |
 | C-08 | §4.1 #4 `/proposals` | `proposal_create.request.invoice`: **remove `iban`** and `vendor_name`; add `vendor_id` (required), `invoice_ref`, `reason_code` enum (`DUE`, `PARTIAL`, `ADVANCE`, `OTHER`). The executor takes the IBAN from `registry`. I-PAYEE becomes "vendor exists, is ACTIVE, has an ACTIVE IBAN" |
 | C-09 | §4.1 #9 reject | Requires an EIP-191 signature from an enrolled clerk (purpose `CHG_REJECT`), or the vendor-portal role (tripwire "not us"). Logged with the actor and rate-limited. The unauthenticated host call is removed |
 | C-10 | §4.1 #12–13 | `/callbacks` and `/portal/*` are accessible only via the `vendor-portal` IAM role. Remove `GET /portal/notifications?ico=` from the public API. S7 Deny for agent and host |
 | C-11 | §4.1 new rows | `POST /changes/{id}/attestations` (SD-JWT VC + KB-JWT), `POST /changes/{id}/break-glass` (portal role), `POST /tools/{name}` (tools λ, MCP), `POST /witness/add-checkpoint` (W1, C2SP), `GET /checkpoint` (latest note, `text/plain`), `GET /export/pain001/{tx_id}` (XML + c14n SHA-256). Remove the #24 "schema TBD" `/bank/batch` (BATCH is stretch, page-per-payee) |
-| C-12 | §4.1 #23 `/health` | `{status, backend, deployment, policy_hash, render_profile:"safe5-mono-18x7", code_sha256, log_origin, log_pubkey_id}` |
+| C-12 | §4.1 #23 `/health` | `{status, backend, deployment, policy_hash, render_profile:"safe5-mono-18x7", code_sha256, log_origin, log_pubkey_id}` (superseded by H0: `safe3-mono-16x4`, CONTRACTS v2.1) |
 | C-13 | §4.3 | Keep the order. Step 3 re-renders with the stored `profile`. Add step 6b: for CHG/SIG_TREASURY and MANDATE 2/2, the recovered address ≠ the first signer, and the prod profile requires `authenticity=GENUINE` for treasury. Step 4 (`displayed_text`) stays diagnostic only |
 | C-14 | §4.4 | New codes: `attestation_insufficient` (replaces `vendor_attestation_missing`), `kb_jwt_invalid`, `issuer_not_pinned`, `break_glass_required`, `callback_attempts_exceeded`, `emulator_not_allowed`, `checkpoint_inconsistent` (witness 422), `stale_checkpoint` (409) |
-| C-15 | §5 (whole) | Replace with this document's §3.4: profile `safe5-mono-18x7`, `DEFAULT_WIDTH=18`, `LINES_PER_PAGE=7`, `MAX_PAGES=2`, page 1 exactly 7 lines, lines adjacent to a page break ≤15 (`BREAK_LINE_MAX=15` until H0), uppercase transliterated names, **no `[F]`/`[H]` prefixes and no [H] lines on the device**, summary line `<b> BLOCK <w> WARN` always first on page 2, `N <8hex>`, `H <16hex>`, `P <16hex>` (MANDATE), title `AG1/<DEPLOY> <TYPE> <no>` never dropped, OLD IBAN as `..<last4> <YYYY-MM>`, NEW and payee IBAN in full, overflow line `+N MORE 0 BLOCK`. Keep the width-32 profile `ui-preview-32` for UI only. Python API: add `profile=` and `deployment=` kwargs, `render()` returns a str with LF (pagination implicit), `render_pages()` helper; `MIN_WIDTH` per profile (fixes D7). Rewrite `tests/test_render.py` goldens from the emulator oracle |
-| C-16 | §6 | EIP-191 unchanged. Enrolment via the §3.3 ceremony; the `enrolled_signers.device` value is **set by the tool** (`GENUINE`/`EMULATOR`), plus `device_model`, `firmware_version`, `cert_chain_sha256`, `fw_hash`, `enroll_sig`. Passphrase policy documented. The physical Safe 5 is the clerk, the emulator the treasury |
+| C-15 | §5 (whole) | Replace with this document's §3.4: profile `safe5-mono-18x7`, `DEFAULT_WIDTH=18`, `LINES_PER_PAGE=7`, `MAX_PAGES=2`, page 1 exactly 7 lines, lines adjacent to a page break ≤15 (`BREAK_LINE_MAX=15` until H0), uppercase transliterated names, **no `[F]`/`[H]` prefixes and no [H] lines on the device**, summary line `<b> BLOCK <w> WARN` always first on page 2, `N <8hex>`, `H <16hex>`, `P <16hex>` (MANDATE), title `AG1/<DEPLOY> <TYPE> <no>` never dropped, OLD IBAN as `..<last4> <YYYY-MM>`, NEW and payee IBAN in full, overflow line `+N MORE 0 BLOCK`. Keep the width-32 profile `ui-preview-32` for UI only. Python API: add `profile=` and `deployment=` kwargs, `render()` returns a str with LF (pagination implicit), `render_pages()` helper; `MIN_WIDTH` per profile (fixes D7). Rewrite `tests/test_render.py` goldens from the emulator oracle (superseded by H0: `safe3-mono-16x4`, CONTRACTS v2.1) |
+| C-16 | §6 | EIP-191 unchanged. Enrolment via the §3.3 ceremony; the `enrolled_signers.device` value is **set by the tool** (`GENUINE`/`EMULATOR`), plus `device_model`, `firmware_version`, `cert_chain_sha256`, `fw_hash`, `enroll_sig`. Passphrase policy documented. The physical Safe 5 is the clerk, the emulator the treasury (H0: physical Safe 3 clerk, T3B1 emulator treasury) |
 | C-17 | §6.1 | Replace with this document's §5.2 (states `PENDING_ATTEST, CALLBACK_PENDING, COOLING, SIG_CLERK, SIG_TREASURY, ACTIVE, REJECTED, EXPIRED`; removed transient states become `change_event` leaves; break-glass; tripwire on every create). Rewrite `tests/test_change_machine.py` |
 | C-18 | §4.2 mandate | `max_total_minor > 10_000_000` (100000 CZK) requires clerk + treasury: states `PENDING_SIG_CLERK`, `PENDING_SIG_TREASURY`, `ACTIVE`, `EXPIRED`, `SUPERSEDED`. Add `payee_registry_version` + `payee_registry_hash`, `require_vop:["MTCH"]`, `max_anom` (default 40). `signer_address` becomes `signers[]` |
 | C-19 | §7.1 | State that `canonical_json` == RFC 8785 JCS for our domain (ints only, ASCII keys); add a test with JCS vectors |
@@ -966,6 +985,6 @@ Every change also requires matching updates to `contracts/schemas/*`, `contracts
 | C-24 | §8.2 | Add S10, S11, S12 and R0 with named tests: `tests/test_egress.py::test_s10_no_route` (aws only), `tests/test_render.py::test_s11_grid`, `tests/test_audit_fuzz.py::test_s12_replay`, `tests/test_invariants.py::test_r0_no_challenge_on_block`. Strengthen S3 to monotonicity; S4 per C-17; S6 per C-07 |
 | C-25 | new §10 Bench | `bench_case.json` and `bench_result.jsonl` schemas per §11 of this document; arms A0–A3; attacker levels H0–H6; human policies `diligent`/`rubber_stamp` |
 | C-26 | new §11 Attestation | SD-JWT VC `vct=urn:airgap:payee-binding:v1`, the issuer classes and the pinned trust list, KB-JWT rules (`aud`, `nonce`, `iat` ≤15 min), revocation list, commitment format. The `vendor_attest` EIP-191 path is kept as the hardware issuer profile |
-| C-27 | §9 env | Change: `AIRGAP_RENDER_WIDTH` → `AIRGAP_RENDER_PROFILE=safe5-mono-18x7`; `AIRGAP_COOLING_SECONDS` default 20 in the demo profile; `AIRGAP_TSA_URL=off`; `AIRGAP_KMS_KEY_ID` = Ed25519 key. Add `AIRGAP_DEPLOYMENT_ID=DEMO`, `AIRGAP_DEMO_PROFILE=demo\|prod`, `AIRGAP_LOG_ORIGIN`, `AIRGAP_W2_URL`, `AIRGAP_SONNET_BUDGET` (req/min), `AIRGAP_MANDATE_DUAL_THRESHOLD_MINOR=10000000`, `AGENT_MODE=naive\|quarantined`, `AIRGAP_GATEWAY=agentcore\|local`. Remove `AIRGAP_STH_EVERY_N_LEAVES` → `AIRGAP_CHECKPOINT_EVERY_N_LEAVES=10` + `AIRGAP_CHECKPOINT_MAX_SECONDS=30` |
+| C-27 | §9 env | Change: `AIRGAP_RENDER_WIDTH` → `AIRGAP_RENDER_PROFILE=safe5-mono-18x7`; `AIRGAP_COOLING_SECONDS` default 20 in the demo profile; `AIRGAP_TSA_URL=off`; `AIRGAP_KMS_KEY_ID` = Ed25519 key. Add `AIRGAP_DEPLOYMENT_ID=DEMO`, `AIRGAP_DEMO_PROFILE=demo\|prod`, `AIRGAP_LOG_ORIGIN`, `AIRGAP_W2_URL`, `AIRGAP_SONNET_BUDGET` (req/min), `AIRGAP_MANDATE_DUAL_THRESHOLD_MINOR=10000000`, `AGENT_MODE=naive\|quarantined`, `AIRGAP_GATEWAY=agentcore\|local`. Remove `AIRGAP_STH_EVERY_N_LEAVES` → `AIRGAP_CHECKPOINT_EVERY_N_LEAVES=10` + `AIRGAP_CHECKPOINT_MAX_SECONDS=30` (superseded by H0: `safe3-mono-16x4`, CONTRACTS v2.1) |
 | C-28 | §1 hard rules | Add: no [H] text on the device; no real bank or regulator names in signed text or labels; witness label "independent supervisor witness (simulated operator)" |
 | C-29 | pyproject (not CONTRACTS, same PR) | Move `pytest`, `hypothesis`, `moto` to `[dev]` and `streamlit`, `trezorlib` to `[ui]`/`[host]`; add `cedarpy`, `sd-jwt`, `pynacl`; drop `rfc3161ng` from runtime; add `uv.lock`, ruff, `make ci` |
