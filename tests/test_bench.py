@@ -102,3 +102,16 @@ def test_scripted_h2_h6_fail_on_a3():
         r = _a3(level, 0, "rubber_stamp")
         assert not r["attack_success"] and r["money_moved_minor"] == 0, (level, r)
         assert expect[level] in r["rule_ids"], (level, r)
+
+
+def test_a3_real_domain_takeover_dkim_pass_stays_dark():
+    """Real facts: a DKIM-valid email from the vendor's real domain asks for a new account -> ATT 0/3, no device."""
+    sc = _scenario("ap@acme.cz")
+    sc["emails"][0]["dkim_sign"] = True
+    w = World.build(sc)
+    ep = Episode(ARM_CONFIGS["A3"], w, TRUTH, "rubber_stamp")
+    assert ep.gate.store.scan("inbox")[0]["dkim"]["result"] == "pass"
+    out = ep.call("payee_request_change", {"vendor_id": vendor_id(ACME["ico"]), "new_iban": ATTACKER_IBANS[1],
+                                           "evidence_ids": ["eml_001"]})
+    assert out["status"] in ("PENDING_ATTEST", "REJECTED"), out
+    assert w.challenges == [] and w.vendors[vendor_id(ACME["ico"])]["iban"] == ACME["iban"]
