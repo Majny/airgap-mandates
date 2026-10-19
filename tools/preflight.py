@@ -6,6 +6,7 @@ Checks, in stage order:
   mode      AIRGAP_TREZOR_PATH unset (physical clerk) or udp:... (FALLBACK: emulator clerk), printed loudly
   aws       operator credentials valid (sts), airgap-host assumable, GET /health 200 as host
   deploy    /health policy_hash == this checkout's policy_hash; code_sha256 == the deployed executor Lambda's
+  data      data/mostlyright/snapshot.sqlite sha256 == committed snapshot.sha256 (else `make data`)
   offline   tools/noteverify built (.local/bin/noteverify), docs/audit/demo bundle present and verifying offline
   bedrock   planner + extractor model ids resolvable (control plane, no tokens); --deep: one 1-token call each
 
@@ -153,6 +154,27 @@ def check_deploy(r: Report, health: dict) -> None:
         r.add("WARN", "code_sha256", f"cannot read the Lambda config ({type(e).__name__})", required=False)
 
 
+def check_data(r: Report) -> None:
+    import hashlib
+
+    d = ROOT / "data" / "mostlyright"
+    db, pin = d / "snapshot.sqlite", d / "snapshot.sha256"
+    if not pin.exists():
+        r.add("FAIL", "MostlyRight snapshot", "data/mostlyright/snapshot.sha256 missing")
+        return
+    want = pin.read_text().split()[0]
+    if not db.exists():
+        r.add("FAIL", "MostlyRight snapshot", "snapshot.sqlite missing -> make data")
+        return
+    h = hashlib.sha256()
+    with db.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    got = h.hexdigest()
+    r.add("OK" if got == want else "FAIL", "MostlyRight snapshot", f"sha256 {got[:16]}" + (
+        " == committed" if got == want else f" != committed {want[:16]} -> make data (stale after a rebase)"))
+
+
 def check_offline(r: Report, run_verify: bool = True) -> None:
     nv = ROOT / ".local" / "bin" / "noteverify"
     r.add("OK" if nv.exists() else "FAIL", "noteverify built", str(nv.relative_to(ROOT)) if nv.exists()
@@ -199,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--url", default=os.environ.get("AIRGAP_EXECUTOR_URL") if ".execute-api." in
                     os.environ.get("AIRGAP_EXECUTOR_URL", "") else DEFAULT_URL)
     ap.add_argument("--deep", action="store_true", help="also make one 1-token Bedrock call per model")
-    ap.add_argument("--skip", default="", help="comma list: device,emulator,aws,deploy,offline,bedrock")
+    ap.add_argument("--skip", default="", help="comma list: device,emulator,aws,deploy,data,offline,bedrock")
     a = ap.parse_args(argv)
     skip = {x.strip() for x in a.skip.split(",") if x.strip()}
     os.environ.setdefault("AWS_PROFILE", "hackathon")
@@ -220,6 +242,10 @@ def main(argv: list[str] | None = None) -> int:
         r.add("SKIP", "deploy hashes", "" if "deploy" in skip else "no /health", required="deploy" in skip)
     else:
         check_deploy(r, health)
+    if "data" in skip:
+        r.add("SKIP", "data", "", required=False)
+    else:
+        check_data(r)
     if "offline" in skip:
         r.add("SKIP", "offline", "", required=False)
     else:

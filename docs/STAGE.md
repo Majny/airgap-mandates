@@ -26,7 +26,9 @@ export AWS_PROFILE=hackathon
    Nobody else resets. W2 cosigns every checkpoint automatically (checkpointer tick -> `witness.relay_w2.after_tick`
    over SSM); manual fallback: `python -m witness.relay_w2 --executor-url $API --aws-role airgap-relay --read-role
    airgap-auditor --w2-ssm i-0bc5865c1ddae7b1d` with `AIRGAP_W2_VKEY` set.
-2. **While online:** `make .local/bin/noteverify` (Go build; the offline beat cannot build it with Wi-Fi off).
+2. **While online:** `make .local/bin/noteverify` (Go build; the offline beat cannot build it with Wi-Fi off) and
+   `make data` (rebuilds `data/mostlyright/snapshot.sqlite` to the committed `snapshot.sha256`; stale after any
+   rebase that changes it, ~22 tests and the facts go wrong otherwise; `make preflight` checks it).
 3. Re-seal the stage bundle once the freeze build is deployed: `make demo-bundle` (refuses unless green), then
    `make offline-demo` once to see ALL PASS.
 4. Device operator: Safe 3 auto-lock to max (Settings -> Auto-lock), short data cable seated and taped, no hub.
