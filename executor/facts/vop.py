@@ -34,26 +34,44 @@ def bank_code(iban: str) -> str | None:
     return s[4 : 4 + n] if n else None
 
 
+def _fold(name: str) -> str:
+    """Lower-case, no diacritics, the Czech legal forms written out ("spol. s r.o.", "s. r. o.", "a. s.") collapsed to
+    one token (sro / as). Letters without an ASCII decomposition (Cyrillic/Greek homoglyphs, ...) are kept."""
+    s = unicodedata.normalize("NFKD", str(name))
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = re.sub(r"\bspol\s*\.?\s*s\s*\.?\s*r\s*\.?\s*o\b\.?", " sro ", s)  # "spol. s r.o." -> sro
+    s = re.sub(r"\bs\s*\.?\s*r\s*\.?\s*o\b\.?", " sro ", s)  # "s. r. o." -> sro
+    s = re.sub(r"\ba\s*\.\s*s\b\.?", " as ", s)  # "a. s." -> as
+    return s
+
+
 def normalize_name(name: str) -> str:
-    """Lower-case, no diacritics or punctuation, legal forms (s.r.o., a.s., sro, as, ...) removed.
+    """Lower-case, no diacritics or punctuation, legal forms (s.r.o., a.s., sro, as, ...) removed: the core name the
+    CMTC rule compares.
 
     Letters without an ASCII decomposition (Cyrillic/Greek homoglyphs, ...) are kept, not dropped, so a holder like
     "ACME \u0414\u0414" can never normalise to an exact "acme" match."""
-    s = unicodedata.normalize("NFKD", str(name))
-    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
-    s = re.sub(r"\bs\s*\.?\s*r\s*\.?\s*o\b\.?", " sro ", s)  # "s. r. o." -> sro
-    s = re.sub(r"\ba\s*\.\s*s\b\.?", " as ", s)  # "a. s." -> as
-    s = "".join(c if c.isalnum() else " " if c.isspace() else "" for c in s)
+    s = "".join(c if c.isalnum() else " " if c.isspace() else "" for c in _fold(name))
     return " ".join(t for t in s.split() if t not in _LEGAL_FORMS)
 
 
+def exact_name(name: str) -> str:
+    """The MTCH form: diacritics, case and whitespace folded and the legal form canonicalised (s.r.o. == sro ==
+    spol. s r.o.) but KEPT, and punctuation a word separator (never deleted), so 'ACME a.s.' / 'ACME GmbH' (another
+    legal entity) and 'A.C.M.E.' never equal 'ACME s.r.o.'."""
+    return " ".join("".join(c if c.isalnum() else " " for c in _fold(name)).split())
+
+
 def match_code(requested: str, holder: str) -> tuple[str, int]:
-    """(EPC code, similarity 0..100) for the requested name vs the registered account holder."""
+    """(EPC code, similarity 0..100) for the requested name vs the registered account holder. MTCH only for the same
+    name with the same legal form; the same core name under another legal form (or punctuation) is at most CMTC."""
     a, b = normalize_name(requested), normalize_name(holder)
     if not a or not b:
         return "NMTC", 0
-    if a == b:
+    if exact_name(requested) == exact_name(holder):
         return "MTCH", 100
+    if a == b:
+        return "CMTC", 100
     score = int(round(fuzz.token_sort_ratio(a, b)))
     # All of the requested (registered) name's tokens inside the holder name ("ACME SRO Trading" for "ACME s.r.o.")
     # is a close match too. Only this direction: a holder that is a fragment of the name ("Tisk" for "Gamma Tisk")
