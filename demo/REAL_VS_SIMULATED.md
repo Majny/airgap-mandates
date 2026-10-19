@@ -17,3 +17,14 @@ Every "real" line points to evidence in this repo. Anything not listed as real i
 **One-line version for the slide:** "Real: the device in my hand, the AWS executor and its IAM walls, the KMS-signed
 log you can verify offline. Simulated and labelled: the companies, the second approver's device, the supplier
 issuers and the humans in the benchmark."
+
+## Known gaps (say them before anyone asks; WS-D adversarial review, each reproduced)
+
+None of these is an attack inside our threat model; each has a named production fix.
+
+| # | Gap | Why it is outside the demo threat model | Production fix |
+|---|---|---|---|
+| 1 | The 6-digit callback code is stored as an **unsalted SHA-256** in the portal table, which the vendor-portal role can read; that role could invert it offline | The portal role is a simulated supplier-side component; the demo attacker uses the agent and host roles, which have no access to the portal table. (Our laptops hold admin SSO, which could assume the portal role: the same honest limit as ARCHITECTURE §9; production uses a separate account.) | HMAC under an executor-only key (KMS `GenerateMac`); callback rows in an executor-only table |
+| 2 | **Two-person rule = two addresses.** Clerk and treasury must be distinct enrolled addresses, but enrolment does not stop one Trezor enrolling at two derivation paths | Coercion or collusion of both approvers is explicitly out of scope; enrolment is a supervised ceremony | Compare device identity (certificate chain / serial) across roles at enrolment and at signing |
+| 3 | **Shared demo issuer keys.** The same three simulated SD-JWT issuer keys (supplier-erp, supplier-bank, registry) are pinned for every vendor, and their private keys are in the repo (labelled DEMO-ONLY) | Real cryptography, simulated organisations; the attacker never holds issuer keys in the demo | Each vendor pins its own ERP key at enrolment; the bank key comes from a pinned trust list |
+| 4 | **(until FACTS-1 merges, deadline Tue 03:00)** A proposal without an `email_id` skips the document / DKIM / domain checks in the executor; only the tools λ enforces it | The agent can only reach the executor through the tools λ, which binds every proposal to its source document | "No source document, no autopay" in the executor itself (WS-D FACTS-1). **Strike this row once merged.** |
