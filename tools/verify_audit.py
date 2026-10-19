@@ -409,11 +409,14 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
             else:
                 if hashlib.sha256(text.encode()).hexdigest() != d.get("text_sha256"):
                     ctx.bad(f"seq {seq}: re-rendered text does not match text_sha256", seq)
-                try:
-                    rec = _recover(text, str(d.get("sig", "")))
-                except ValueError as exc:
-                    ctx.bad(f"seq {seq}: signature does not recover ({exc})", seq)
-                    rec = ""
+                rec: str | None = ""
+                if not d.get("sig"):
+                    ctx.bad(f"seq {seq}: accepted signature leaf carries no sig, EIP-191 cannot be checked", seq)
+                else:
+                    try:
+                        rec = _recover(text, str(d["sig"]))
+                    except ValueError as exc:
+                        ctx.bad(f"seq {seq}: signature does not recover ({exc})", seq)
                 if rec is None:
                     ctx.count("eip191_unavailable")
                     ctx.note("EIP-191 signer recovery " + _SKIP_UPSTREAM.format("executor/sig.py"))
