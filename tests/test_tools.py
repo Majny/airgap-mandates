@@ -35,7 +35,14 @@ class ToolHarness(Harness):
         self.store.put("inbox", {"email_id": "eml_0001", "from_addr": "fakturace@acme.cz", "from_domain": "acme.cz",
                                  "subject": "Faktura FV-2026-0412", "received_at": "2026-10-19T07:00:00Z",
                                  "sha256": hashlib.sha256(RAW).hexdigest(),
-                                 "raw_b64": base64.b64encode(RAW).decode()})
+                                 "raw_b64": base64.b64encode(RAW).decode(),
+                                 # verdict as written by executor.facts.dkim.ingest (fixture: RAW is not signed)
+                                 "dkim": {"result": "pass", "d": "acme.cz", "s": "sel2026", "aligned": True}})
+        # earlier mail from the same domain, so F-DOMAIN-AGE (first seen in our inbox) is not WARN
+        self.store.put("inbox", {"email_id": "eml_0000", "from_addr": "fakturace@acme.cz", "from_domain": "acme.cz",
+                                 "subject": "Faktura FV-2026-0101", "received_at": "2025-01-15T07:00:00Z",
+                                 "sha256": "0" * 64,
+                                 "dkim": {"result": "pass", "d": "acme.cz", "s": "sel2026", "aligned": True}})
         self.step = 0
 
     def tool(self, name: str, args: dict | None = None, *, manifest: str | None = None):
