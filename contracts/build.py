@@ -679,7 +679,7 @@ DEC_ALLOW = decision("allow", [], F_ACME_OK)
 HINT = {"source": "agent", "text": "service contract Q4, CFO approved"}
 H_AGENT = fact("H-AGENT", "INFO", "service contract Q4, CFO approved", "Agent stated reason", kind="H")
 DEC_CH = decision("challenge", ["F-MANDATE", "I-BUDGET", "I-WARN"], PAY_FACTS + [H_AGENT], PAY_CH)
-F_DUP = fact("F-DUP", "BLOCK", "DUPLICATE INVOICE", "Duplicate invoice", matched="prp_38")
+F_DUP = fact("F-DUP", "BLOCK", "DUPLICATE INV", "Duplicate invoice", matched="prp_38")
 DEC_DENY = decision("deny", ["F-DUP", "I-BLOCK", "I-DUP"], ordered(F_ACME_OK + [F_DUP]))
 F_WL_HIT = fact("F-WARNLIST", "BLOCK", "WARNLIST HIT", "Regulator warning lists", prov="mostlyright", hit=True,
                 list="regulator-warnings", matched_name="ACME-CZ TRADING")

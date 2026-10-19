@@ -110,7 +110,7 @@
           "kind": "F",
           "severity": "BLOCK",
           "label": "Duplicate invoice",
-          "display_line": "DUPLICATE INVOICE",
+          "display_line": "DUPLICATE INV",
           "evidence": {
             "matched": "prp_38"
           }
@@ -199,13 +199,13 @@
             "kind": "F",
             "severity": "BLOCK",
             "label": "Duplicate invoice",
-            "display_line": "DUPLICATE INVOICE",
+            "display_line": "DUPLICATE INV",
             "evidence": {
               "matched": "prp_38"
             }
           }
         ],
-        "facts_digest": "f4587cac875daf626168a4b3cbcf2ab7781e5533920f249d79d5cf9f581d33ca",
+        "facts_digest": "bea7aa0af3d2f7c85d6bbc14a32a024af58a496bf99f3107e5a6f4bd9cae1438",
         "mandate_id": "mnd_3",
         "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
       },
@@ -296,13 +296,13 @@
           "kind": "F",
           "severity": "BLOCK",
           "label": "Duplicate invoice",
-          "display_line": "DUPLICATE INVOICE",
+          "display_line": "DUPLICATE INV",
           "evidence": {
             "matched": "prp_38"
           }
         }
       ],
-      "facts_digest": "f4587cac875daf626168a4b3cbcf2ab7781e5533920f249d79d5cf9f581d33ca",
+      "facts_digest": "bea7aa0af3d2f7c85d6bbc14a32a024af58a496bf99f3107e5a6f4bd9cae1438",
       "mandate_id": "mnd_3",
       "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
     },
