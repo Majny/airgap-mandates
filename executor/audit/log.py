@@ -5,6 +5,7 @@ Owner: WS-B.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -148,6 +149,11 @@ def leaf_hashes(log_id: str, *, store: Any) -> list[bytes]:
     return [bytes.fromhex(r["leaf_hash"]) for r in rows]
 
 
+def w2_vkey(settings: Any) -> str | None:
+    """W2's pinned cosigner vkey (AIRGAP_W2_VKEY, the key row 22b checks uploads against); None when unset."""
+    return getattr(settings, "w2_vkey", None) or os.environ.get("AIRGAP_W2_VKEY", "").strip() or None
+
+
 def export(log_id: str, from_seq: int = 0, *, redact: bool = False, store: Any, settings: Any) -> dict[str, Any]:
     """audit_export.response body (CONTRACTS §7.4)."""
     from executor.audit import checkpoint as cp
@@ -163,7 +169,7 @@ def export(log_id: str, from_seq: int = 0, *, redact: bool = False, store: Any, 
                   "enroll_seq": le["seq"]} for le in out_leaves if (e := le["event"])["type"] == "enroll"]
     material = rules.policy_material()
     return {"log_id": log_id, "redacted": 0, "leaves": out_leaves, "checkpoints": notes,
-            "pubkeys": {"log": vk["log"], "w1": vk["w1"], "w2": getattr(settings, "w2_vkey", None)},
+            "pubkeys": {"log": vk["log"], "w1": vk["w1"], "w2": w2_vkey(settings)},
             "approvers": approvers,
             "policies": {rules.policy_hash(): material},  # verbatim: sha256(canonical_json(material)) == key
             "snapshots": {}, "render_profile": settings.render_profile}

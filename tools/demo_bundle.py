@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -152,7 +153,7 @@ def build_from_api(get: Callable[[str], Any], trust_keys: dict[str, str], *, log
         raise ValueError(f"{source}: /audit/export did not return a JSON object")
     problems = []
     health = get("/health")
-    for role in ("log", "w1"):
+    for role in ("log", "w1", "w2") if "w2" in trust_keys else ("log", "w1"):
         api_key = health.get(f"{role}_vkey") if isinstance(health, dict) else None
         if api_key != trust_keys.get(role):
             problems.append(f"/health {role}_vkey {api_key} differs from the independently pinned key")
@@ -267,6 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--role", default="airgap-auditor", help="role to assume for --from-aws (default airgap-auditor)")
     ap.add_argument("--region", default="eu-central-1")
     ap.add_argument("--origin", default="airgap.example/demo", help="AIRGAP_LOG_ORIGIN of the deployment")
+    ap.add_argument("--w2-vkey", default=os.environ.get("AIRGAP_W2_VKEY") or None,
+                    help="pin W2's vkey for --from-aws (default $AIRGAP_W2_VKEY; from the litewitness startup log, "
+                    "`infra/w2_ctl.sh vkey`), not from the API")
     a = ap.parse_args(argv)
     if a.tamper:
         src, dst = a.tamper
@@ -278,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"AWS {a.region}: {a.from_aws} as {a.role} (read-only); keys pinned from KMS", file=sys.stderr)
         try:
             get, trust = _aws_reader(a.from_aws, role=a.role, region=a.region, origin=a.origin)
+            if a.w2_vkey:
+                trust["w2"] = a.w2_vkey
             sealed = build_from_api(get, trust, source=a.from_aws)
         except ValueError as exc:
             print(f"CANNOT SEAL FROM AWS: {exc}")
