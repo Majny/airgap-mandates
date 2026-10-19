@@ -110,6 +110,13 @@ class ExecutorGate:
         seed_data.seed_registry([canon[v["ico"]] for v in self.w.vendors.values()], store=self.store,
                                 settings=self.settings, keys_dir=DATA / "issuer_keys", now=NOW)
         from executor.docs import extract
+        # Mail history: each real vendor domain has corresponded with us for a year (F-DOMAIN-AGE), like the demo seed.
+        for k, v in enumerate(self.w.vendors.values()):
+            when = NOW - timedelta(days=400, minutes=k)
+            hist = {"email_id": f"hist_{k}", "from": v["contact"], "from_name": v["name"], "dkim_sign": True,
+                    "subject": "Dodaci podminky 2025", "body": "Dobry den, zasilame dodaci podminky."}
+            self.call("POST", "/ingest", {"raw_b64": base64.b64encode(raw_email(hist, when, [])).decode("ascii"),
+                                          "received_at": _iso(when)}, principal="ingest")
         self.email_ids: dict[str, str] = {}
         self.doc_ids: dict[str, tuple[str, str]] = {}  # bench doc_id -> (executor email_id, executor doc_id)
         for k, em in enumerate(self.w.inbox):
@@ -120,7 +127,7 @@ class ExecutorGate:
                                                     "received_at": _iso(when)}, principal="ingest")
             assert st == 201, row
             self.email_ids[em["email_id"]] = row["email_id"]
-            parts = extract.documents(raw)
+            parts = [d for d in extract.documents(raw) if d["kind"] == "attachment"]
             for a, part in zip(em["attachments"], parts):
                 self.doc_ids[a["doc_id"]] = (row["email_id"], part["doc_id"])
         self.clerk, self.treasury = Account.create(), Account.create()
