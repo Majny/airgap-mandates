@@ -215,7 +215,8 @@ def compute_change_facts(req: dict[str, Any], vendor: dict[str, Any], *, store: 
     provisional = {"in_network": in_network, "break_glass": False,
                    "callback": {"status": "none" if in_network else "pending", "code_exp": None, "attempts": 0}}
     subject = {"kind": "change", "subject_id": (change or {}).get("change_id", ""), "new_iban": req["new_iban"],
-               "email_id": req.get("email_id"), "hints": req.get("hints") or []}
+               "email_id": req.get("email_id"), "evidence_ids": list(req.get("evidence_ids") or []),
+               "hints": req.get("hints") or []}
     state = {
         "payee": vendor, **_inbox.email_state(req.get("email_id"), store=store),
         "change": change or provisional,

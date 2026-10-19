@@ -100,6 +100,25 @@ def _first_seen(from_domain: str, payee: dict[str, Any], state: dict[str, Any]) 
     return min(seen) if seen else None
 
 
+def _cited_sources(subject: dict[str, Any], state: dict[str, Any]) -> frozenset[str]:
+    """The action's own source for F-ANOM (reads of it are not taint): a proposal's invoice email + invoice_ref, a
+    change's email_id + eml_/doc_ evidence ids, plus every document of the email the subject is judged on."""
+    from executor.facts import anom
+
+    invoice = subject.get("invoice") or {}
+    evidence = [e for e in subject.get("evidence_ids") or [] if isinstance(e, str)]
+    emails = [subject.get("email_id"), invoice.get("email_id")] + [e for e in evidence if e.startswith("eml_")]
+    docs = [invoice.get("invoice_ref")] + [e for e in evidence if e.startswith("doc_")]
+    if state.get("email_raw"):
+        from executor.docs import extract
+
+        try:
+            docs += [d["doc_id"] for d in extract.documents(state["email_raw"])]
+        except Exception:  # noqa: BLE001 - an unparseable source only means fewer reads are excused (fail safe)
+            pass
+    return anom.cited_source_args(emails, docs)
+
+
 def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> FactSet:
     """subject: {"kind": "proposal"|"change", "subject_id", ...request fields}; for a change `new_iban` (+ `email_id`),
     for a proposal `invoice` (+ `hints`).
@@ -167,8 +186,8 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     add(iban_bank.bank_fact(iban, payee.get("country", "CZ"),
                             bank_codes_path=_util.snapshot_path(state, "bank_codes")), "bank_codes")
     add(firstseen.firstseen_fact(iban, payee.get("iban_history") or [], now), "registry")
-    add(anom.anom_fact(subject, state.get("tool_log") or [], payee=payee, mandate=state.get("mandate"), now=now),
-        "toollog")
+    add(anom.anom_fact(subject, state.get("tool_log") or [], payee=payee, mandate=state.get("mandate"), now=now,
+                       cited=_cited_sources(subject, state)), "toollog")
     add(_translit_fact(name))
     if kind == "proposal":
         from executor.facts.amount_doc import amount_doc_fact

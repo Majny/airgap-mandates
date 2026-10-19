@@ -2,7 +2,8 @@
 ARCHITECTURE §4.4. Owner: WS-D (WS-E feeds the log).
 
 Integer score 0..100, sum of fired features: untrusted read within 3 steps before payee.request_change /
-payment.propose (+40), > 5 proposals in 60 s (+20), amount within 2% below the mandate max_per_payment_minor (+20),
+payment.propose (+40; reads of the action's own cited source - the invoice email and its documents, or the change's
+evidence - do not count, any other untrusted email/document does), > 5 proposals in 60 s (+20), amount within 2% below the mandate max_per_payment_minor (+20),
 round amount (+10), off-hours Europe/Prague 22:00-06:00 (+10). >= 40 -> WARN 'ANOM 55/100', else INFO.
 It can only add a WARN (step-up); it never allows. Thresholds are placeholders until calibrated on the CNB
 synthetic transactions.csv.
@@ -41,7 +42,8 @@ def normalize_log(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             step = 0
         out.append({"session_id": str(r.get("session_id", "")), "step": step, "tool": r.get("tool"),
-                    "untrusted_read": bool(r.get("untrusted_read")), "ts": r.get("ts", r.get("at"))})
+                    "untrusted_read": bool(r.get("untrusted_read")), "ts": r.get("ts", r.get("at")),
+                    "args_sha256": r.get("args_sha256")})
     return sorted(out, key=lambda r: (r["session_id"], r["step"]))
 
 
@@ -59,10 +61,18 @@ def session_log(session_id: str, *, store: Any, action: str | None = None, step:
     return log
 
 
-def _untrusted_before_action(log: list[dict[str, Any]]) -> bool:
+def cited_source_args(email_ids: list[str | None], doc_ids: list[str | None]) -> frozenset[str]:
+    """args_sha256 of reading exactly the cited sources: inbox.read {email_id} / invoice.extract {doc_id} (the tools
+    λ hashes canonical_json(args)). A read with any other args does not match, so it still counts (fail safe)."""
+    out = {_util.digest({"email_id": e}) for e in email_ids if isinstance(e, str) and e}
+    out |= {_util.digest({"doc_id": d}) for d in doc_ids if isinstance(d, str) and d}
+    return frozenset(out)
+
+
+def _untrusted_before_action(log: list[dict[str, Any]], cited: frozenset[str] = frozenset()) -> bool:
     reads: dict[str, list[int]] = {}
     for r in log:
-        if r.get("untrusted_read"):
+        if r.get("untrusted_read") and r.get("args_sha256") not in cited:
             reads.setdefault(str(r.get("session_id")), []).append(int(r.get("step", 0)))
     for r in log:
         if r.get("tool") in ACTION_TOOLS:
@@ -91,11 +101,12 @@ def _amount(subject: dict[str, Any]) -> int | None:
 
 
 def features(subject: dict[str, Any], tool_log: list[dict[str, Any]], *, mandate: dict[str, Any] | None,
-             now: datetime) -> list[str]:
-    """Names of the fired features, in WEIGHTS order. `tool_log`: tool_calls rows (stored or normalised form)."""
+             now: datetime, cited: frozenset[str] = frozenset()) -> list[str]:
+    """Names of the fired features, in WEIGHTS order. `tool_log`: tool_calls rows (stored or normalised form);
+    `cited`: cited_source_args() of the action's own source, whose reads are not taint."""
     tool_log = normalize_log(tool_log)
     fired: set[str] = set()
-    if _untrusted_before_action(tool_log):
+    if _untrusted_before_action(tool_log, cited):
         fired.add("untrusted_read_before_action")
     if _proposal_burst(tool_log):
         fired.add("proposal_burst")
@@ -113,11 +124,11 @@ def features(subject: dict[str, Any], tool_log: list[dict[str, Any]], *, mandate
 
 
 def anom_fact(subject: dict[str, Any], tool_log: list[dict[str, Any]], *, payee: dict[str, Any],
-              mandate: dict[str, Any] | None, now: datetime) -> Fact:
+              mandate: dict[str, Any] | None, now: datetime, cited: frozenset[str] = frozenset()) -> Fact:
     """F-ANOM; prov = digest(tool_log). `payee` is accepted for future features (same-vendor splitting)."""
     raw = list(tool_log or [])
     log = normalize_log(raw)
-    fired = features(subject, log, mandate=mandate, now=now)
+    fired = features(subject, log, mandate=mandate, now=now, cited=cited)
     score = min(100, sum(WEIGHTS[f] for f in fired))
     severity = "WARN" if score >= WARN_AT else "INFO"
     evidence = {"score": score, "features": ",".join(fired), "tool_calls": len(log),

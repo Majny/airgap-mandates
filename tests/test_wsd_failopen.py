@@ -19,7 +19,8 @@ from executor.config import Settings, iso
 from executor.facts import anom, compute, sanction, vop, warnlist
 from executor.facts import mostlyright as mr
 from executor.store.memory import MemoryStore
-from tests.test_wsd_scenarios import ACME, NEW_IBAN, World, _facts
+from executor.facts._util import digest as _digest
+from tests.test_wsd_scenarios import ACME, NEW_IBAN, T0, World, _facts
 from tools import load_mostlyright as lm
 from tools import seed_data
 
@@ -162,12 +163,14 @@ def test_facts2_e2e_untrusted_read_then_propose_steps_up():
 
     h = ToolHarness()
     h.mandate()
-    doc_id = _isdoc_doc_id(h)
+    st_, r = h.tool("inbox.read", {"email_id": "eml_0000"})  # an untrusted email that is NOT the cited source
+    assert st_ == 200, r
+    doc_id = _isdoc_doc_id(h)  # reads the cited source eml_0001 (not taint)
     st_, r = h.tool("payment.propose", _propose_args(doc_id))
     assert st_ == 200, r
     (p,) = h.store.scan("proposals")
     a = next(f for f in p["facts"] if f["id"] == "F-ANOM")
-    assert a["severity"] == "WARN" and a["evidence"]["score"] >= 40
+    assert a["severity"] == "WARN" and "untrusted_read_before_action" in a["evidence"]["features"]
     assert r["result"]["decision"] == "challenge"
 
 
@@ -336,3 +339,67 @@ def test_facts2_change_create_takes_the_tool_log_and_anom_never_drops_on_recompu
     fs = machine._recompute(c, store=w.store, settings=w.settings, now=w.now)
     assert _facts(fs["facts"])["F-ANOM"][0] == "WARN" and _facts(c["facts"])["F-ANOM"][0] == "WARN"
     assert fs["facts_digest"] == compute.facts_digest(fs["facts"])
+
+
+# --------------------------------------------------------------------------- FACTS-2 decision (b): cited source is not taint
+
+
+def _session(w: World, sid: str, *reads: tuple[str, dict]) -> int:
+    """tool_calls rows exactly as the tools λ stores them (args hashed); returns the next step."""
+    for i, (tool, args) in enumerate(reads, 1):
+        w.store.put("tool_calls", {"session_id": sid, "sk": f"{i:06d}", "tool": tool, "args_sha256": _digest(args),
+                                   "result": "ok", "rule_ids": [], "untrusted_read": True, "at": iso(w.now)})
+    return len(reads) + 1
+
+
+def _cited(w: World, invoice_no: str, amount_minor: int) -> dict:
+    from tools import invoice_mail
+
+    inv = {"vendor_id": ACME, "invoice_no": invoice_no, "issue_date": "2026-10-15", "amount_minor": amount_minor,
+           "currency": "CZK", "vs": invoice_no[-4:], "reason_code": "DUE"}
+    raw = invoice_mail.invoice_email(inv, data_dir=w.settings.data_dir)
+    st_, r = w.call("POST", "/ingest", invoice_mail.ingest_body(raw), "ingest")
+    assert st_ == 201, r
+    return invoice_mail.cite(inv, raw, r["email_id"])
+
+
+def _propose(w: World, inv: dict, sid: str, step: int) -> dict:
+    st_, r = w.call("POST", "/proposals", {"invoice": inv, "hints": [], "session_id": sid, "step": step}, "tools")
+    assert st_ == 201, r
+    return r
+
+
+def test_facts2b_reading_the_cited_source_is_not_taint_and_s1_allows():
+    w = World()
+    w.mandate()
+    inv = _cited(w, "FV-ANOM-0001", 1_450_000)
+    step = _session(w, "s-cited", ("inbox.read", {"email_id": inv["email_id"]}),
+                    ("invoice.extract", {"doc_id": inv["invoice_ref"]}))
+    r = _propose(w, inv, "s-cited", step)
+    anom_f = _facts(r["proposal"]["facts"])["F-ANOM"]
+    assert anom_f[0] == "INFO", anom_f
+    assert r["decision"]["decision"] == "allow", r["decision"]
+
+
+def test_facts2b_reading_another_untrusted_email_before_proposing_steps_up():
+    w = World()
+    w.mandate()
+    inv = _cited(w, "FV-ANOM-0002", 1_450_000)
+    step = _session(w, "s-other", ("inbox.read", {"email_id": w.emails["04"]}),  # the lookalike BEC, not the source
+                    ("inbox.read", {"email_id": inv["email_id"]}))
+    r = _propose(w, inv, "s-other", step)
+    (p,) = [x for x in w.store.scan("proposals") if x["proposal_id"] == r["proposal"]["proposal_id"]]
+    a = next(f for f in p["facts"] if f["id"] == "F-ANOM")
+    assert a["severity"] == "WARN" and "untrusted_read_before_action" in a["evidence"]["features"], a
+    assert r["decision"]["decision"] == "challenge" and "I-ANOM" in r["decision"]["rule_ids"], r["decision"]
+
+
+def test_facts2b_read_with_other_args_still_counts():
+    """Only an exact read of the cited source is excused: extra/other args hash differently (fail safe)."""
+    cited = anom.cited_source_args(["eml_aaaaaaaaaaaaaaaa"], ["doc_bbbbbbbbbbbbbbbb"])
+    rows = [{"session_id": "s", "step": 1, "tool": "inbox.read", "untrusted_read": True,
+             "args_sha256": _digest({"email_id": "eml_aaaaaaaaaaaaaaaa", "x": 1})},
+            {"session_id": "s", "step": 2, "tool": "payment.propose", "untrusted_read": False}]
+    assert "untrusted_read_before_action" in anom.features({}, rows, mandate=None, now=T0, cited=cited)
+    rows[0]["args_sha256"] = _digest({"email_id": "eml_aaaaaaaaaaaaaaaa"})
+    assert "untrusted_read_before_action" not in anom.features({}, rows, mandate=None, now=T0, cited=cited)
