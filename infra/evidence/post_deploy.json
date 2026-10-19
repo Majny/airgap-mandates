@@ -5,7 +5,7 @@
     "log": "airgap.example/demo/audit+05e38094+AYMB6t/Q61AckfFZgHBU50wiDz+u2PMzsCnuFTyhHJn2",
     "w1": "airgap.example/demo/w1+a2e46ba2+BAx0bd3NtelGOJf81qgBU3uIEEGhPwhQTFiG21pddB3q"
   },
-  "code_sha256": "987b6fc661478a89c137fe29d86dc95d9385eb7877775bd09488718f266b9dac",
+  "code_sha256": "fcaada147eaec01e752464f79f8c99d9c18d333cf3306b0719a6ea04539277cc",
   "w2_instance": "i-0bc5865c1ddae7b1d",
   "next": [
     "infra/w2_ctl.sh trust '<log vkey>'",

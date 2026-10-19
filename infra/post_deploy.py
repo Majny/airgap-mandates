@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import boto3
 
@@ -33,6 +34,12 @@ def main() -> None:
                                   "AIRGAP_KMS_KEY_ID": out["LogKeyId"], "AIRGAP_WITNESS_KMS_KEY_ID": out["W1KeyId"]})
     vk = checkpoint.vkeys(settings)
     set_env("airgap-witness", {"AIRGAP_W1_LOG_VKEY": vk["log"]})
+    # keep it across deploys: the stack reads context w1_log_vkey (the KMS key, hence the vkey, is stable)
+    ctx_path = Path(__file__).resolve().parent / "cdk.context.json"
+    ctx = json.loads(ctx_path.read_text()) if ctx_path.exists() else {}
+    if ctx.get("w1_log_vkey") != vk["log"]:
+        ctx["w1_log_vkey"] = vk["log"]
+        ctx_path.write_text(json.dumps(ctx, indent=2) + "\n")
     print(json.dumps({"api_url": out["ApiUrl"], "agent_tools_url": out["AgentToolsUrl"], "vkeys": vk,
                       "code_sha256": out["CodeSha256"], "w2_instance": out.get("W2InstanceId"),
                       "next": ["infra/w2_ctl.sh trust '<log vkey>'", "infra/w2_ctl.sh vkey -> AIRGAP_W2_VKEY",
