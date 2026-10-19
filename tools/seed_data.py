@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from executor.canonical import canonical_json
 from executor.config import Settings, iso
 
 META_KEY = "registry#meta"
@@ -77,16 +78,56 @@ def seed_registry(vendors: list[dict[str, Any]], *, store: Any, settings: Any, k
     return {"vendors": len(vendors), "pins": pinned}
 
 
-def seed_signers(path: Path, *, store: Any) -> int:
-    """enrolled_signers rows from data/enrollment.json ({"signers": [...]}, device set by tools/enroll.py)."""
+_ENROLL_FIELDS = ("address", "role", "label", "device", "device_model", "firmware_version", "cert_chain_sha256",
+                  "fw_hash", "derivation_path", "enroll_sig")
+
+
+def _logged_enrolls(store: Any) -> dict[str, int]:
+    """canonical `enroll` leaf data -> seq for leaves already in the audit log (a re-seed reuses them)."""
+    out: dict[str, int] = {}
+    for r in store.scan("audit"):
+        ev = r.get("event")
+        if not isinstance(ev, str) or '"type":"enroll"' not in ev:
+            continue
+        e = json.loads(ev)
+        out.setdefault(canonical_json(e["data"]).decode(), int(e["seq"]))
+    return out
+
+
+def _enroll(row: dict[str, Any], *, store: Any, settings: Any) -> int:
+    """One transaction: `enroll` leaf (§7.2, head-conditioned Put) + the enrolled_signers row with enroll_seq."""
+    from executor.store import Put, TxConflict, ensure_head, leaf_ops, next_seq, shims
+
+    data = {k: row.get(k) for k in _ENROLL_FIELDS}
+    event = shims.make_event("enroll", data, subject_id=row["address"], actor="executor", settings=settings)
+    ensure_head(store, event["log_id"])
+    for _ in range(20):
+        seq = next_seq(store, event["log_id"])
+        if store.transact(leaf_ops(event, seq) + [Put("enrolled_signers", {**row, "enroll_seq": seq})]):
+            shims.after_commit(store=store, settings=settings)
+            return seq
+    raise TxConflict("audit head contention while enrolling")
+
+
+def seed_signers(path: Path, *, store: Any, settings: Any = None) -> int:
+    """enrolled_signers rows from data/enrollment.json ({"signers": [...]}, device set by tools/enroll.py). Each row is
+    written in one transaction with its `enroll` leaf (CONTRACTS §6, §7.2) and carries `enroll_seq`, so the offline
+    verifier sees the signer enrolled before its first signature. Inactive rows (fallback emulator clerk) are logged
+    too; `active` lives only in the row. Re-seeding reuses an identical existing leaf instead of logging twice."""
     if not path.exists():
         return 0
+    settings = settings or Settings(backend="memory")
     doc = json.loads(path.read_text())
+    logged = _logged_enrolls(store)
     n = 0
     for s in doc.get("signers") or []:
         row = {k: v for k, v in s.items() if k not in _SIGNER_PRIVATE}
         row["address"] = str(row["address"]).lower()
-        store.put("enrolled_signers", row)
+        seq = logged.get(canonical_json({k: row.get(k) for k in _ENROLL_FIELDS}).decode())
+        if seq is None:
+            _enroll(row, store=store, settings=settings)
+        else:
+            store.put("enrolled_signers", {**row, "enroll_seq": seq})
         n += 1
     return n
 
@@ -154,7 +195,7 @@ def seed(*, settings: Any = None, data_dir: str | None = None, store: Any = None
     vendors_path = base / "vendors.json"
     vendors = json.loads(vendors_path.read_text()) if vendors_path.exists() else []
     out = seed_registry(vendors, store=store, settings=settings, keys_dir=base / "issuer_keys", now=now)
-    out["signers"] = seed_signers(base / "enrollment.json", store=store)
+    out["signers"] = seed_signers(base / "enrollment.json", store=store, settings=settings)
     out["emails"] = seed_inbox(base / "emails", store=store, settings=settings, now=now)
     return out
 
