@@ -1,13 +1,16 @@
 """Tools λ handler (POST /tools/{name}). CONTRACTS.md v2 §4.1 #18, §4.5. Owner: WS-E.
 
-Order per call: manifest hash pin -> known tool -> argument schema -> Cedar tool policy (A2) -> executor call with the
+Order per call: request check (step int >= 0, canonical args; else logged 400) -> claim (session_id, step) (T-STEP-REUSE) -> manifest hash pin -> known tool -> argument schema -> Cedar tool policy (A2) -> executor call with the
 tools role (no token passthrough; in-process dispatch on memory/moto, SigV4 HTTP to the executor on aws) -> one
 `tool_call` leaf + `tool_calls` row (F-ANOM toollog). Untrusted content is returned wrapped in <untrusted> tags.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 
 import jsonschema
@@ -22,6 +25,12 @@ from executor.tools import policy as tool_policy
 from executor.tools.manifest import DECOY_TOOLS, TOOL_MANIFEST, manifest_sha256
 
 UNTRUSTED_WINDOW = 3  # steps; taint rule "untrusted read within the last 3 steps" (LOG_ONLY, feeds F-ANOM)
+UNTRUSTED_SECONDS = 120  # ...or any untrusted read in the last 120 s, whatever the (agent-chosen) session and step
+LOOKUP_WINDOW_MINUTES = 10  # T-LOOKUP-RATE also counts per principal over a rolling window, not only per session
+MAX_HINTS = 5
+REMINDER_FEE_BP = 1000  # a reminder may add a late fee / interest: up to 10 % of the paid invoice...
+REMINDER_FEE_MIN = 50_000  # ...or 500.00, whichever is more
+_AT_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _IBAN_RE = re.compile(r"[A-Z]{2}\s?\d{2}(?:\s?[A-Z0-9]){11,30}", re.I)
 _REGISTRY_META_ID = "registry#meta"
 
@@ -33,6 +42,9 @@ MAIL_TEMPLATES: dict[str, str] = {
     "query_amount": "Hello, the amount on invoice {invoice_no} does not match our order {po}. Please confirm.",
 }
 _VAR_RE = re.compile(r"^[A-Za-z0-9 ._/:-]{0,40}$")
+_VAR_SHAPE = {"date": re.compile(r"^\d{4}-\d{2}-\d{2}$"), "po": re.compile(r"^PO-[A-Za-z0-9-]{1,20}$")}
+_PO_RE = re.compile(r"PO-[A-Za-z0-9-]+")
+_DATE_RANGE = (date(2020, 1, 1), date(2035, 12, 31))
 
 
 # ---------------------------------------------------------------- executor transport
@@ -79,34 +91,79 @@ def _history(store: Any, session_id: str) -> list[dict[str, Any]]:
 
 
 def _context(name: str, args: dict[str, Any], history: list[dict[str, Any]], step: int,
-             vendors: list[dict[str, Any]]) -> dict[str, Any]:
+             vendors: list[dict[str, Any]], *, effect: str, store: Any, settings: Any) -> dict[str, Any]:
     to = str(args.get("to", ""))
     vars_text = canonical_json(args.get("vars") or {}).decode() if name == "mail.send_template" else ""
-    reg_ibans = {str(v.get("iban", "")) for v in vendors}
+    lookups = 1 + sum(1 for h in history if h.get("tool") == "vendor.lookup")
+    if name == "vendor.lookup":
+        lookups = max(lookups, _lookup_window(store, settings))
     return {
         "to_allowlisted": name != "mail.send_template" or allowlist.is_allowed("send_email", to, vendors=vendors),
-        "vars_match_iban": bool(_IBAN_RE.search(vars_text)) or any(i and i in vars_text for i in reg_ibans),
-        "lookup_count": 1 + sum(1 for h in history if h.get("tool") == "vendor.lookup"),
-        "untrusted_read_recent": any(h.get("untrusted_read") and step - int(h["sk"]) <= UNTRUSTED_WINDOW
-                                     for h in history),
+        "vars_match_iban": _vars_match_iban((args.get("vars") or {}) if name == "mail.send_template" else {},
+                                            vars_text, vendors),
+        "lookup_count": lookups,
+        "untrusted_read_recent": effect == "propose" and _untrusted_recent(history, step, store=store,
+                                                                            settings=settings),
     }
+
+
+def _vars_match_iban(vars_: Any, vars_text: str, vendors: list[dict[str, Any]]) -> bool:
+    """An IBAN in the vars, or the account number of a registered IBAN without its country prefix
+    ('PO-6508000000192000145399', 'PO-08000000192000145399'). Fragments are not matched here (a short digit window also hits genuine POs, as CZ
+    IBANs have long zero runs): every var is bound to the recipient's own documents or a calendar date (_bind_vars)."""
+    reg = [str(v.get("iban") or "") for v in vendors]
+    if _IBAN_RE.search(vars_text) or any(i and i in vars_text for i in reg):
+        return True
+    reg_digits = ["".join(c for c in i[n:] if c.isdigit()) for i in reg if i for n in (2, 4)]  # with/without check
+    values = vars_.values() if isinstance(vars_, dict) else []
+    for v in values:
+        d = "".join(c for c in str(v) if c.isdigit())
+        if any(r and r in d for r in reg_digits):
+            return True
+    return False
+
+
+def _lookup_window(store: Any, settings: Any) -> int:
+    """Count this vendor.lookup; return all lookups by the agent principal in the last 10 minutes (any session)."""
+    t = now(settings)
+    names = [f"toolrate#vendor.lookup#{(t - timedelta(minutes=i)).strftime('%Y%m%d%H%M')}"
+             for i in range(LOOKUP_WINDOW_MINUTES)]
+    total = store.increment("counters", {"name": names[0]}, "value")
+    return total + sum(int((store.get("counters", {"name": n}) or {}).get("value", 0)) for n in names[1:])
+
+
+def _untrusted_recent(history: list[dict[str, Any]], step: int, *, store: Any, settings: Any) -> bool:
+    """Untrusted read within UNTRUSTED_WINDOW steps of this session, or within UNTRUSTED_SECONDS in any session."""
+    if any(h.get("untrusted_read") and step - int(h["sk"]) <= UNTRUSTED_WINDOW for h in history):
+        return True
+    since = (now(settings) - timedelta(seconds=UNTRUSTED_SECONDS)).strftime(_AT_FMT)
+    return any(r.get("untrusted_read") and str(r.get("at", "")) >= since for r in store.scan("tool_calls"))
 
 
 def _vendors(store: Any) -> list[dict[str, Any]]:
     return [r for r in store.scan("registry") if r.get("vendor_id") != _REGISTRY_META_ID]
 
 
+def _reserve(name: str, req: dict[str, Any], *, store: Any, settings: Any) -> bool:
+    """Claim (session_id, step) before anything runs; False when the agent reuses a step (rows are never overwritten)."""
+    return store.put_if_absent("tool_calls", {"session_id": req["session_id"], "sk": f"{int(req['step']):06d}",
+                                              "tool": name, "result": "pending", "rule_ids": [],
+                                              "untrusted_read": False, "at": now(settings).strftime(_AT_FMT)}, "sk")
+
+
 def _log(name: str, req: dict[str, Any], result: str, rule_ids: list[str], *, untrusted: bool,
-         store: Any, settings: Any) -> int:
+         store: Any, settings: Any, row: bool = True) -> int:
     args_sha256 = sha256_hex(canonical_json(req.get("args") or {}))
     data = {"session_id": req["session_id"], "step": req["step"], "tool": name, "args_sha256": args_sha256,
             "result": result, "rule_ids": rule_ids, "untrusted_read": untrusted}
     seq = shims.append(shims.make_event("tool_call", data, subject_id=req["session_id"], actor="tools",
                                         settings=settings), store=store, settings=settings)
+    if not row:
+        return seq
     store.put("tool_calls", {"session_id": req["session_id"], "sk": f"{int(req['step']):06d}", "tool": name,
                              "args_sha256": args_sha256, "result": result, "rule_ids": rule_ids,
                              "untrusted_read": untrusted, "seq": seq,
-                             "at": now(settings).strftime("%Y-%m-%dT%H:%M:%SZ")})
+                             "at": now(settings).strftime(_AT_FMT)})
     return seq
 
 
@@ -127,31 +184,42 @@ def _email_docs(email_id: str, *, store: Any, settings: Any) -> tuple[bytes, lis
     return raw, extract.documents(raw)
 
 
-def _find_doc(doc_id: str, *, store: Any, settings: Any) -> tuple[str, dict[str, Any]]:
+def _find_doc(doc_id: str, *, store: Any, settings: Any) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+    """(email_id, document, all documents of that email)."""
     emails = _executor("GET", "/inbox", None, store=store, settings=settings)["emails"]
     for e in emails:
         _, docs = _email_docs(e["email_id"], store=store, settings=settings)
         for d in docs:
             if d["doc_id"] == doc_id:
-                return e["email_id"], d
+                return e["email_id"], d, docs
     raise ApiError(ErrorCode.NOT_FOUND, f"document {doc_id}")
 
 
 def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store: Any, settings: Any) -> dict[str, Any]:
     ex = lambda m, p, b=None: _executor(m, p, b, store=store, settings=settings)  # noqa: E731
     if name == "inbox.list":
-        return ex("GET", "/inbox")
+        out = ex("GET", "/inbox")
+        reg = _registered_domains(store)
+        return {"emails": [{**e, "registered_vendor_id": reg.get(str(e.get("from_domain", "")).lower())}
+                           for e in out["emails"]]}
     if name == "inbox.read":
         raw, docs = _email_docs(args["email_id"], store=store, settings=settings)
         hdr = extract.headers(raw)
-        return {"email_id": args["email_id"], "from": hdr["From"], "subject": hdr["Subject"],
+        # sender = the ingest row's from_addr (parsed from the raw header by the DKIM path), never a decoded header:
+        # an RFC 2047 display name can decode to an address-like string
+        row = next((e for e in ex("GET", "/inbox")["emails"] if e.get("email_id") == args["email_id"]), {})
+        return {"email_id": args["email_id"], "from": row.get("from_addr") or None,
+                "registered_vendor_id": _registered_domains(store).get(str(row.get("from_domain", "")).lower()),
+                "subject": hdr["Subject"],
                 "documents": [{"doc_id": d["doc_id"], "kind": d["kind"], "name": d["name"]} for d in docs],
                 "content": _untrusted(f"email:{args['email_id']}", "\n\n".join(
                     d["text"] if d["kind"] == "body" else f"--- attachment {d['name']} ({d['doc_id']}) ---\n{d['text']}"
                     for d in docs))}
     if name == "invoice.extract":
-        email_id, doc = _find_doc(args["doc_id"], store=store, settings=settings)
-        return {"email_id": email_id, "draft": extract.extract_draft(doc)}
+        email_id, doc, _ = _find_doc(args["doc_id"], store=store, settings=settings)
+        draft = extract.extract_draft(doc)  # invoice_no: verbatim only if plain, else its inv_ reference (#15)
+        draft["fields"]["invoice_no"] = extract.invoice_no_ref(draft["fields"]["invoice_no"])
+        return {"email_id": email_id, "draft": draft}
     if name == "vendor.lookup":
         if args.get("vendor_id"):
             v = ex("GET", f"/vendors/{args['vendor_id']}")
@@ -177,10 +245,18 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
                 "remaining_minor": m["max_total_minor"] - m.get("spent_minor", 0),
                 "remaining_count": m["max_count"] - m.get("count", 0), "valid_until": m["valid_until"]}
     if name == "payment.propose":
-        email_id, doc = _find_doc(args["invoice_ref"], store=store, settings=settings)
+        email_id, doc, docs = _find_doc(args["invoice_ref"], store=store, settings=settings)
         vendor = ex("GET", f"/vendors/{args['vendor_id']}")
-        inv, warn = invoice_from_document(args, extract.extract_draft(doc), vendor, settings=settings)
+        drafts = [extract.extract_draft(d) for d in docs]
+        draft = next(d for d in drafts if d["doc_id"] == doc["doc_id"])
+        inv, warn = invoice_from_document(args, draft, vendor, settings=settings, siblings=_others(draft, drafts))
         inv["email_id"] = email_id
+        rows = _live_proposals(store=store, settings=settings)
+        # Cross-email reminders of an already paid invoice are NOT matched here by amount/VS heuristics: every such
+        # rule either missed real reminders (late fees, reverse order, rounding) or refused legitimate recurring
+        # invoices forever (constant-VS vendors, fixed monthly fees). Residual, gated by the executor's I-DUP and the
+        # human step-up (infra/PROBES.md "Known residuals").
+        _check_cumulative(inv, _invoice_cap(draft, drafts), store=store, settings=settings, rows=rows)
         out = ex("POST", "/proposals", {"invoice": inv, "hints": hints})
         return {"proposal_id": out["proposal"]["proposal_id"], "decision": out["decision"]["decision"],
                 "rule_ids": out["decision"].get("rule_ids", []), "tx_id": (out.get("tx") or {}).get("tx_id"),
@@ -196,7 +272,10 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         if tpl is None:
             raise ApiError(ErrorCode.INVALID_REQUEST, f"unknown template {args['template_id']}")
         vars_ = {k: str(v) for k, v in (args.get("vars") or {}).items()}
-        bad = [k for k, v in vars_.items() if not _VAR_RE.match(v)]
+        bad = [k for k, v in vars_.items() if not _VAR_RE.match(v)
+               or (k in _VAR_SHAPE and not _VAR_SHAPE[k].match(v))]
+        if not bad:
+            vars_, bad = _bind_vars(vars_, args["to"], ex, store=store, settings=settings)
         if bad:
             raise ApiError(ErrorCode.INVALID_REQUEST, f"template vars not allowed: {bad}")
         try:
@@ -208,6 +287,134 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
     raise ApiError(ErrorCode.NOT_FOUND, f"tool {name}")
 
 
+def _registered_domains(store: Any) -> dict[str, str]:
+    """registered vendor domain -> vendor_id (our registry's text, safe to show the planner verbatim)."""
+    return {str(v["domain"]).lower(): v["vendor_id"] for v in _vendors(store) if v.get("domain")}
+
+
+def _authenticated(raw: bytes, domain: str, *, settings: Any) -> bool:
+    """DKIM pass, aligned, d = the recipient's domain or a subdomain of it: re-verified here from the raw bytes over the same DNS snapshot
+    the ingest uses (GET /inbox does not carry the verdict, and a From header alone is not evidence)."""
+    from executor.facts import _util
+    from executor.facts.dkim import dkim_verdict
+
+    dns, _ = _util.load_json(Path(settings.data_dir) / _util.SNAPSHOT_FILES["dns"])
+    v = dkim_verdict(raw, dns_snapshot=dns)
+    d = str(v.get("d") or "").lower()
+    return v.get("result") == "pass" and v.get("aligned") is True and (d == domain or d.endswith("." + domain))
+
+
+def _sender_documents(to: str, ex: Any, *, settings: Any) -> list[dict[str, Any]]:
+    """Documents of the DKIM-authenticated emails received from the recipient's domain."""
+    domain = to.rsplit("@", 1)[-1].lower()
+    out: list[dict[str, Any]] = []
+    for e in ex("GET", "/inbox")["emails"]:
+        if str(e.get("from_domain", "")).lower() != domain:
+            continue
+        try:
+            raw = bytes(ex("GET", f"/inbox/{e['email_id']}/raw"))
+        except ApiError:  # unreadable email: contributes nothing (fail closed)
+            continue
+        if _authenticated(raw, domain, settings=settings):
+            out += extract.documents(raw)
+    return out
+
+
+def _bind_vars(vars_: dict[str, str], to: str, ex: Any, *, store: Any,
+               settings: Any) -> tuple[dict[str, str], list[str]]:
+    """(vars as sent, names not allowed). Every var must mean something, digits or not (an IBAN can be spelled in
+    letters, 'PO-gfaiaaaa...', and free words are free text): invoice_no (verbatim or its inv_ reference, sent as the
+    document's value) and po must appear in the documents of DKIM-authenticated mail from the recipient's domain; date
+    must be a real calendar date in 2020..2035. Any other var is refused. No var may carry an IBAN."""
+    if not vars_:
+        return vars_, []
+    docs = _sender_documents(to, ex, settings=settings) if {"invoice_no", "po"} & set(vars_) else []
+    out, bad = dict(vars_), []
+    for k, v in vars_.items():
+        if k == "invoice_no":
+            nos = [n for d in docs if (n := extract.extract_draft(d)["fields"]["invoice_no"])]
+            n = next((n for n in nos if extract.invoice_no_matches(v, n)), None)
+            ok = n is not None and bool(_VAR_RE.match(n))
+            out[k] = n or v
+        elif k == "po":
+            ok = any(v in _PO_RE.findall(d["text"]) for d in docs)
+        elif k == "date":
+            try:
+                ok = _DATE_RANGE[0] <= date.fromisoformat(v) <= _DATE_RANGE[1]
+            except ValueError:
+                ok = False
+        else:
+            ok = False
+        if not ok:
+            bad.append(k)
+    if not bad and _vars_match_iban(out, canonical_json(out).decode(), _vendors(store)):
+        bad = sorted(vars_)
+    return out, bad
+
+
+def _live_proposals(*, store: Any, settings: Any) -> list[dict[str, Any]]:
+    rows = _executor("GET", "/proposals", None, store=store, settings=settings)["proposals"]
+    return [r for r in rows if r.get("status") in ("EXECUTED", "PENDING_SIG")]
+
+
+def _norm_no(v: Any) -> str:
+    return re.sub(r"\s", "", str(v or "")).upper()
+
+
+def _unbound(inv: dict[str, Any]) -> bool:
+    """No invoice number of its own (the DOC-<doc id> fallback, or none recorded)."""
+    no = inv.get("invoice_no")
+    return not no or no == "DOC-" + str(inv.get("invoice_ref", ""))[4:]
+
+
+def _vendor_of(r: dict[str, Any]) -> Any:
+    return (r.get("invoice") or {}).get("vendor_id") or r.get("vendor_id")
+
+
+def _same_invoice(r: dict[str, Any], inv: dict[str, Any]) -> bool:
+    """Does live proposal `r` pay (part of) the invoice `inv`? Same document; or the same email (body and attachments
+    describe one invoice unless they carry different invoice numbers); or, across emails, the same vendor with the
+    same invoice number. A shared VS alone
+    does not make two invoices one: some vendors use a constant VS (a customer number)."""
+    ri = r.get("invoice") or {}
+    if ri.get("invoice_ref") == inv["invoice_ref"]:
+        return True
+    same_no = bool(ri.get("invoice_no")) and _norm_no(ri.get("invoice_no")) == _norm_no(inv.get("invoice_no"))
+    if inv.get("email_id") and ri.get("email_id") == inv["email_id"]:
+        return _unbound(ri) or _unbound(inv) or same_no
+    return _vendor_of(r) == inv.get("vendor_id") and same_no
+
+
+def _norm_vs(v: Any) -> str:
+    """VS as a number: leading zeros carry no meaning ('0020260412' == '20260412')."""
+    return str(v or "").strip().lstrip("0")
+
+
+def _others(draft: dict[str, Any], drafts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [d for d in drafts if d["doc_id"] != draft["doc_id"]]
+
+
+def _invoice_cap(draft: dict[str, Any], drafts: list[dict[str, Any]]) -> int:
+    """The amount PARTIALs of this invoice add up against: the largest amount among the email's documents with the
+    same (email-bound) invoice number; the email's largest amount when the document has no number of its own. Two
+    invoices with different numbers in one email are capped separately."""
+    key = _norm_no(bind_to_email(draft, _others(draft, drafts))["fields"]["invoice_no"])
+    group = [d for d in drafts
+             if not key or _norm_no(bind_to_email(d, _others(d, drafts))["fields"]["invoice_no"]) == key]
+    return max(a for d in [draft, *group] if (a := d["fields"]["amount_minor"]) is not None)
+
+
+def _check_cumulative(inv: dict[str, Any], doc_amount: int, *, store: Any, settings: Any,
+                      rows: list[dict[str, Any]] | None = None) -> None:
+    """PARTIAL cannot add up past the invoice: live proposals (EXECUTED/PENDING_SIG) of the same invoice
+    (_same_invoice: same document, same email, or a reminder of it in another email) count against doc_amount."""
+    rows = _live_proposals(store=store, settings=settings) if rows is None else rows
+    prior = sum(int(r["invoice"]["amount_minor"]) for r in rows if _same_invoice(r, inv))
+    if prior + int(inv["amount_minor"]) > doc_amount:
+        raise DocMismatch(["T-AMOUNT-MISMATCH"],
+                          f"amount {inv['amount_minor']} + earlier proposals {prior} > document {doc_amount}")
+
+
 class DocMismatch(ApiError):
     """payment.propose args disagree with the provenance-hashed document (P3 extended to amounts)."""
 
@@ -216,15 +423,33 @@ class DocMismatch(ApiError):
         self.rule_ids = rule_ids
 
 
+_SIBLING_FIELDS = ("invoice_no", "issue_date", "supplier_ico")
+
+
+def bind_to_email(draft: dict[str, Any], siblings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The draft with invoice_no / issue_date / supplier_ico taken from the other documents of the same email when
+    it lacks them (exactly one distinct value there, else left empty): the body and the ISDOC attachment of one
+    email are one invoice, so I-DUP and the ICO check see the same values whichever document the agent cites."""
+    fields = dict(draft["fields"])
+    for k in _SIBLING_FIELDS:
+        values = {v for s in siblings if (v := s["fields"].get(k))}
+        if not fields.get(k) and len(values) == 1:
+            fields[k] = values.pop()
+    return {**draft, "fields": fields}
+
+
 def invoice_from_document(args: dict[str, Any], draft: dict[str, Any], vendor: dict[str, Any], *,
-                          settings: Any) -> tuple[dict[str, Any], list[str]]:
+                          settings: Any, siblings: list[dict[str, Any]] | None = None
+                          ) -> tuple[dict[str, Any], list[str]]:
     """Build the proposal invoice from the document, never from the agent (P3 for amounts, VS, dates).
 
     The agent's amount/currency/vs/due/invoice_no only have to *agree* with the document: any disagreement raises
     DocMismatch (T-AMOUNT-MISMATCH for the amount, T-DOC-MISMATCH otherwise) and nothing reaches the executor.
     amount_minor below the document amount is allowed only with reason_code PARTIAL. A document without an amount
-    fails closed (T-DOC-MISSING). Returns (invoice, WARN rule ids for fallbacks).
+    fails closed (T-DOC-MISSING). Missing invoice_no / issue_date / supplier_ico come from the other documents of the
+    same email (`siblings`, bind_to_email). Returns (invoice, WARN rule ids for fallbacks).
     """
+    draft = bind_to_email(draft, siblings or [])
     f = draft["fields"]
     problems = extract.check_against_document(draft, args, vendor.get("ico"))
     if problems:
@@ -237,11 +462,11 @@ def invoice_from_document(args: dict[str, Any], draft: dict[str, Any], vendor: d
         warn.append("T-ISSUEDATE-FALLBACK")
         issue = f["due_date"] or now(settings).strftime("%Y-%m-%d")
     inv: dict[str, Any] = {"vendor_id": args["vendor_id"], "invoice_ref": draft["doc_id"],
-                           "invoice_no": f["invoice_no"] or args["invoice_no"], "issue_date": issue,
+                           "invoice_no": f["invoice_no"] or "DOC-" + draft["doc_id"][4:], "issue_date": issue,
                            "amount_minor": amount, "currency": f["currency"], "reason_code": args["reason_code"],
                            "attachment_sha256": draft["sha256"]}
-    if not f["invoice_no"]:
-        warn.append("T-INVOICENO-AGENT")
+    if not f["invoice_no"]:  # never the agent's (I-DUP keys on it): bound to the document id instead
+        warn.append("T-INVOICENO-DOCID")
     if f["vs"]:
         inv["vs"] = f["vs"]
     if f["due_date"]:
@@ -257,13 +482,39 @@ class _Strict(dict):
 def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) -> dict[str, Any]:
     """Check manifest hash, evaluate the Cedar tool policy (A2), log a tool_call leaf, call the executor
     with the tools role (no token passthrough), mask IBANs to '..<last4>' in vendor.lookup results."""
-    args = dict(request.get("args") or {})
     spec = TOOL_MANIFEST.get(name)
     effect = spec["effect"] if spec else ("decoy" if name in DECOY_TOOLS else "unknown")
     untrusted = effect == "read_untrusted"
+    problem = _request_problem(request)
+    if problem:  # before anything is reserved: no 'pending' row, one logged leaf, 400
+        seq = _log_invalid(name, request, untrusted=untrusted, store=store, settings=settings)
+        raise ApiError(ErrorCode.INVALID_REQUEST, problem, {"rule_ids": [], "seq": seq})
+    args = dict(request.get("args") or {})
     log = lambda result, rule_ids: _log(name, request, result, rule_ids, untrusted=untrusted,  # noqa: E731
                                         store=store, settings=settings)
 
+    history = _history(store, request["session_id"])
+    if not _reserve(name, request, store=store, settings=settings):
+        seq = _log(name, request, "forbidden", ["T-STEP-REUSE"], untrusted=untrusted, store=store, settings=settings,
+                   row=False)
+        raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, f"step {request['step']} already used in this session",
+                       {"rule_ids": ["T-STEP-REUSE"], "seq": seq})
+    try:
+        return _call_reserved(name, request, args, spec, effect, history, log, store=store, settings=settings)
+    except Exception:
+        key = {"session_id": request["session_id"], "sk": f"{request['step']:06d}"}
+        if (store.get("tool_calls", key) or {}).get("result") == "pending":  # never leave a stale 'pending' row
+            try:
+                log("error", [])
+            except Exception:  # noqa: BLE001 - the row at least must not stay pending
+                store.put("tool_calls", {**key, "tool": name, "result": "error", "rule_ids": [],
+                                         "untrusted_read": untrusted, "at": now(settings).strftime(_AT_FMT)})
+        raise
+
+
+def _call_reserved(name: str, request: dict[str, Any], args: dict[str, Any], spec: dict[str, Any] | None,
+                   effect: str, history: list[dict[str, Any]], log: Any, *, store: Any,
+                   settings: Any) -> dict[str, Any]:
     if request["manifest_sha256"] != manifest_sha256():
         seq = log("forbidden", ["T-MANIFEST"])
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, "tool manifest hash mismatch",
@@ -273,30 +524,72 @@ def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) 
         raise ApiError(ErrorCode.NOT_FOUND, f"unknown tool {name}")
 
     vendors = _vendors(store)
-    history = _history(store, request["session_id"])
-    ctx = _context(name, args, history, int(request["step"]), vendors)
+    ctx = _context(name, args, history, int(request["step"]), vendors, effect=effect, store=store, settings=settings)
     allowed, rule_ids = tool_policy.authorize(name, effect=effect, mode=str(request.get("mode", "unknown")),
                                               session_id=request["session_id"], context=ctx)
     if not allowed:
         seq = log("forbidden", rule_ids)
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, f"tool {name} forbidden for Agent",
                        {"rule_ids": rule_ids, "seq": seq})
-    if ctx["untrusted_read_recent"] and effect == "propose":
+    if ctx["untrusted_read_recent"]:
         rule_ids = ["T-TAINT"]  # LOG_ONLY: recorded for F-ANOM, never blocks
 
-    hints = [{"source": "agent", "text": str(h.get("text", ""))[:200]} for h in args.pop("hints", []) or []]
     try:
+        hints = _pop_hints(name, args)
         _validate_args(name, args)
         result = _run(name, args, hints, store=store, settings=settings)
     except DocMismatch as e:
         seq = log("forbidden", rule_ids + e.rule_ids)
         raise ApiError(e.code, e.message, {"rule_ids": e.rule_ids, "seq": seq}) from e
-    except ApiError:
+    except Exception:
         log("error", rule_ids)
         raise
     rule_ids = rule_ids + (result.pop("_warn", None) or [])
     seq = log("ok", rule_ids)
     return {"result": result, "seq": seq}
+
+
+def _request_problem(request: dict[str, Any]) -> str | None:
+    """Why the request cannot be logged canonically (step not an int >= 0, floats/NaN in args), or None."""
+    step = request.get("step")
+    if type(step) is not int or step < 0:
+        return "step must be an integer >= 0"
+    if not isinstance(request.get("session_id"), str):
+        return "session_id must be a string"
+    if not isinstance(request.get("args", {}), dict):
+        return "args must be an object"
+    try:
+        canonical_json(request.get("args") or {})
+    except (TypeError, ValueError) as e:
+        return f"args are not canonical JSON ({type(e).__name__}: no floats/NaN)"
+    return None
+
+
+def _log_invalid(name: str, request: dict[str, Any], *, untrusted: bool, store: Any, settings: Any) -> int:
+    """tool_call leaf for a request that cannot be canonicalised (no tool_calls row is written)."""
+    try:
+        raw = json.dumps(request.get("args"), sort_keys=True, default=repr).encode()
+    except (TypeError, ValueError):
+        raw = repr(request.get("args")).encode()
+    step = request.get("step")
+    data = {"session_id": str(request.get("session_id")), "step": step if type(step) is int else -1, "tool": name,
+            "args_sha256": hashlib.sha256(raw).hexdigest(), "result": "error", "rule_ids": [],
+            "untrusted_read": untrusted}
+    return shims.append(shims.make_event("tool_call", data, subject_id=data["session_id"], actor="tools",
+                                         settings=settings), store=store, settings=settings)
+
+
+def _pop_hints(name: str, args: dict[str, Any]) -> list[dict[str, Any]]:
+    """Validated hints ([] if absent): at most MAX_HINTS objects, exactly {source: 'agent', text: str <= 200}."""
+    if "hints" not in TOOL_MANIFEST[name]["args"] or "hints" not in args:
+        return []
+    hints = args.pop("hints")
+    ok = isinstance(hints, list) and len(hints) <= MAX_HINTS and all(
+        isinstance(h, dict) and set(h) == {"source", "text"} and h["source"] == "agent"
+        and isinstance(h["text"], str) and len(h["text"]) <= 200 for h in hints)
+    if not ok:
+        raise ApiError(ErrorCode.INVALID_REQUEST, f"hints: at most {MAX_HINTS} {{source: 'agent', text <= 200}}")
+    return [{"source": "agent", "text": h["text"]} for h in hints]
 
 
 def _validate_args(name: str, args: dict[str, Any]) -> None:
