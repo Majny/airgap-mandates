@@ -439,6 +439,110 @@ def run_scene(name: str, *, auto_treasury: bool = True, auto_clerk: bool | None 
     return scenes.scene_s2(env) if name == "s2" else scenes.scene_s3(env)
 
 
+def _post_sig(call: Any, ch: dict, signer: "DeviceSigner") -> tuple[int, Any]:
+    from eth_account.messages import encode_defunct
+
+    sig = "0x" + signer.sign_message(encode_defunct(text=ch["text"])).signature.hex()
+    return call("POST", "/signatures", {"nonce": ch["nonce"], "role": ch["role"], "sig": sig,
+                                        "displayed_text": ch["text"]}, "host")
+
+
+def create_mandate(call: Any, clerk: "DeviceSigner", treasury: "DeviceSigner", *, log: Any = print) -> dict:
+    """Stage S1 part 1: the mandate (same terms as executor.e2e: 80000 per payment, 250000 total, 20 payments,
+    existing payees, 24 h), signed by the clerk device and then the treasury device (2/2)."""
+    from datetime import datetime, timedelta, timezone
+
+    until = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    st, r = call("POST", "/mandates", {"max_per_payment_minor": 8_000_000, "max_total_minor": 25_000_000,
+                                       "max_count": 20, "payee_scope": "existing_only", "valid_until": until,
+                                       "currency": "CZK"}, "host")
+    if st != 201:
+        raise RuntimeError(f"POST /mandates -> {st} {r}")
+    log(f"mandate {r['mandate']['mandate_id']}: sig_required={r['mandate']['sig_required']}\n{r['challenge']['text']}\n")
+    st, r = _post_sig(call, r["challenge"], clerk)
+    if st != 200:
+        raise RuntimeError(f"clerk signature -> {st} {r}")
+    log(f"clerk signed -> {r['effect']['state']}")
+    if r.get("challenge"):
+        st, r = _post_sig(call, r["challenge"], treasury)
+        if st != 200:
+            raise RuntimeError(f"treasury signature -> {st} {r}")
+    m = r["mandate"]
+    log(f"mandate {m['mandate_id']} -> {m['status']}")
+    return m
+
+
+def pay_up(call: Any, clerk: "DeviceSigner", *, vendor_id: str | None = None, replay: bool = True,
+           log: Any = print) -> list[dict]:
+    """Stage S1 part 3: every PENDING_SIG proposal (optionally one vendor's) is exact-signed on the clerk device;
+    then the captured signature is re-sent once to show the replay refusal (nonce_reused)."""
+    q = "/proposals?status=PENDING_SIG" + (f"&vendor_id={vendor_id}" if vendor_id else "")
+    st, r = call("GET", q, None, "host")
+    if st != 200:
+        raise RuntimeError(f"GET {q} -> {st} {r}")
+    pending = r.get("proposals", [])
+    if not pending:
+        log("no proposal is waiting for a signature (nothing to step up)")
+    out = []
+    for p in sorted(pending, key=lambda p: p["proposal_no"]):
+        st, ch = call("GET", f"/challenges/{p['challenge_nonce']}", None, "host")
+        if st != 200:
+            raise RuntimeError(f"GET /challenges/{p['challenge_nonce']} -> {st} {ch}")
+        inv = p.get("invoice", {})
+        log(f"proposal {p['proposal_id']} {inv.get('vendor_id')} {inv.get('amount_minor', 0) / 100:.2f} "
+            f"{inv.get('currency')} -> step-up; device shows:\n{ch['text']}\n")
+        st, res = _post_sig(call, ch, clerk)
+        if st != 200:
+            raise RuntimeError(f"step-up signature -> {st} {res}")
+        eff = res.get("effect", {})
+        log(f"clerk held to confirm -> {eff.get('type')} {eff.get('tx_id', '')}")
+        if replay:
+            st, e = _post_sig(call, ch, clerk)
+            log(f"replay of the same signature -> {st} {e.get('error') if isinstance(e, dict) else e}")
+            if (st, e.get("error") if isinstance(e, dict) else None) != (403, "nonce_reused"):
+                raise RuntimeError(f"replay was not refused: {st} {e}")
+        out.append(res)
+    return out
+
+
+def run_agent_s1(*, log: Any = print) -> dict:
+    """Stage S1 part 2: WS-E's agent beat on AWS (`python -m agent run --scenario s1`, agent λ in the no-NAT VPC)."""
+    import json
+    import subprocess
+    import sys as _sys
+
+    p = subprocess.run([_sys.executable, "-m", "agent", "run", "--scenario", "s1", "--json"], capture_output=True,
+                       text=True, timeout=400)
+    if p.returncode != 0:
+        raise RuntimeError(f"agent beat failed ({p.returncode}): {p.stderr.strip()[-400:]}")
+    try:
+        out = json.loads(p.stdout)
+    except ValueError:
+        out = {"raw": p.stdout.strip()[-800:]}
+    log("agent beat done")
+    return out
+
+
+def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = True, auto_clerk: bool | None = None,
+                 vendor_id: str | None = None) -> dict:
+    """The stage S1 beat as one: mandate (device 2/2) -> the real agent pays under it -> device step-up -> replay."""
+    clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
+    call = executor_call(url)
+    print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
+    m = create_mandate(call, clerk, treasury)
+    agent = run_agent_s1() if with_agent else None
+    st, led = call("GET", "/ledger", None, "host")
+    paid = [t for t in (led.get("txs", []) if st == 200 else []) if (t.get("authorization") or {}).get("kind") == "mandate"]
+    for t in paid:
+        print(f"paid under mandate: {t['vendor_id']} {t['amount_minor'] / 100:.2f} {t.get('currency', 'CZK')} "
+              f"{t['tx_id']}")
+    steps = pay_up(call, clerk, vendor_id=vendor_id)
+    st, mm = call("GET", "/mandates/active", None, "host")
+    if st == 200:
+        print(f"mandate spent {mm['spent_minor'] / 100:.2f} CZK in {mm['count']} payments (the step-up is outside it)")
+    return {"mandate": m["mandate_id"], "paid_under_mandate": len(paid), "stepups": len(steps), "agent": agent}
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import json
@@ -449,6 +553,14 @@ def main(argv: list[str] | None = None) -> int:
     s1.add_argument("--manual-treasury", action="store_true", help="operate the treasury emulator by hand")
     s1.add_argument("--manual-clerk", action="store_true", help="fallback mode: operate the clerk emulator by hand")
     s1.add_argument("--url", default=None, help="drive a running executor (e.g. the AWS regional API) instead")
+    s1.add_argument("--with-agent", action="store_true",
+                    help="stage S1: mandate on the device, the real agent pays (make agent-s1), device step-up")
+    md = sub.add_parser("mandate", help="stage S1 part 1: create the mandate and sign it on the devices (2/2)")
+    md.add_argument("--url", default=None)
+    pu = sub.add_parser("payup", help="stage S1 part 3: exact-sign every PENDING_SIG proposal on the clerk device")
+    pu.add_argument("--url", default=None)
+    pu.add_argument("--vendor", default=None, help="only this vendor_id's pending proposals")
+    pu.add_argument("--no-replay", action="store_true", help="skip the replay-refused demonstration")
     sc = sub.add_parser("sign", help="GET /challenges/{nonce}, sign on the device, POST /signatures")
     sc.add_argument("nonce")
     sc.add_argument("role", choices=sorted(ROLE_PATHS))
@@ -462,7 +574,18 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("info", help="show the connected devices and the mode")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
-    if a.cmd == "s1":
+    if a.cmd == "s1" and a.with_agent:
+        if not a.url:
+            ap.error("--with-agent needs --url (the agent beat runs on AWS)")
+        run_stage_s1(a.url, auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None)
+        print("\nSTAGE S1 OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
+    elif a.cmd == "mandate":
+        clerk, treasury = demo_signers()
+        create_mandate(executor_call(a.url), clerk, treasury)
+    elif a.cmd == "payup":
+        clerk, _ = demo_signers()
+        pay_up(executor_call(a.url), clerk, vendor_id=a.vendor, replay=not a.no_replay)
+    elif a.cmd == "s1":
         run_s1(auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None, url=a.url)
         print("\nS1 WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
     elif a.cmd == "scene":
