@@ -170,7 +170,18 @@ def proposal_state(ctx: Context, vendor_id: str, now: datetime, *, exclude: str 
             "reg_hit": _reg_hit(ctx, payee, mandate)}
 
 
-def _evaluate(ctx: Context, pid: str, invoice: dict, hints: list, now: datetime, *, exclude: str | None = None):
+def _session_log(ctx: Context, body: dict, action: str, now: datetime) -> list | None:
+    """FACTS-2: the agent session's own tool-call log (+ the in-flight action) for F-ANOM, when the tools λ forwarded
+    session_id/step; None otherwise (F-ANOM then scores an empty log)."""
+    if not body.get("session_id"):
+        return None
+    from executor.facts import anom
+
+    return anom.session_log(body["session_id"], store=ctx.store, action=action, step=body.get("step"), now=now)
+
+
+def _evaluate(ctx: Context, pid: str, invoice: dict, hints: list, now: datetime, *, exclude: str | None = None,
+              tool_log: list | None = None):
     state = proposal_state(ctx, invoice["vendor_id"], now, exclude=exclude)
     subject = {"proposal_id": pid, "invoice": invoice}
     extra: dict[str, Any] = {}
@@ -180,7 +191,7 @@ def _evaluate(ctx: Context, pid: str, invoice: dict, hints: list, now: datetime,
         extra = inbox.email_state(invoice["email_id"], store=ctx.store, settings=ctx.settings)
     facts = shims.compute_facts({"kind": "proposal", "subject_id": pid, "proposal_id": pid, "invoice": invoice,
                                  "hints": hints, "email_id": invoice.get("email_id")},
-                                {**state, **extra, "snapshots": None, "tool_log": None, "change": None,
+                                {**state, **extra, "snapshots": None, "tool_log": tool_log, "change": None,
                                  "data_dir": ctx.settings.data_dir}, now)
     policy = rules.policy_material()
     dec = decide_mod.decide(subject, facts, state, policy)
@@ -223,7 +234,8 @@ def post_proposals(ctx: Context, p: dict, q: dict, body: Any, principal: str | N
         raise _not_found(f"vendor {inv['vendor_id']}")
     no = st.increment("counters", {"name": "proposal_no"}, "value")
     pid = f"prp_{no}"
-    state, subject, facts, dec, dg = _evaluate(ctx, pid, inv, hints, now)
+    state, subject, facts, dec, dg = _evaluate(ctx, pid, inv, hints, now,
+                                               tool_log=_session_log(ctx, body, "payment.propose", now))
     _log(ctx, "proposal", {"proposal_id": pid, "invoice": inv, "hints": hints}, pid, dg, actor="tools")
     _log(ctx, "facts", {"subject_id": pid, "facts": facts["facts"], "snapshots": facts["snapshots"]}, pid, dg)
     _log(ctx, "decision", {"subject_id": pid, "decision": dec["decision"], "rule_ids": dec["rule_ids"],
@@ -304,10 +316,16 @@ def post_changes(ctx: Context, p: dict, q: dict, body: Any, principal: str | Non
     vendor = st.get("registry", {"vendor_id": body["vendor_id"]})
     if vendor is None:
         raise _not_found(f"vendor {body['vendor_id']}")
-    facts = shims.compute_facts({"kind": "change", **body}, {"payee": vendor, "mandate": None, "history": [],
-                                                             "snapshots": None, "tool_log": None, "change": None,
-                                                             "data_dir": ctx.settings.data_dir}, now)
-    c = _machine().create(body, facts, vendor, store=st, settings=ctx.settings, now=now)
+    tool_log = _session_log(ctx, body, "payee.request_change", now)
+    req = {k: v for k, v in body.items() if k not in ("session_id", "step")}
+    facts = shims.compute_facts({"kind": "change", **req}, {"payee": vendor, "mandate": None, "history": [],
+                                                            "snapshots": None, "tool_log": tool_log, "change": None,
+                                                            "data_dir": ctx.settings.data_dir}, now)
+    import inspect
+
+    machine = _machine()
+    kw = {"tool_log": tool_log} if "tool_log" in inspect.signature(machine.create).parameters else {}
+    c = machine.create(req, facts, vendor, store=st, settings=ctx.settings, now=now, **kw)
     c = _change_out(c)
     cf = c.get("facts") or facts["facts"]  # the FSM's own FactSet is authoritative for the change
     f_only = [f for f in cf if f["kind"] == "F"]
