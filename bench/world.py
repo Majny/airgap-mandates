@@ -29,7 +29,7 @@ def iban_from_bban(cc: str, bban: str) -> str:
 
 def iban_valid(iban: str) -> bool:
     s = iban.replace(" ", "").upper()
-    if len(s) < 15 or not s[:2].isalpha():
+    if len(s) < 15 or not s[:2].isalpha() or not s.isalnum():
         return False
     digits = "".join(str(int(ch, 36)) for ch in (s[4:] + s[:4]))
     return int(digits) % 97 == 1

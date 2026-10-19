@@ -99,13 +99,21 @@ def run_matrix(arms: list[str], tasks: list[dict[str, Any]], *, out: str, model:
             fh.write(json.dumps({"case_id": r["case_id"], "human_policy": r["human_policy"],
                                  "agent_mode": r["agent_mode"], **r["_extra"]}) + "\n")
     meta = {"git_sha": sha, "model": model, "arms": arms, "n_jobs": len(jobs), "n_rows": len(rows),
-            "errors": errors, "a3_gate": "ref (bench twin of executor rules; executor not yet merged)",
+            "errors": errors, "a3_gate": _a3_gate_meta(),
             "agent": "bench.agent_loop", "modes": list(modes),
             "extractor": "bench.agent_loop.extract (quarantined mode)", "humans": "model of a human, not a user study",
             "system_prompt": __import__("bench.agent_loop", fromlist=["SYSTEM_PROMPT"]).SYSTEM_PROMPT}
     (Path(out) / f"{stem}.meta.json").write_text(json.dumps(meta, indent=1))
     print(f"wrote {stem}: {len(rows)} rows, {len(errors)} errors")
     return rows
+
+
+def _a3_gate_meta() -> dict[str, str]:
+    from bench import arms
+    if arms.A3_GATE != "executor":
+        return {"all": "ref (bench twin of executor rules)"}
+    from bench.executor_gate import gate_parts
+    return gate_parts()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -117,8 +125,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--a3-gate", default="executor", choices=["executor", "ref"])
     ap.add_argument("--modes", default="naive", help="A3 agent modes: naive,quarantined")
     a = ap.parse_args(argv)
+    from bench import arms
+    arms.A3_GATE = a.a3_gate
     tasks = load_scenarios(a.cases)
     if a.limit:
         tasks = tasks[: a.limit]

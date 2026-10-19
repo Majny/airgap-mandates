@@ -106,7 +106,7 @@ class Episode:
 
     def __post_init__(self) -> None:
         if self.cfg.airgap and self.gate is None:
-            self.gate = RefAirGap(self)
+            self.gate = make_a3_gate(self)
 
     def call(self, wire: str, args: dict[str, Any]) -> dict[str, Any]:
         tool = next((t for t in list(TOOL_MANIFEST) + list(_LEGACY_EXTRA) if wire_name(t) == wire), wire)
@@ -253,6 +253,16 @@ class Episode:
         shown = compromised.lie(view) if self.ui_lies else view
         self.world.challenges.append({"channel": "ui", "kind": view["kind"], "lied": self.ui_lies})
         return humans.decide(self.human_policy, shown, self.truth)
+
+
+A3_GATE = "executor"  # "executor" (real dispatch, memory backend) | "ref" (bench twin)
+
+
+def make_a3_gate(ep: Episode) -> Any:
+    if A3_GATE == "executor":
+        from bench.executor_gate import ExecutorGate
+        return ExecutorGate(ep)
+    return RefAirGap(ep)
 
 
 class RefAirGap:
