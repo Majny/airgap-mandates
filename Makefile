@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv test test-render dev ui bench verify contracts lint ci lock deploy teardown
+.PHONY: help venv test test-render dev ui bench verify e2e contracts lint ci lock deploy teardown
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -36,6 +36,9 @@ ui:  ## run Streamlit host UI
 
 bench:  ## run AgentPayBench
 	$(PY) -m bench.run_bench --out bench/results
+
+e2e:  ## demo beat S1 end to end (memory backend; URL=http://127.0.0.1:8000 CLERK_KEY= TREASURY_KEY= to drive a server)
+	$(PY) -m executor.e2e $(if $(URL),--url $(URL) --clerk-key $(CLERK_KEY) --treasury-key $(TREASURY_KEY))
 
 verify:  ## verify an audit export offline
 	$(PY) -m tools.verify_audit
