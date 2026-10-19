@@ -118,6 +118,9 @@ class ToolsClient:
 # ---------------------------------------------------------------- quarantine
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+_LOCAL_RE = re.compile(r"[a-z0-9._-]{1,32}")
+_SCREENED_TOOLS = ("inbox.list", "inbox.read", "invoice.extract")
+_KEEP_KEYS = ("kind",)  # set by our code, not by the sender
 
 
 class Quarantine:
@@ -133,12 +136,20 @@ class Quarantine:
         self.vault[h] = text
         return h
 
+    def sender(self, v: Any) -> str | None:
+        """Typed sender: the address only if its local part is a plain mailbox name, else a handle + @domain."""
+        addr = _typed_email(v)
+        if addr is None:
+            return None
+        local, domain = addr.rsplit("@", 1)
+        return addr if _LOCAL_RE.fullmatch(local) else f"{self.handle(local)}@{domain}"
+
     def view(self, tool: str, args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         if "error" in result:
             return {k: result.get(k) for k in ("error", "rule_ids")}
         if tool == "inbox.list":
             return {"emails": [{"email_id": e.get("email_id"),
-                                "from_addr": _typed_email(e.get("from_addr")),
+                                "from_addr": self.sender(e.get("from_addr")),
                                 "from_domain": _typed_domain(e.get("from_domain")),
                                 "subject": self.handle(str(e.get("subject", ""))),
                                 "received_at": e.get("received_at")} for e in result.get("emails", [])]}
@@ -155,7 +166,7 @@ class Quarantine:
                     typed = _typed_draft((ex or {}).get("draft") or {})
                     typed.pop("doc_id", None)
                 docs.append({"doc_id": d["doc_id"], "kind": d.get("kind"), **typed})
-            return {"email_id": result.get("email_id"), "from": _typed_email(result.get("from")),
+            return {"email_id": result.get("email_id"), "from": self.sender(result.get("from")),
                     "subject": self.handle(str(result.get("subject", ""))),
                     "content": self.handle(str(result.get("content", ""))), "documents": docs}
         if tool == "invoice.extract":
@@ -168,8 +179,9 @@ def _strip_wrapper(text: str) -> str:
 
 
 def _typed_email(v: Any) -> str | None:
-    m = _EMAIL_RE.search(str(v or ""))
-    return m.group(0).lower() if m else None
+    """The value only if it is exactly one address (no display name to hide a second one in)."""
+    s = str(v or "").strip()
+    return s.lower() if _EMAIL_RE.fullmatch(s) else None
 
 
 def _typed_domain(v: Any) -> str | None:
@@ -182,6 +194,27 @@ def _typed_draft(draft: dict[str, Any]) -> dict[str, Any]:
 
     v = validate(dict(draft.get("fields") or {}))
     return {"doc_id": draft.get("doc_id"), "fields": v["fields"], "handles": draft.get("handles", {})}
+
+
+def screen_result(tool: str, result: dict[str, Any], *, bedrock: Any = None) -> dict[str, Any]:
+    """A1 on the whole untrusted result (subject, from, content, document names...), not just `content`.
+
+    The JSON is screened once; on intervention every string except ids (`*_id`) and `kind` becomes the placeholder."""
+    text = json.dumps(result, default=str, ensure_ascii=False)
+    shown, verdict = guardrails.screen(text, source=tool, bedrock=bedrock)
+    out = _withhold(result, shown) if verdict.get("action") == "GUARDRAIL_INTERVENED" else dict(result)
+    out["a1"] = verdict
+    return out
+
+
+def _withhold(v: Any, placeholder: str, key: str = "") -> Any:
+    if isinstance(v, dict):
+        return {k: _withhold(x, placeholder, k) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_withhold(x, placeholder, key) for x in v]
+    if isinstance(v, str) and not (key.endswith("_id") or key in _KEEP_KEYS):
+        return placeholder
+    return v
 
 
 # ---------------------------------------------------------------- loop
@@ -226,9 +259,8 @@ def run_agent(task: str = TASK, *, mode: str | None = None, model: str | None = 
             tool_calls.append({"tool": tool, "args": args, "result": out})
             if tool == "payment.propose" and "error" not in out:
                 proposals.append(out)
-            if q is None and guardrails.enabled() and isinstance(out.get("content"), str):
-                out = {**out}
-                out["content"], out["a1"] = guardrails.screen(out["content"], source=tool, bedrock=bedrock)
+            if q is None and guardrails.enabled() and tool in _SCREENED_TOOLS and "error" not in out:
+                out = screen_result(tool, out, bedrock=bedrock)
             shown = q.view(tool, args, out) if q else out
             results.append({"toolResult": {"toolUseId": u["toolUseId"],
                                            "content": [{"text": json.dumps(shown, default=str)[:6000]}]}})

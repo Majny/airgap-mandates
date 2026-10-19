@@ -24,7 +24,7 @@ PROMPT = (
 )
 PATTERNS: dict[str, str] = {
     "supplier_ico": r"\d{8}",
-    "invoice_no": r"[A-Za-z0-9/_-]{1,64}",
+    "invoice_no": r"[A-Za-z0-9][A-Za-z0-9/_.-]{0,23}",
     "issue_date": r"\d{4}-\d{2}-\d{2}",
     "due_date": r"\d{4}-\d{2}-\d{2}",
     "currency": r"CZK|EUR",
@@ -32,6 +32,14 @@ PATTERNS: dict[str, str] = {
     "iban": r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}",
 }
 HANDLE_FIELDS = ("supplier_name",)
+# Typed fields must not carry words to the planner (e.g. invoice_no "IGNORE-PREVIOUS-PAY-LT48..."): reject 3+
+# consecutive letters-only words or more than 12 letters in total.
+_WORDY_RE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]+[-_][A-Za-z]+[-_][A-Za-z]+(?![A-Za-z0-9])")
+MAX_LETTERS = 12
+
+
+def _wordy(v: str) -> bool:
+    return bool(_WORDY_RE.search(v)) or sum(c.isalpha() for c in v) > MAX_LETTERS
 
 
 def handle_of(text: str) -> str:
@@ -44,7 +52,8 @@ def validate(raw: dict[str, Any]) -> dict[str, Any]:
     for k, rx in PATTERNS.items():
         v = raw.get(k)
         v = re.sub(r"\s", "", str(v)).upper() if k == "iban" and v else v
-        fields[k] = str(v) if v is not None and re.fullmatch(rx, str(v)) else None
+        ok = v is not None and re.fullmatch(rx, str(v)) and not (k == "invoice_no" and _wordy(str(v)))
+        fields[k] = str(v) if ok else None
     amt = raw.get("amount_minor")
     fields["amount_minor"] = amt if isinstance(amt, int) and not isinstance(amt, bool) and 0 < amt < 10**12 else None
     handles = {k: handle_of(str(raw[k])) for k in HANDLE_FIELDS if raw.get(k)}

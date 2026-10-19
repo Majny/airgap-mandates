@@ -186,7 +186,163 @@ def test_spayd_body_uses_warn_fallbacks():
     # body has SPAYD (amount, VS, due) but no issue date or invoice number: allowed with WARN fallbacks
     assert st == 200, r
     leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
-    assert {"T-ISSUEDATE-FALLBACK", "T-INVOICENO-AGENT"} <= set(leaf["data"]["rule_ids"])
+    assert {"T-ISSUEDATE-FALLBACK", "T-INVOICENO-DOCID"} <= set(leaf["data"]["rule_ids"])
+    prop = h.store.scan("proposals")[0]
+    assert prop["invoice"]["invoice_no"] == "DOC-" + body_id[4:]  # never the agent's invoice_no
+
+
+def test_partial_cannot_repeat_past_the_document():
+    """#6: invoice_no is bound to the document and PARTIAL proposals add up against the document amount."""
+    h = ToolHarness()
+    h.mandate()
+    st, r = h.tool("inbox.read", {"email_id": "eml_0001"})
+    body_id = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "body")
+    st, r = h.tool("payment.propose", _propose_args(body_id, invoice_no="AGENT-1", amount_minor=700000,
+                                                    reason_code="PARTIAL"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    # a fresh agent invoice_no used to defeat I-DUP; now the invoice_no is the document's, so I-DUP sees the repeat
+    st, r = h.tool("payment.propose", _propose_args(body_id, invoice_no="AGENT-2", amount_minor=700000,
+                                                    reason_code="PARTIAL"))
+    assert st == 200 and r["result"]["decision"] == "deny" and "I-DUP" in r["result"]["rule_ids"], r
+    # and PARTIALs cannot add up past the document amount (1 450 000) whatever the executor decides
+    st, r = h.tool("payment.propose", _propose_args(body_id, invoice_no="AGENT-3", amount_minor=800000,
+                                                    reason_code="PARTIAL"))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+    props = h.store.scan("proposals")
+    assert {p["invoice"]["invoice_no"] for p in props} == {"DOC-" + body_id[4:]}
+    assert sum(p["invoice"]["amount_minor"] for p in props if p["status"] == "EXECUTED") == 700000
+
+
+def test_cumulative_check_counts_live_proposals_only():
+    from executor.tools.handler import DocMismatch, _check_cumulative
+
+    h = ToolHarness()
+    ref = "doc_00000000000000aa"
+    for i, (status, amt) in enumerate((("EXECUTED", 600), ("PENDING_SIG", 300), ("DENIED", 900), ("EXPIRED", 900))):
+        h.store.put("proposals", {"proposal_id": f"prp_x{i}", "proposal_no": 100 + i, "vendor_id": "ven_12345678",
+                                  "status": status, "invoice": {"invoice_ref": ref, "amount_minor": amt},
+                                  "gsi1pk": "vendor#ven_12345678", "gsi1sk": f"2026-10-19T00:00:0{i}Z"})
+    inv = {"vendor_id": "ven_12345678", "invoice_ref": ref, "amount_minor": 100}
+    _check_cumulative(inv, 1000, store=h.store, settings=h.settings)  # 600 + 300 + 100 = 1000
+    import pytest
+
+    with pytest.raises(DocMismatch):
+        _check_cumulative({**inv, "amount_minor": 101}, 1000, store=h.store, settings=h.settings)
+
+
+def test_step_reuse_rejected_and_rows_not_overwritten():
+    """#13b: a reused (session_id, step) is refused and logged; the original tool_calls row stays."""
+    h = ToolHarness()
+    st, r = h.tool("inbox.read", {"email_id": "eml_0001"})
+    assert st == 200
+    h.step -= 1
+    st, r = h.tool("inbox.list")
+    assert st == 403 and r["details"]["rule_ids"] == ["T-STEP-REUSE"], r
+    row = h.store.get("tool_calls", {"session_id": "ses_t", "sk": f"{h.step:06d}"})
+    assert row["tool"] == "inbox.read" and row["untrusted_read"] is True
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert leaf["data"]["result"] == "forbidden" and leaf["data"]["rule_ids"] == ["T-STEP-REUSE"]
+
+
+def _session_call(h: ToolHarness, session: str, step: int, name: str, args: dict):
+    return h.call("POST", f"/tools/{name}", {"session_id": session, "step": step, "args": args,
+                                             "manifest_sha256": manifest_sha256()}, "agent")
+
+
+def test_lookup_rate_is_per_principal_across_sessions():
+    """#13a: a fresh session_id per call no longer resets T-LOOKUP-RATE."""
+    h = ToolHarness()
+    for i in range(5):
+        st, r = _session_call(h, f"ses_{i}", 1, "vendor.lookup", {"vendor_id": "ven_12345678"})
+        assert st == 200, r
+    st, r = _session_call(h, "ses_new", 1, "vendor.lookup", {"vendor_id": "ven_12345678"})
+    assert st == 403 and r["details"]["rule_ids"] == ["T-LOOKUP-RATE"]
+    later = ToolHarness.__new__(ToolHarness)  # same store, clock 11 minutes on: the window has rolled
+    later.__dict__.update(h.__dict__)
+    from executor import handler
+    from executor.config import Settings
+
+    later.settings = Settings(backend="memory", fake_now="2026-10-19T12:11:00Z", data_dir=h.settings.data_dir)
+    later.ctx = handler.Context(later.settings, h.store)
+    st, r = _session_call(later, "ses_later", 1, "vendor.lookup", {"vendor_id": "ven_12345678"})
+    assert st == 200, r
+
+
+def test_taint_window_by_time_across_sessions():
+    """#13c: an untrusted read in another session or many steps earlier still taints a proposal within 120 s."""
+    h = ToolHarness()
+    h.mandate()
+    doc_id = _isdoc_doc_id(h)  # session ses_t, step 1
+    st, r = _session_call(h, "ses_other", 100, "payment.propose", _propose_args(doc_id))
+    assert st == 200, r
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert "T-TAINT" in leaf["data"]["rule_ids"]
+
+
+def test_hints_validated_before_use():
+    """#18: hints are bounded and typed; a bad hint is a logged 400, not a crash."""
+    h = ToolHarness()
+    h.mandate()
+    doc_id = _isdoc_doc_id(h)
+    for hints in ([{"source": "agent", "text": "x"}] * 6, ["not-an-object"], [{"source": "agent", "text": 5}],
+                  [{"source": "agent", "text": "x", "evil": 1}], "nope"):
+        st, r = h.tool("payment.propose", _propose_args(doc_id, hints=hints))
+        assert st == 400 and r["error"] == "invalid_request", (hints, r)
+        leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+        assert leaf["data"]["tool"] == "payment.propose" and leaf["data"]["result"] == "error"
+    assert not h.store.scan("proposals")
+
+
+def test_unexpected_exception_is_logged(monkeypatch):
+    from executor.tools import handler as tools
+
+    def boom(*a, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(tools, "_run", boom)
+    h = ToolHarness()
+    st, _ = h.tool("inbox.list")
+    assert st == 500
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert leaf["data"]["tool"] == "inbox.list" and leaf["data"]["result"] == "error"
+
+
+def test_inbox_read_from_is_the_parsed_address():
+    """#14: the display name cannot smuggle a different sender address."""
+    from executor.tools.handler import _single_address
+
+    assert _single_address("fakturace@acme.cz") == "fakturace@acme.cz"
+    assert _single_address('"ceo@acme.cz" <x@evil.example>') == "x@evil.example"
+    assert _single_address("ACME <a@acme.cz>, b@evil.example") is None
+    assert _single_address("no address here") is None
+    h = ToolHarness()
+    st, r = h.tool("inbox.read", {"email_id": "eml_0001"})
+    assert r["result"]["from"] == "fakturace@acme.cz"
+
+
+def test_mail_vars_cannot_carry_digit_runs():
+    """#17: an IBAN split over several messages needs 5+ digit runs; only a known invoice_no may have one."""
+    h = ToolHarness()
+    isdoc = ISDOC.replace("<ID>FV-2026-0412</ID>", "<ID>2026041299</ID>")
+    raw = RAW.replace(ISDOC.replace("\n", "\r\n").encode(), isdoc.replace("\n", "\r\n").encode())
+    h.store.put("inbox", {"email_id": "eml_0002", "from_addr": "fakturace@acme.cz", "from_domain": "acme.cz",
+                          "subject": "Faktura", "received_at": "2026-10-19T08:00:00Z",
+                          "sha256": hashlib.sha256(raw).hexdigest(), "raw_b64": base64.b64encode(raw).decode()})
+    send = lambda tpl, **v: h.tool("mail.send_template", {"to": "fakturace@acme.cz", "template_id": tpl,  # noqa: E731
+                                                          "vars": v})
+    st, r = send("ack_invoice", invoice_no="2026041299")
+    assert st == 200, r  # a real invoice number from this supplier
+    for tpl, v in (("ack_invoice", {"invoice_no": "0800000019"}), ("ack_invoice", {"invoice_no": "20001 45399"}),
+                   ("payment_scheduled", {"invoice_no": "FV-2026-0412", "date": "65080"}),
+                   ("payment_scheduled", {"invoice_no": "FV-2026-0412", "date": "next week"}),
+                   ("query_amount", {"invoice_no": "FV-2026-0412", "po": "0800 0000"}),
+                   ("query_amount", {"invoice_no": "FV-2026-0412", "po": "PO-00001920"})):
+        st, r = send(tpl, **v)
+        assert st == 400, (v, r)
+    st, r = send("payment_scheduled", invoice_no="FV-2026-0412", date="2026-10-25")
+    assert st == 200, r
+    st, r = send("query_amount", invoice_no="FV-2026-0412", po="PO-7788")
+    assert st == 200, r
 
 
 def test_document_without_amount_fails_closed():

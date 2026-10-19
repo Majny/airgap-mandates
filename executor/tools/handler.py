@@ -1,13 +1,15 @@
 """Tools λ handler (POST /tools/{name}). CONTRACTS.md v2 §4.1 #18, §4.5. Owner: WS-E.
 
-Order per call: manifest hash pin -> known tool -> argument schema -> Cedar tool policy (A2) -> executor call with the
+Order per call: claim (session_id, step) (T-STEP-REUSE) -> manifest hash pin -> known tool -> argument schema -> Cedar tool policy (A2) -> executor call with the
 tools role (no token passthrough; in-process dispatch on memory/moto, SigV4 HTTP to the executor on aws) -> one
 `tool_call` leaf + `tool_calls` row (F-ANOM toollog). Untrusted content is returned wrapped in <untrusted> tags.
 """
 from __future__ import annotations
 
+import email.utils
 import json
 import re
+from datetime import timedelta
 from typing import Any
 
 import jsonschema
@@ -22,6 +24,10 @@ from executor.tools import policy as tool_policy
 from executor.tools.manifest import DECOY_TOOLS, TOOL_MANIFEST, manifest_sha256
 
 UNTRUSTED_WINDOW = 3  # steps; taint rule "untrusted read within the last 3 steps" (LOG_ONLY, feeds F-ANOM)
+UNTRUSTED_SECONDS = 120  # ...or any untrusted read in the last 120 s, whatever the (agent-chosen) session and step
+LOOKUP_WINDOW_MINUTES = 10  # T-LOOKUP-RATE also counts per principal over a rolling window, not only per session
+MAX_HINTS = 5
+_AT_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _IBAN_RE = re.compile(r"[A-Z]{2}\s?\d{2}(?:\s?[A-Z0-9]){11,30}", re.I)
 _REGISTRY_META_ID = "registry#meta"
 
@@ -33,6 +39,8 @@ MAIL_TEMPLATES: dict[str, str] = {
     "query_amount": "Hello, the amount on invoice {invoice_no} does not match our order {po}. Please confirm.",
 }
 _VAR_RE = re.compile(r"^[A-Za-z0-9 ._/:-]{0,40}$")
+_VAR_SHAPE = {"date": re.compile(r"^\d{4}-\d{2}-\d{2}$"), "po": re.compile(r"^PO-[A-Za-z0-9-]{1,20}$")}
+_DIGIT_RUN_RE = re.compile(r"\d{5,}")  # an IBAN split over several messages needs runs of digits
 
 
 # ---------------------------------------------------------------- executor transport
@@ -79,34 +87,63 @@ def _history(store: Any, session_id: str) -> list[dict[str, Any]]:
 
 
 def _context(name: str, args: dict[str, Any], history: list[dict[str, Any]], step: int,
-             vendors: list[dict[str, Any]]) -> dict[str, Any]:
+             vendors: list[dict[str, Any]], *, effect: str, store: Any, settings: Any) -> dict[str, Any]:
     to = str(args.get("to", ""))
     vars_text = canonical_json(args.get("vars") or {}).decode() if name == "mail.send_template" else ""
     reg_ibans = {str(v.get("iban", "")) for v in vendors}
+    lookups = 1 + sum(1 for h in history if h.get("tool") == "vendor.lookup")
+    if name == "vendor.lookup":
+        lookups = max(lookups, _lookup_window(store, settings))
     return {
         "to_allowlisted": name != "mail.send_template" or allowlist.is_allowed("send_email", to, vendors=vendors),
         "vars_match_iban": bool(_IBAN_RE.search(vars_text)) or any(i and i in vars_text for i in reg_ibans),
-        "lookup_count": 1 + sum(1 for h in history if h.get("tool") == "vendor.lookup"),
-        "untrusted_read_recent": any(h.get("untrusted_read") and step - int(h["sk"]) <= UNTRUSTED_WINDOW
-                                     for h in history),
+        "lookup_count": lookups,
+        "untrusted_read_recent": effect == "propose" and _untrusted_recent(history, step, store=store,
+                                                                            settings=settings),
     }
+
+
+def _lookup_window(store: Any, settings: Any) -> int:
+    """Count this vendor.lookup; return all lookups by the agent principal in the last 10 minutes (any session)."""
+    t = now(settings)
+    names = [f"toolrate#vendor.lookup#{(t - timedelta(minutes=i)).strftime('%Y%m%d%H%M')}"
+             for i in range(LOOKUP_WINDOW_MINUTES)]
+    total = store.increment("counters", {"name": names[0]}, "value")
+    return total + sum(int((store.get("counters", {"name": n}) or {}).get("value", 0)) for n in names[1:])
+
+
+def _untrusted_recent(history: list[dict[str, Any]], step: int, *, store: Any, settings: Any) -> bool:
+    """Untrusted read within UNTRUSTED_WINDOW steps of this session, or within UNTRUSTED_SECONDS in any session."""
+    if any(h.get("untrusted_read") and step - int(h["sk"]) <= UNTRUSTED_WINDOW for h in history):
+        return True
+    since = (now(settings) - timedelta(seconds=UNTRUSTED_SECONDS)).strftime(_AT_FMT)
+    return any(r.get("untrusted_read") and str(r.get("at", "")) >= since for r in store.scan("tool_calls"))
 
 
 def _vendors(store: Any) -> list[dict[str, Any]]:
     return [r for r in store.scan("registry") if r.get("vendor_id") != _REGISTRY_META_ID]
 
 
+def _reserve(name: str, req: dict[str, Any], *, store: Any, settings: Any) -> bool:
+    """Claim (session_id, step) before anything runs; False when the agent reuses a step (rows are never overwritten)."""
+    return store.put_if_absent("tool_calls", {"session_id": req["session_id"], "sk": f"{int(req['step']):06d}",
+                                              "tool": name, "result": "pending", "rule_ids": [],
+                                              "untrusted_read": False, "at": now(settings).strftime(_AT_FMT)}, "sk")
+
+
 def _log(name: str, req: dict[str, Any], result: str, rule_ids: list[str], *, untrusted: bool,
-         store: Any, settings: Any) -> int:
+         store: Any, settings: Any, row: bool = True) -> int:
     args_sha256 = sha256_hex(canonical_json(req.get("args") or {}))
     data = {"session_id": req["session_id"], "step": req["step"], "tool": name, "args_sha256": args_sha256,
             "result": result, "rule_ids": rule_ids, "untrusted_read": untrusted}
     seq = shims.append(shims.make_event("tool_call", data, subject_id=req["session_id"], actor="tools",
                                         settings=settings), store=store, settings=settings)
+    if not row:
+        return seq
     store.put("tool_calls", {"session_id": req["session_id"], "sk": f"{int(req['step']):06d}", "tool": name,
                              "args_sha256": args_sha256, "result": result, "rule_ids": rule_ids,
                              "untrusted_read": untrusted, "seq": seq,
-                             "at": now(settings).strftime("%Y-%m-%dT%H:%M:%SZ")})
+                             "at": now(settings).strftime(_AT_FMT)})
     return seq
 
 
@@ -144,7 +181,7 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
     if name == "inbox.read":
         raw, docs = _email_docs(args["email_id"], store=store, settings=settings)
         hdr = extract.headers(raw)
-        return {"email_id": args["email_id"], "from": hdr["From"], "subject": hdr["Subject"],
+        return {"email_id": args["email_id"], "from": _single_address(hdr["From"]), "subject": hdr["Subject"],
                 "documents": [{"doc_id": d["doc_id"], "kind": d["kind"], "name": d["name"]} for d in docs],
                 "content": _untrusted(f"email:{args['email_id']}", "\n\n".join(
                     d["text"] if d["kind"] == "body" else f"--- attachment {d['name']} ({d['doc_id']}) ---\n{d['text']}"
@@ -181,6 +218,7 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         vendor = ex("GET", f"/vendors/{args['vendor_id']}")
         inv, warn = invoice_from_document(args, extract.extract_draft(doc), vendor, settings=settings)
         inv["email_id"] = email_id
+        _check_cumulative(inv, extract.extract_draft(doc)["fields"]["amount_minor"], store=store, settings=settings)
         out = ex("POST", "/proposals", {"invoice": inv, "hints": hints})
         return {"proposal_id": out["proposal"]["proposal_id"], "decision": out["decision"]["decision"],
                 "rule_ids": out["decision"].get("rule_ids", []), "tx_id": (out.get("tx") or {}).get("tx_id"),
@@ -196,7 +234,9 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         if tpl is None:
             raise ApiError(ErrorCode.INVALID_REQUEST, f"unknown template {args['template_id']}")
         vars_ = {k: str(v) for k, v in (args.get("vars") or {}).items()}
-        bad = [k for k, v in vars_.items() if not _VAR_RE.match(v)]
+        bad = [k for k, v in vars_.items() if not _VAR_RE.match(v)
+               or (k in _VAR_SHAPE and not _VAR_SHAPE[k].match(v))
+               or (_DIGIT_RUN_RE.search(v) and not (k == "invoice_no" and v in _sender_invoice_nos(args["to"], ex)))]
         if bad:
             raise ApiError(ErrorCode.INVALID_REQUEST, f"template vars not allowed: {bad}")
         try:
@@ -206,6 +246,38 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         out = ex("POST", "/egress", {"tool": "send_email", "target": args["to"], "content": content})
         return {"sent": out["decision"] == "allow", "simulated": True}
     raise ApiError(ErrorCode.NOT_FOUND, f"tool {name}")
+
+
+def _single_address(header: str) -> str | None:
+    """The one address of a From header (display name dropped); None unless there is exactly one."""
+    addrs = [a for _, a in email.utils.getaddresses([header]) if a]
+    return addrs[0].lower() if len(addrs) == 1 and "@" in addrs[0] else None
+
+
+def _sender_invoice_nos(to: str, ex: Any) -> set[str]:
+    """invoice_no values on the documents of emails received from the recipient's domain."""
+    domain = to.rsplit("@", 1)[-1].lower()
+    out: set[str] = set()
+    for e in ex("GET", "/inbox")["emails"]:
+        if str(e.get("from_domain", "")).lower() != domain:
+            continue
+        try:
+            docs = extract.documents(bytes(ex("GET", f"/inbox/{e['email_id']}/raw")))
+        except ApiError:  # unreadable email: contributes nothing (fail closed)
+            continue
+        out |= {n for d in docs if (n := extract.extract_draft(d)["fields"]["invoice_no"])}
+    return out
+
+
+def _check_cumulative(inv: dict[str, Any], doc_amount: int, *, store: Any, settings: Any) -> None:
+    """PARTIAL cannot add up past the document: live proposals (EXECUTED/PENDING_SIG) for this invoice_ref count."""
+    rows = _executor("GET", "/proposals", None, store=store, settings=settings,
+                     query={"vendor_id": inv["vendor_id"]})["proposals"]
+    prior = sum(int(r["invoice"]["amount_minor"]) for r in rows if r.get("status") in ("EXECUTED", "PENDING_SIG")
+                and (r.get("invoice") or {}).get("invoice_ref") == inv["invoice_ref"])
+    if prior + int(inv["amount_minor"]) > doc_amount:
+        raise DocMismatch(["T-AMOUNT-MISMATCH"],
+                          f"amount {inv['amount_minor']} + earlier proposals {prior} > document {doc_amount}")
 
 
 class DocMismatch(ApiError):
@@ -237,11 +309,11 @@ def invoice_from_document(args: dict[str, Any], draft: dict[str, Any], vendor: d
         warn.append("T-ISSUEDATE-FALLBACK")
         issue = f["due_date"] or now(settings).strftime("%Y-%m-%d")
     inv: dict[str, Any] = {"vendor_id": args["vendor_id"], "invoice_ref": draft["doc_id"],
-                           "invoice_no": f["invoice_no"] or args["invoice_no"], "issue_date": issue,
+                           "invoice_no": f["invoice_no"] or "DOC-" + draft["doc_id"][4:], "issue_date": issue,
                            "amount_minor": amount, "currency": f["currency"], "reason_code": args["reason_code"],
                            "attachment_sha256": draft["sha256"]}
-    if not f["invoice_no"]:
-        warn.append("T-INVOICENO-AGENT")
+    if not f["invoice_no"]:  # never the agent's (I-DUP keys on it): bound to the document id instead
+        warn.append("T-INVOICENO-DOCID")
     if f["vs"]:
         inv["vs"] = f["vs"]
     if f["due_date"]:
@@ -264,6 +336,12 @@ def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) 
     log = lambda result, rule_ids: _log(name, request, result, rule_ids, untrusted=untrusted,  # noqa: E731
                                         store=store, settings=settings)
 
+    history = _history(store, request["session_id"])
+    if not _reserve(name, request, store=store, settings=settings):
+        seq = _log(name, request, "forbidden", ["T-STEP-REUSE"], untrusted=untrusted, store=store, settings=settings,
+                   row=False)
+        raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, f"step {request['step']} already used in this session",
+                       {"rule_ids": ["T-STEP-REUSE"], "seq": seq})
     if request["manifest_sha256"] != manifest_sha256():
         seq = log("forbidden", ["T-MANIFEST"])
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, "tool manifest hash mismatch",
@@ -273,30 +351,42 @@ def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) 
         raise ApiError(ErrorCode.NOT_FOUND, f"unknown tool {name}")
 
     vendors = _vendors(store)
-    history = _history(store, request["session_id"])
-    ctx = _context(name, args, history, int(request["step"]), vendors)
+    ctx = _context(name, args, history, int(request["step"]), vendors, effect=effect, store=store, settings=settings)
     allowed, rule_ids = tool_policy.authorize(name, effect=effect, mode=str(request.get("mode", "unknown")),
                                               session_id=request["session_id"], context=ctx)
     if not allowed:
         seq = log("forbidden", rule_ids)
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, f"tool {name} forbidden for Agent",
                        {"rule_ids": rule_ids, "seq": seq})
-    if ctx["untrusted_read_recent"] and effect == "propose":
+    if ctx["untrusted_read_recent"]:
         rule_ids = ["T-TAINT"]  # LOG_ONLY: recorded for F-ANOM, never blocks
 
-    hints = [{"source": "agent", "text": str(h.get("text", ""))[:200]} for h in args.pop("hints", []) or []]
     try:
+        hints = _pop_hints(name, args)
         _validate_args(name, args)
         result = _run(name, args, hints, store=store, settings=settings)
     except DocMismatch as e:
         seq = log("forbidden", rule_ids + e.rule_ids)
         raise ApiError(e.code, e.message, {"rule_ids": e.rule_ids, "seq": seq}) from e
-    except ApiError:
+    except Exception:
         log("error", rule_ids)
         raise
     rule_ids = rule_ids + (result.pop("_warn", None) or [])
     seq = log("ok", rule_ids)
     return {"result": result, "seq": seq}
+
+
+def _pop_hints(name: str, args: dict[str, Any]) -> list[dict[str, Any]]:
+    """Validated hints ([] if absent): at most MAX_HINTS objects, exactly {source: 'agent', text: str <= 200}."""
+    if "hints" not in TOOL_MANIFEST[name]["args"] or "hints" not in args:
+        return []
+    hints = args.pop("hints")
+    ok = isinstance(hints, list) and len(hints) <= MAX_HINTS and all(
+        isinstance(h, dict) and set(h) == {"source", "text"} and h["source"] == "agent"
+        and isinstance(h["text"], str) and len(h["text"]) <= 200 for h in hints)
+    if not ok:
+        raise ApiError(ErrorCode.INVALID_REQUEST, f"hints: at most {MAX_HINTS} {{source: 'agent', text <= 200}}")
+    return [{"source": "agent", "text": h["text"]} for h in hints]
 
 
 def _validate_args(name: str, args: dict[str, Any]) -> None:
