@@ -398,6 +398,14 @@ class AirgapStack(Stack):
                               vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
                               require_imdsv2=True)
             CfnOutput(self, "W2InstanceId", value=w2.instance_id)
+            # every tick relays new checkpoints to W2 over SSM RunCommand (witness.relay_w2.after_tick). No reserved
+            # concurrency 1: this account's whole pool is 10 and AWS keeps 10 unreserved; an overlapping tick is
+            # harmless (W2 answers 409 with its size, the relay retries / catches up next tick).
+            f_ckpt.add_environment("AIRGAP_W2_INSTANCE_ID", w2.instance_id)
+            r_ckpt.add_to_policy(iam.PolicyStatement(actions=["ssm:SendCommand"], resources=[
+                f"arn:aws:ec2:{self.region}:{self.account}:instance/{w2.instance_id}",
+                f"arn:aws:ssm:{self.region}::document/AWS-RunShellScript"]))
+            r_ckpt.add_to_policy(iam.PolicyStatement(actions=["ssm:GetCommandInvocation"], resources=["*"]))
 
         # ------------------------------------------------------------ outputs
         for k, v in {"ApiUrl": api_url, "AgentToolsUrl": tools_url, "LogKeyId": k_log.key_id, "W1KeyId": k_w1.key_id,

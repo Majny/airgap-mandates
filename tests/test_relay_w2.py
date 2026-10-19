@@ -315,8 +315,135 @@ def test_real_litewitness(tmp_path):
                                 [cp.vkeys(settings)["log"], vkey])
         assert isinstance(parsed["verified"]["airgap.example/demo/w2"], int)
         assert parsed["extensions"][0].startswith("policy sha256:")
+        # checkpointer hook against the real witness: c1 is behind W2 (skipped), c2 re-cosigned (old == size), c3/c4 new
+        _grow(store, settings, 3)
+        _grow(store, settings, 2)
+        sizes = _ckpt_sizes(store)
+        rs = relay_w2.relay_store(store=store, settings=settings, w2_post=relay_w2._post, w2_vkey=vkey,
+                                  w2_url=f"http://127.0.0.1:{port}")
+        assert rs == {"cosigned": sizes[1:], "skipped": sizes[:1], "w2_size": sizes[-1], "error": None}, rs
+        for row in store.query("checkpoints", log.checkpoint_pk("audit")):
+            assert (relay_w2._w2_lines(row["note"], vkey) != []) == (int(row["size"]) in sizes[1:])
     finally:
         for p in procs:
             p.terminate()
             p.wait(5)
         shutil.rmtree(work, ignore_errors=True)
+
+
+def test_relay_uses_injected_transports(world):
+    """AWS path: reads, upload and W2 delivery go through the given callables (sigv4() / ssm_post())."""
+    ex_settings, ex_store, w2_settings, w2_store = world
+    _grow(ex_store, ex_settings, 3)
+    calls: list[tuple[str, str]] = []
+
+    def get(url, timeout):
+        calls.append(("get", url))
+        return relay_w2._get(url, timeout)
+
+    def post(url, data, timeout):
+        calls.append(("post", url))
+        return relay_w2._post(url, data, timeout)
+
+    with _serve(_executor_handler(ex_store, ex_settings)) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_real:
+        def w2_post(url, data, timeout):  # "http://w2" is never dialled: only the path is used, as over SSM
+            calls.append(("w2", url))
+            return relay_w2._post(w2_real + "/add-checkpoint", data, timeout)
+
+        r = relay_w2.relay(executor_url=ex_url, w2_url="http://w2", w2_vkey=_w2_vkey(w2_settings),
+                           get=get, post=post, w2_post=w2_post)
+    assert r.status == 200 and r.cosignatures
+    assert [k for k, _ in calls] == ["get", "get", "w2", "post"]
+    assert calls[2][1] == "http://w2/add-checkpoint" and "/checkpoint/cosignature?" in calls[3][1]
+
+
+@pytest.mark.parametrize("raw, want", [
+    (b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n\xe2\x80\x94 w2 AAAA\n",
+     (200, "text/plain; charset=utf-8", b"\xe2\x80\x94 w2 AAAA\n")),
+    (b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 409 Conflict\r\nContent-Type: text/x.tlog.size\r\n\r\n12\n",
+     (409, "text/x.tlog.size", b"12\n")),
+    (b"HTTP/1.1 422 Unprocessable Entity\nContent-Length: 0\n\n", (422, "", b"")),
+])
+def test_parse_http_response(raw, want):
+    assert relay_w2.parse_http_response(raw) == want
+
+
+@pytest.mark.parametrize("raw", [b"", b"curl: (7) Failed to connect", b"HTTP/1.1 200 OK\r\nContent-Type: x"])
+def test_parse_http_response_rejects_garbage(raw):
+    with pytest.raises(ValueError):
+        relay_w2.parse_http_response(raw)
+
+
+def test_export_publishes_w2_vkey_from_env(world, monkeypatch):
+    ex_settings, ex_store, w2_settings, _ = world
+    _grow(ex_store, ex_settings, 1)
+    monkeypatch.delenv("AIRGAP_W2_VKEY", raising=False)
+    assert log.export("audit", store=ex_store, settings=ex_settings)["pubkeys"]["w2"] is None
+    monkeypatch.setenv("AIRGAP_W2_VKEY", _w2_vkey(w2_settings))
+    assert log.export("audit", store=ex_store, settings=ex_settings)["pubkeys"]["w2"] == _w2_vkey(w2_settings)
+
+
+def _ckpt_sizes(store):
+    return sorted(int(r["size"]) for r in store.query("checkpoints", log.checkpoint_pk("audit")))
+
+
+def test_relay_store_cosigns_every_checkpoint_in_order(world):
+    """Checkpointer hook: every checkpoint, not only the latest, ends up cosigned by W2; a re-run is a no-op."""
+    from tools import verify_audit as va
+
+    ex_settings, ex_store, w2_settings, w2_store = world
+    for n in (3, 2, 4):
+        _grow(ex_store, ex_settings, n)
+    sizes = _ckpt_sizes(ex_store)
+    assert len(sizes) == 3
+    vk = _w2_vkey(w2_settings)
+    seen: list[bytes] = []
+    with _serve(_w2_standin_handler(w2_store, w2_settings, seen)) as w2_url:
+        r = relay_w2.relay_store(store=ex_store, settings=ex_settings, w2_post=relay_w2._post, w2_vkey=vk,
+                                 w2_url=w2_url)
+        assert r == {"cosigned": sizes, "skipped": [], "w2_size": sizes[-1], "error": None}
+        assert [x.split(b"\n", 1)[0] for x in seen] == [f"old {o}".encode() for o in [0, *sizes[:-1]]]
+        assert relay_w2.relay_store(store=ex_store, settings=ex_settings, w2_post=relay_w2._post, w2_vkey=vk,
+                                    w2_url=w2_url)["cosigned"] == []
+        assert len(seen) == 3
+    b = log.export("audit", store=ex_store, settings=ex_settings)
+    b["pubkeys"]["w2"] = vk
+    rep = va.verify(b, replay=False, quorum=va.parse_quorum("log,w1,w2"), allow_uncovered_tail=True)
+    assert rep.ok, rep.problems
+    assert rep.checked["checkpoint_sig_w2"] == 3
+
+
+def test_relay_store_skips_sizes_w2_has_passed(world):
+    ex_settings, ex_store, w2_settings, w2_store = world
+    _grow(ex_store, ex_settings, 3)
+    _grow(ex_store, ex_settings, 2)
+    first, second = _ckpt_sizes(ex_store)
+    vk = _w2_vkey(w2_settings)
+    with _serve(_executor_handler(ex_store, ex_settings)) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_url:
+        assert relay_w2.relay(executor_url=ex_url, w2_url=w2_url, w2_vkey=vk, upload=False).size == second
+        r = relay_w2.relay_store(store=ex_store, settings=ex_settings, w2_post=relay_w2._post, w2_vkey=vk,
+                                 w2_url=w2_url)
+    # W2 already holds `second` (relayed, never uploaded): `first` can never be cosigned; `second` is re-cosigned
+    # (old == size, empty proof) and its line stored.
+    assert r == {"cosigned": [second], "skipped": [first], "w2_size": second, "error": None}
+
+
+def test_after_tick_is_off_without_config_and_never_raises(world):
+    ex_settings, ex_store, w2_settings, _ = world
+    _grow(ex_store, ex_settings, 2)
+    assert relay_w2.after_tick(store=ex_store, settings=ex_settings, env={}) is None
+
+    def down(url, data, timeout):
+        raise OSError("SSM unreachable")
+
+    env = {"AIRGAP_W2_INSTANCE_ID": "i-0", "AIRGAP_W2_VKEY": _w2_vkey(w2_settings)}
+    orig = relay_w2.ssm_post
+    relay_w2.ssm_post = lambda *a, **k: down
+    try:
+        r = relay_w2.after_tick(store=ex_store, settings=ex_settings, env=env)
+    finally:
+        relay_w2.ssm_post = orig
+    assert r["cosigned"] == [] and r["error"] == "OSError: SSM unreachable"
+    assert not relay_w2._w2_lines(cp.latest("audit", store=ex_store)["note"], env["AIRGAP_W2_VKEY"])

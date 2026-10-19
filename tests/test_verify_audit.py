@@ -162,7 +162,92 @@ def test_policy_hash_removed(b):
 
 def test_approver_mismatch(b):
     b["approvers"][0]["role"] = "treasury"
-    _fails(b, f"approver {CLERK}: does not match an enroll leaf")
+    _fails(b, f"approver {CLERK}: does not match its latest enroll leaf",
+           f"approver {CLERK} (clerk): enrolled at seq 0 but missing from approvers")
+
+
+def _enroll_as(ev, active):
+    e = copy.deepcopy(ev)
+    e["data"]["active"] = active
+    return e
+
+
+def test_reenrolled_signer_verifies(tmp_path):
+    """Fallback clerk on AWS: enrolled inactive, then re-enrolled active. One approvers row: the latest leaf."""
+    evs = demo_events()
+    evs[0] = _enroll_as(evs[0], False)
+    evs.insert(2, _enroll_as(evs[0], True))
+    b = _export(tmp_path, evs)
+    assert [a["enroll_seq"] for a in b["approvers"] if a["address"] == CLERK] == [2]
+    rep = va.verify(b, replay=False)
+    assert rep.ok, rep.problems
+    assert rep.checked["approvers"] == 2 and "enroll_active_missing" not in rep.checked
+
+
+def test_reenrolled_approver_with_stale_seq_fails(tmp_path):
+    evs = demo_events()
+    evs.insert(2, copy.deepcopy(evs[0]))
+    b = _export(tmp_path, evs)
+    row = next(a for a in b["approvers"] if a["address"] == CLERK)
+    row["enroll_seq"] = 0  # the clerk's first enroll leaf, superseded at seq 2
+    _fails(b, f"approver {CLERK}: does not match its latest enroll leaf")
+    b["approvers"].append({**row, "enroll_seq": 2})
+    _fails(b, f"approver {CLERK} (clerk): listed twice")
+
+
+def _clerk_enroll_seqs(b):
+    return [le["seq"] for le in b["leaves"] if le["event"]["type"] == "enroll"
+            and le["event"]["data"]["address"] == CLERK]
+
+
+def _clerk_sig_seqs(b):
+    return [le["seq"] for le in b["leaves"] if le["event"]["type"] == "signature"
+            and le["event"]["data"]["signer_address"] == CLERK]
+
+
+def test_enroll_deactivate_reactivate(tmp_path):
+    """A signature counts only if the signer's latest enroll leaf (same address and role) before it is active."""
+    evs = demo_events()
+    clerk = _enroll_as(evs[0], True)
+    evs[0] = clerk
+    i_chg = next(i for i, e in enumerate(evs) if e["type"] == "challenge" and e["data"]["purpose"] == "CHG")
+    good = _export(tmp_path / "ok", [*evs[:i_chg], _enroll_as(clerk, False), _enroll_as(clerk, True), *evs[i_chg:]])
+    rep = va.verify(good, replay=False)
+    assert rep.ok, rep.problems
+    enrolls = _clerk_enroll_seqs(good)
+    assert len(enrolls) == 3
+    assert next(a for a in good["approvers"] if a["address"] == CLERK)["enroll_seq"] == enrolls[-1]
+
+    bad = _export(tmp_path / "bad", [*evs[:i_chg], _enroll_as(clerk, False), *evs[i_chg:]])
+    off = _clerk_enroll_seqs(bad)[-1]
+    sig = next(s for s in _clerk_sig_seqs(bad) if s > off)
+    _fails(bad, f"seq {sig}: signer {CLERK} (clerk) deactivated by enroll leaf seq {off}")
+    early = [s for s in _clerk_sig_seqs(bad) if s < off]
+    assert early and not any(f"seq {s}: " in p for s in early for p in va.verify(bad, replay=False).problems)
+
+
+def test_enroll_without_active_counts_as_active_and_is_noted(tmp_path):
+    """Bundles written before the field existed (pre-reset AWS logs) still verify."""
+    evs = demo_events()
+    for e in evs[:2]:
+        del e["data"]["active"]
+    rep = va.verify(_export(tmp_path, evs), replay=False)
+    assert rep.ok and rep.checked["enroll_active_missing"] == 2
+    assert any("no `active` field" in n for n in rep.notes)
+
+
+def test_enroll_active_must_be_bool(tmp_path):
+    evs = demo_events()
+    evs[0]["data"]["active"] = "yes"
+    _fails(_export(tmp_path, evs), "seq 0: enroll leaf active is not a boolean")
+
+
+def test_enroll_role_mismatch_still_named(tmp_path):
+    evs = demo_events()
+    evs[0]["data"]["role"] = "treasury"  # clerk's address enrolled only as treasury, then signs as clerk
+    b = _export(tmp_path, evs)
+    sig = _clerk_sig_seqs(b)[0]
+    _fails(b, f"seq {sig}: signer {CLERK} enrolled as treasury but signed as clerk")
 
 
 def test_mandate_2of2_same_signer(tmp_path):

@@ -597,8 +597,9 @@ def _agent_change(w: World, vendor_id: str, new_iban: str, evidence_ids: list[st
     evidence_ids and NO email_id to POST /changes."""
     from executor.tools.manifest import manifest_sha256
 
+    w.tool_step = getattr(w, "tool_step", 0) + 1  # a (session_id, step) is never reused (T-STEP-REUSE)
     st_, r = w.call("POST", "/tools/payee.request_change",
-                    {"session_id": "s-review", "step": 1, "manifest_sha256": manifest_sha256(),
+                    {"session_id": "s-review", "step": w.tool_step, "manifest_sha256": manifest_sha256(),
                      "args": {"vendor_id": vendor_id, "new_iban": new_iban, "evidence_ids": evidence_ids}}, "agent")
     assert st_ == 200, r
     return w.store.get("changes", {"change_id": r["result"]["change_id"]})

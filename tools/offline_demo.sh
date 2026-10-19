@@ -49,6 +49,7 @@ fi
 
 LOGKEY="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["log"])' "$DIR/trust-keys.json")"
 W1KEY="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["w1"])' "$DIR/trust-keys.json")"
+W2KEY="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("w2") or "")' "$DIR/trust-keys.json")"
 LOGNAME_="${LOGKEY%%+*}"
 
 # 1. checkpoint signature, checked by code we did not write (stock golang.org/x/mod/sumdb/note)
@@ -59,12 +60,12 @@ if [ ! -x "$NV" ]; then
   verdict FAIL "1 checkpoint (noteverify missing)"
 else
   set +e
-  "$NV" "$DIR/checkpoint.txt" "$LOGKEY" "$W1KEY" >"$WORK/nv.out" 2>&1
+  "$NV" "$DIR/checkpoint.txt" "$LOGKEY" "$W1KEY" ${W2KEY:+"$W2KEY"} >"$WORK/nv.out" 2>&1
   rc=$?
   set -e
   sed 's/ (stock sumdb\/note cannot verify this signature type)/ (*)/' "$WORK/nv.out" | fold -s -w 72
-  echo "(*) W1 cosignature: a type stock note cannot check;"
-  echo "    step 2 checks it with the pinned W1 key."
+  echo "(*) witness cosignature: a type stock note cannot check;"
+  echo "    step 2 checks it with the pinned witness key."
   if [ "$rc" -eq 0 ] && grep -qF "OK $LOGNAME_ " "$WORK/nv.out"; then
     verdict PASS "1 checkpoint signed by the log"
   else

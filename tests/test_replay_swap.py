@@ -95,3 +95,27 @@ def test_signer_without_enroll_leaf_is_refused():
     assert h.store.scan("ledger") == []
     st, r = h.submit(ch, h.clerk)  # properly enrolled (row + leaf in one transaction)
     assert st == 200 and r["effect"]["type"] == "payment_executed"
+
+
+def test_deactivated_signer_is_refused_and_can_be_reenrolled():
+    """Deactivation = a new enroll leaf with active=false; the online check reads the row's enroll_seq leaf."""
+    import json
+
+    from executor.store import seed, signers
+
+    h = Harness()
+    ch = _pay_challenge(h)
+    leaves = [e for e in h.leaves() if e["type"] == "enroll"]
+    assert leaves and all(e["data"]["active"] is True for e in leaves)
+    seq = signers.deactivate(h.store, h.clerk.address, settings=h.settings)
+    leaf = json.loads(h.store.get("audit", {"log_id": "audit", "seq": seq})["event"])
+    assert leaf["type"] == "enroll" and leaf["data"]["active"] is False
+    st, r = h.submit(ch, h.clerk)
+    assert (st, r["error"]) == (403, "unknown_signer")
+    # a row claiming active=true but pointing at the active=false leaf is still refused (the leaf is authoritative)
+    row = h.store.get("enrolled_signers", {"address": h.clerk.address.lower()})
+    h.store.put("enrolled_signers", {**row, "active": True})
+    assert h.submit(ch, h.clerk)[1]["error"] == "unknown_signer"
+    seed.enroll_signer(h.store, h.clerk.address, "clerk", device="GENUINE", settings=h.settings)  # re-enrol
+    st, r = h.submit(ch, h.clerk)
+    assert st == 200 and r["effect"]["type"] == "payment_executed"
