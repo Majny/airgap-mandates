@@ -741,7 +741,23 @@ def main(argv: list[str] | None = None) -> int:
         try:
             with open(args.receipt, encoding="utf-8") as f:
                 text = f.read()
-            if text.strip().startswith(rc.QR_PREFIX):  # what a phone QR scanner yields (receipt.qr_payload)
+            if text.strip().startswith((rc.SHORT_PREFIX, rc.SHORT_URL)):  # short QR pointer: needs the bundle
+                r = None
+                try:
+                    short = rc.parse_short_qr(text)
+                    if not isinstance(bundle, dict):
+                        raise ValueError("an AGR2 short receipt needs the bundle: verify_audit bundle.json --receipt ...")
+                    sp = rc.short_qr_problems(short, bundle)
+                except ValueError as exc:
+                    short, sp = None, [str(exc)]
+                out.append(f"receipt: {args.receipt} (AGR2 short QR)  tx {short['tx_id'] if short else '?'}  seq "
+                           f"{short['seq'] if short else '?'}  tree size {short['tree_size'] if short else '?'}: "
+                           f"{'ok' if not sp else 'FAILED'}")
+                if short and not sp:
+                    out.append("  vouched for: the execution leaf at seq in the verified bundle (pointer; the full "
+                               "receipt is a separate file)")
+                problems += [f"receipt: {p}" for p in sp]
+            elif text.strip().startswith(rc.QR_PREFIX):  # what a phone QR scanner yields (receipt.qr_payload)
                 try:
                     r = rc.parse_qr_payload(text)
                 except ValueError as exc:

@@ -14,6 +14,7 @@ import pytest
 
 from executor.audit import checkpoint as cp
 from executor.audit import receipt as rc
+from tests.ws_b_store import make_settings
 from tools import demo_bundle as db
 from tools import verify_audit as va
 
@@ -146,3 +147,39 @@ def test_offline_demo_missing_noteverify_fails_clearly(made, tmp_path):
     assert r.returncode == 1 and "noteverify binary not found" in r.stdout
     assert "FAIL  !!!!!!!!  1 checkpoint (noteverify missing)" in r.stdout
 
+
+
+# --- --from-aws path, exercised offline: the executor's read API served in-process stands in for API Gateway -----
+
+@pytest.fixture(scope="module")
+def api(tmp_path_factory):
+    import urllib.parse
+
+    from executor import handler
+
+    ctx, s, summary = db.run_inprocess(key_dir=str(tmp_path_factory.mktemp("apikeys")))
+
+    def get(path: str):
+        u = urllib.parse.urlsplit(path)
+        status, body = handler.dispatch("GET", u.path, dict(urllib.parse.parse_qsl(u.query)), None,
+                                        principal="auditor", ctx=ctx)
+        assert status == 200, (path, status, body)
+        return body.decode("utf-8") if isinstance(body, bytes) else body
+
+    return get, cp.vkeys(s), summary
+
+
+def test_from_api_seals_green_with_independent_keys(api, tmp_path):
+    get, trust, summary = api
+    sealed = db.build_from_api(get, trust, source="in-process API")
+    assert sealed.ok, sealed.problems
+    assert sealed.summary["tx_ids"][-1] == summary["tx_ids"][-1] and sealed.checkpoint_note.startswith("airgap.")
+    assert db.write(sealed, tmp_path / "out") == 0 and (tmp_path / "out" / "bundle.json").exists()
+
+
+def test_from_api_refuses_when_pinned_keys_disagree(api, tmp_path):
+    get, trust, _ = api
+    other = cp.vkeys(make_settings(tmp_path))
+    sealed = db.build_from_api(get, {**trust, "log": other["log"]}, source="in-process API")
+    assert not sealed.ok
+    assert any(p.startswith("/health log_vkey") for p in sealed.problems), sealed.problems
