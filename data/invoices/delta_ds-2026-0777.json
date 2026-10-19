@@ -1,0 +1,12 @@
+{
+  "vendor_id": "ven_77665546",
+  "invoice_no": "DS-2026-0777",
+  "amount_minor": 12500050,
+  "currency": "CZK",
+  "vs": "20260777",
+  "issue_date": "2026-10-19",
+  "due_date": "2026-10-21",
+  "iban_on_invoice": "CZ5201000000007788990011",
+  "fictitious": true,
+  "email_id": "eml_8a5241b9da0f73e2"
+}

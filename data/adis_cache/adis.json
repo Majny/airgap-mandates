@@ -4,6 +4,7 @@
   "payers": {
     "CZ12345678": {"unreliable": false, "accounts": ["CZ6508000000192000145399", "CZ2003000000002001234567"]},
     "CZ87654321": {"unreliable": false, "accounts": ["CZ6203000000000123456789"]},
-    "CZ99887762": {"unreliable": false, "accounts": ["CZ7501000000001155443322"]}
+    "CZ99887762": {"unreliable": false, "accounts": ["CZ7501000000001155443322"]},
+    "CZ77665546": {"unreliable": false, "accounts": ["CZ5201000000007788990011"]}
   }
 }

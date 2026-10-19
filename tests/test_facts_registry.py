@@ -403,7 +403,9 @@ def sample_facts() -> list[dict]:
 def test_vendors_rows():
     rows = json.loads(VENDORS.read_text())
     by_ico = {r["ico"]: r for r in rows}
-    assert set(by_ico) == {"12345678", "87654321", "99887762"}
+    assert set(by_ico) == {"12345678", "87654321", "99887762", "77665546"}
+    delta = by_ico["77665546"]
+    assert (delta["iban"], delta["in_network"], delta["domain"]) == ("CZ5201000000007788990011", True, "deltastavby.cz")
     acme, beta, gamma = by_ico["12345678"], by_ico["87654321"], by_ico["99887762"]
     assert (acme["iban"], acme["domain"], acme["in_network"]) == (ACME_IBAN, "acme.cz", True)
     assert (beta["iban"], beta["in_network"]) == (BETA_IBAN, False)

@@ -17,7 +17,8 @@ EMAILS = DATA / "emails"
 DNS = json.loads((DATA / "dns_snapshot.json").read_text())
 DNS_SHA = hashlib.sha256((DATA / "dns_snapshot.json").read_bytes()).hexdigest()
 MANIFEST = json.loads((EMAILS / "manifest.json").read_text())
-REGISTRY_DOMAIN = {"ven_12345678": "acme.cz", "ven_87654321": "betaservis.cz", "ven_99887762": "gammatisk.cz"}
+REGISTRY_DOMAIN = {"ven_12345678": "acme.cz", "ven_87654321": "betaservis.cz", "ven_99887762": "gammatisk.cz",
+                   "ven_77665546": "deltastavby.cz"}
 NOW = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
 
 
@@ -32,13 +33,14 @@ def _facts(name: str, registry_domain: str) -> tuple[dict, dict]:
 
 
 def test_manifest_ids_match_raw_bytes():
-    assert len(MANIFEST) == 8
+    assert len(MANIFEST) == 9
     for row in MANIFEST:
         assert row["email_id"] == "eml_" + hashlib.sha256(_raw(row["file"])).hexdigest()[:16]
 
 
 @pytest.mark.parametrize("name", ["01_acme_invoice_legit.eml", "02_beta_invoice_legit.eml",
-                                  "03_gamma_invoice_legit.eml", "08_acme_change_legit.eml"])
+                                  "03_gamma_invoice_legit.eml", "08_acme_change_legit.eml",
+                                  "09_delta_invoice_overcap.eml"])
 def test_legit_emails_pass(name):
     row = next(r for r in MANIFEST if r["file"] == name)
     dk, dom = _facts(name, REGISTRY_DOMAIN[row["vendor_id"]])
