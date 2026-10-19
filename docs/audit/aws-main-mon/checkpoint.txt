@@ -1,0 +1,9 @@
+airgap.example/demo/audit
+45
+5dca5h0YIz9N9/Jc6GuP9No4VvU+WaH+dL31+BwHrgE=
+policy sha256:3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd
+code sha256:dec242c4a1d442936a09b4b217a5465fc33c1356d0b34dda3bdb6946507a92b0 pcr0 -
+
+— airgap.example/demo/audit BeOAlG+XUskF+8ZKlhrD62vJ/251pAItHuBa5ohskWAnNcIcNQf1NZ8ox+0I/c4ZgiNL8XWoF+cPcN9t+YFqjn+XOAM=
+— airgap.example/demo/w1 ouRrogAAAABq1j69MWDvLvbgJhTwpSeJrWP/LBHhgj/2GSA1+187JotibTy31SafDIskFjoMVImzYORt9pm1eOtWbvMF2TsfZAVYBA==
+— airgap.example/demo/w2 0Q1ysQAAAABq1j6+Lt9XhUlIIwNAsuVrXSldATKar5olCQjGEUEvbX1kTcL9lwjZFt7NVDwGj0VflbcgeOYogwDTSZWCDZVA/iaoDA==

@@ -1,0 +1,3269 @@
+{
+  "approvers": [
+    {
+      "address": "0x6a7438740dc3289067175efda02459170dc1317d",
+      "device": "GENUINE",
+      "enroll_seq": 0,
+      "role": "clerk"
+    },
+    {
+      "address": "0xfa01a39f8abaeb660c3137f14a310d0b414b2a15",
+      "device": "EMULATOR",
+      "enroll_seq": 1,
+      "role": "treasury"
+    },
+    {
+      "address": "0x73d0385f4d8e00c5e6504c6030f47bf6212736a8",
+      "device": "EMULATOR",
+      "enroll_seq": 2,
+      "role": "clerk"
+    },
+    {
+      "address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+      "device": "EMULATOR",
+      "enroll_seq": 11,
+      "role": "clerk"
+    },
+    {
+      "address": "0xac34739e1e424a377b23e0ffedb1f70f26e64f11",
+      "device": "EMULATOR",
+      "enroll_seq": 12,
+      "role": "treasury"
+    }
+  ],
+  "checkpoints": [
+    "airgap.example/demo/audit\n13\naYx0TzZIcpGnj/xJ/ozn/Hh9G8IgvidvhR0K+xDdXls=\npolicy sha256:3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd\ncode sha256:dec242c4a1d442936a09b4b217a5465fc33c1356d0b34dda3bdb6946507a92b0 pcr0 -\n\n\u2014 airgap.example/demo/audit BeOAlB6Wnab8DlehIMkBPiy84+Xh9+AUa2eUSW/65odHZLiIJgHNzUXuHbwB8CUgk6PeMJfwVN52KWMLMo5mhEmQzg4=\n\u2014 airgap.example/demo/w1 ouRrogAAAABq1j6bNt8tDLIl9T/JYZ7Na1l1Bx6CjPd4yyuwI/iuP7JQJ9EAo0RY9Enut5zegamy+3fprF7TqURB3/JDkEjCug1rAg==\n\u2014 airgap.example/demo/w2 0Q1ysQAAAABq1j6bfKOythQU4i1+WreyAo4ldATo3I6+tnZObSpi3ykJrkIWeKECTpZy/vr9f791eCRXo8zBdc7Qhvo9C9/+QFGmAQ==\n",
+    "airgap.example/demo/audit\n44\n0aJaY9tHY+lm/MXdaE0isnHV2p8FZG+LhvrjDQJ2Zjg=\npolicy sha256:3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd\ncode sha256:dec242c4a1d442936a09b4b217a5465fc33c1356d0b34dda3bdb6946507a92b0 pcr0 -\n\n\u2014 airgap.example/demo/audit BeOAlF8jbhMlVHUpbku2eRdJGzAEd8Ith0+Db0pctfXDL6reQ1kv+IwLAcR1VZTCCSKfjrZStOjb7hk+vmHXusCGBgY=\n\u2014 airgap.example/demo/w1 ouRrogAAAABq1j64dHxG4wOHPXipnPaIS9TG6VxPddXezSrsOofme8quC31LQ5EoBcWgZBNWQeYAnhgKhBtdcts7QneIvyFCStI1Cg==\n\u2014 airgap.example/demo/w2 0Q1ysQAAAABq1j64o0mpKe8vdyk9dynK7KaEqgGrkzA0p6ThiFS3dV61/VSbZhAa+Av2LB6LymYabTwjYktJ/icT9PsDFon3TvpADg==\n",
+    "airgap.example/demo/audit\n45\n5dca5h0YIz9N9/Jc6GuP9No4VvU+WaH+dL31+BwHrgE=\npolicy sha256:3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd\ncode sha256:dec242c4a1d442936a09b4b217a5465fc33c1356d0b34dda3bdb6946507a92b0 pcr0 -\n\n\u2014 airgap.example/demo/audit BeOAlG+XUskF+8ZKlhrD62vJ/251pAItHuBa5ohskWAnNcIcNQf1NZ8ox+0I/c4ZgiNL8XWoF+cPcN9t+YFqjn+XOAM=\n\u2014 airgap.example/demo/w1 ouRrogAAAABq1j69MWDvLvbgJhTwpSeJrWP/LBHhgj/2GSA1+187JotibTy31SafDIskFjoMVImzYORt9pm1eOtWbvMF2TsfZAVYBA==\n\u2014 airgap.example/demo/w2 0Q1ysQAAAABq1j6+Lt9XhUlIIwNAsuVrXSldATKar5olCQjGEUEvbX1kTcL9lwjZFt7NVDwGj0VflbcgeOYogwDTSZWCDZVA/iaoDA==\n"
+  ],
+  "leaves": [
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "active": true,
+          "address": "0x6a7438740dc3289067175efda02459170dc1317d",
+          "cert_chain_sha256": "7d3637951df9f2b48a08527e9871a161071ee55ec534df5d78f5ff8edf917981",
+          "derivation_path": "m/44'/60'/0'/0/0",
+          "device": "GENUINE",
+          "device_model": "T2B1",
+          "enroll_sig": "0xe1d0dd34299570d708344758ac7da8b6260318f3c8f08628af5a8bacfe7f142728422d3ec2d317bcfa0bdaef544d3ed62add79ff8c890a33fc80a9535eb7b3ad1b",
+          "firmware_version": "2.12.0",
+          "fw_hash": "19fd7ab4fa23d5248b25647a9016deffe112b46fe0bc26587a3de1fc8a455e1c",
+          "label": "Clerk (Trezor Safe 3)",
+          "role": "clerk"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 0,
+        "subject_id": "0x6a7438740dc3289067175efda02459170dc1317d",
+        "ts": "2026-10-19T16:00:10.747Z",
+        "type": "enroll",
+        "v": 2
+      },
+      "leaf_hash": "a63f682ff0d8e77d0fbc240a393c86fd3f4fc23def2de4ffc752ac221f27bd3c",
+      "seq": 0
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "active": true,
+          "address": "0xfa01a39f8abaeb660c3137f14a310d0b414b2a15",
+          "cert_chain_sha256": null,
+          "derivation_path": "m/44'/60'/0'/0/1",
+          "device": "EMULATOR",
+          "device_model": "T3B1",
+          "enroll_sig": "0x76b7a1b239d3615be27b5d20e70007cef95e8fb14bf38e3a4da3d9012faf33d135348aa77841f2ea9b14f9c731e840ce1ccf493c67c821fa186ea7c3765c7da21b",
+          "firmware_version": "2.12.5",
+          "fw_hash": "6b1cb7803a90d1c2524495f44906e4f0c05b6a1e64291e1310e7e9b959f613e5",
+          "label": "Treasury (Trezor Safe 3, emulator)",
+          "role": "treasury"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 1,
+        "subject_id": "0xfa01a39f8abaeb660c3137f14a310d0b414b2a15",
+        "ts": "2026-10-19T16:00:11.032Z",
+        "type": "enroll",
+        "v": 2
+      },
+      "leaf_hash": "6cebf53f6737da375e5ccc7310eb80ac7c8c0e0d204b9bf71c8ac8e5a33b0545",
+      "seq": 1
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "active": false,
+          "address": "0x73d0385f4d8e00c5e6504c6030f47bf6212736a8",
+          "cert_chain_sha256": null,
+          "derivation_path": "m/44'/60'/0'/0/0",
+          "device": "EMULATOR",
+          "device_model": "T3B1",
+          "enroll_sig": "0xac3b2b05a1b3a242b7cdcd71a544691c677fa4dfdf01d67d3a4b6a943be2b16f5b2d75513e3bf8b85f07de213768036c9026cbda0eae9e2b8e48aa94e7a4b4561b",
+          "firmware_version": "2.12.5",
+          "fw_hash": "ba304ba55fa74775646c32e6655277ca53683147223a2edd54230b64e7146d21",
+          "label": "Clerk FALLBACK (Trezor Safe 3, emulator)",
+          "role": "clerk"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 2,
+        "subject_id": "0x73d0385f4d8e00c5e6504c6030f47bf6212736a8",
+        "ts": "2026-10-19T16:00:11.277Z",
+        "type": "enroll",
+        "v": 2
+      },
+      "leaf_hash": "4e6d72583886e5d2763335e7c91e02096bcfd35572295c8ef3a8da218b740f4d",
+      "seq": 2
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "acme.cz",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_45ad0b71d001bb48",
+          "from_domain": "acme.cz",
+          "received_at": "2026-10-19T16:00:11Z",
+          "sha256": "45ad0b71d001bb48703ec6663792a0042304a0fa9b32f3ef52f9cc30dfd7d27e"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 3,
+        "subject_id": "eml_45ad0b71d001bb48",
+        "ts": "2026-10-19T16:00:12.014Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "e573703d28f879cc3896e4b791364a6f463aac1113174441e1cad23016978c3e",
+      "seq": 3
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "betaservis.cz",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_bf9747ffe28ddaff",
+          "from_domain": "betaservis.cz",
+          "received_at": "2026-10-19T16:00:12Z",
+          "sha256": "bf9747ffe28ddaff289644e2b9b1c24dabbe318f1b563d9536e96e36eea7fee3"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 4,
+        "subject_id": "eml_bf9747ffe28ddaff",
+        "ts": "2026-10-19T16:00:12.658Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "5121fcc6fb79bf556b074efc0d862403f955c8a5428ea7c97e8b7ea64b1d3058",
+      "seq": 4
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "gammatisk.cz",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_c7b401b428df965d",
+          "from_domain": "gammatisk.cz",
+          "received_at": "2026-10-19T16:00:12Z",
+          "sha256": "c7b401b428df965dfd97ee8eba4ec2fd22a0f51e30a6b8adf4eba5ec9ce4cd60"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 5,
+        "subject_id": "eml_c7b401b428df965d",
+        "ts": "2026-10-19T16:00:13.173Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "ef517313ccaac9ed0b9c442e0a34597e69ac36655c88b5144af41950f8cba76a",
+      "seq": 5
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "acme-cz.com",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_1db5179453419d34",
+          "from_domain": "acme-cz.com",
+          "received_at": "2026-10-19T16:00:13Z",
+          "sha256": "1db5179453419d346fdd138fb4cd20893cc7e5ac66c336673afa7f3c8c6c2596"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 6,
+        "subject_id": "eml_1db5179453419d34",
+        "ts": "2026-10-19T16:00:13.730Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "76158b0e6b04eb4a66865f7bb3a2fa13261f3a02c3431984a4013cda6b18fe76",
+      "seq": 6
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "acme.cz",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_f99592394de353a6",
+          "from_domain": "acme.cz",
+          "received_at": "2026-10-19T16:00:14Z",
+          "sha256": "f99592394de353a6b23b0f9449d3ad3e567904d8d15d5715c496d4c1affe880a"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 7,
+        "subject_id": "eml_f99592394de353a6",
+        "ts": "2026-10-19T16:00:14.267Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "e6a2882822d163858fdad155d2045fdea403327e6b7d2caad8659057eae61095",
+      "seq": 7
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "betaservis.cz",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_bebfd6c612cdd1ff",
+          "from_domain": "betaservis.cz",
+          "received_at": "2026-10-19T16:00:14Z",
+          "sha256": "bebfd6c612cdd1ffcb8ef05ee8df158c60a98793f04ed228e83661e3dd422a6a"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 8,
+        "subject_id": "eml_bebfd6c612cdd1ff",
+        "ts": "2026-10-19T16:00:14.850Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "5e637ea2ad6d3c2ac9b34deadaa30f27264c8030e8453bf2a1e8de18d295b6f2",
+      "seq": 8
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": false,
+            "d": null,
+            "result": "none",
+            "s": null
+          },
+          "email_id": "eml_d93071aec7a7047e",
+          "from_domain": "vendor-review-partners.example",
+          "received_at": "2026-10-19T16:00:15Z",
+          "sha256": "d93071aec7a7047e557af1658e1e769b64ac27f5b0c8d7e15d93b9670d0c44d3"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 9,
+        "subject_id": "eml_d93071aec7a7047e",
+        "ts": "2026-10-19T16:00:15.400Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "fb2e4bb6998d55d899e13841ebf1483605c509fa2be318146c23eda6f82cb821",
+      "seq": 9
+    },
+    {
+      "event": {
+        "actor": "ingest",
+        "data": {
+          "dkim": {
+            "aligned": true,
+            "d": "acme.cz",
+            "result": "pass",
+            "s": "demo2026"
+          },
+          "email_id": "eml_77151c4c0e6a1141",
+          "from_domain": "acme.cz",
+          "received_at": "2026-10-19T16:00:15Z",
+          "sha256": "77151c4c0e6a114103162e459cc129a2bbeb3cf8d140347229998c6f8f1c21a8"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 10,
+        "subject_id": "eml_77151c4c0e6a1141",
+        "ts": "2026-10-19T16:00:15.961Z",
+        "type": "ingest",
+        "v": 2
+      },
+      "leaf_hash": "5dd4aa3371822447915ade98911a7568b9ec8d299008703254e2aef1320e4b36",
+      "seq": 10
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "active": true,
+          "address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+          "cert_chain_sha256": null,
+          "derivation_path": null,
+          "device": "EMULATOR",
+          "device_model": null,
+          "enroll_sig": "",
+          "firmware_version": null,
+          "fw_hash": null,
+          "label": "clerk (SOFTWARE key, aws e2e; no device)",
+          "role": "clerk"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 11,
+        "subject_id": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+        "ts": "2026-10-19T16:00:16.192Z",
+        "type": "enroll",
+        "v": 2
+      },
+      "leaf_hash": "83a990288d5690c3c8add51a2bca6152e21e53b16d23a8aaf3b77efdaa7bef1e",
+      "seq": 11
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "active": true,
+          "address": "0xac34739e1e424a377b23e0ffedb1f70f26e64f11",
+          "cert_chain_sha256": null,
+          "derivation_path": null,
+          "device": "EMULATOR",
+          "device_model": null,
+          "enroll_sig": "",
+          "firmware_version": null,
+          "fw_hash": null,
+          "label": "treasury (SOFTWARE key, aws e2e; no device)",
+          "role": "treasury"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 12,
+        "subject_id": "0xac34739e1e424a377b23e0ffedb1f70f26e64f11",
+        "ts": "2026-10-19T16:00:16.473Z",
+        "type": "enroll",
+        "v": 2
+      },
+      "leaf_hash": "0e18fcc37c340ed88c215f44e6b61b1212cf7f8af139b5caaf1b4828e9d7894e",
+      "seq": 12
+    },
+    {
+      "event": {
+        "actor": "checkpointer",
+        "data": {
+          "cosigners": [
+            "airgap.example/demo/w1"
+          ],
+          "note_sha256": "1de5391ea0ee0924b49816909dd5c5fbc2b6edb885f15dd6e3aaece103cefec5",
+          "origin": "airgap.example/demo/audit",
+          "root_hash": "698c744f36487291a78ffc49fe8ce7fc787d1bc220be276f851d0afb10dd5e5b",
+          "size": 13
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 13,
+        "subject_id": null,
+        "ts": "2026-10-19T16:00:27.362Z",
+        "type": "checkpoint",
+        "v": 2
+      },
+      "leaf_hash": "48baeb7b2df0b5f758447586cca8c0d6d1bd5768d70bec95fe4e60998001528c",
+      "seq": 13
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "deployment": "DEMO",
+          "exp": "2026-10-19T16:05:50.669819Z",
+          "nonce": "B108D9D2",
+          "nonce_secret_sha256": "c8d769c4f645c7288e93b3f4ee55d64c8dd98ae8d234a1308694d42f45c971bd",
+          "params": {
+            "currency": "CZK",
+            "deployment": "DEMO",
+            "mandate_no": 1,
+            "max_count": 20,
+            "max_per_payment_minor": 8000000,
+            "max_total_minor": 25000000,
+            "nonce": "B108D9D2",
+            "payee_count": 3,
+            "payee_registry_version": 1,
+            "payee_scope": "existing_only",
+            "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+            "require_vop": [
+              "MTCH"
+            ],
+            "role": "clerk",
+            "sig_index": 1,
+            "sig_total": 2,
+            "subject_hash": "0aaabcb64ef2eff9a38fd8bdbd6e197587b15e3331ab8905f0701de08576f9ec",
+            "valid_from": "2026-10-19T16:00:50.669819Z",
+            "valid_until": "2026-10-20T16:00:49Z"
+          },
+          "profile": "safe3-mono-16x4",
+          "purpose": "MANDATE",
+          "role": "clerk",
+          "subject_hash": "0aaabcb64ef2eff9a38fd8bdbd6e197587b15e3331ab8905f0701de08576f9ec",
+          "subject_id": "mnd_1",
+          "template": "MANDATE",
+          "text_sha256": "d2cddbea503ae8c0c13b3ff12f0fb5a5ebfb4499933685d38e0978b2e9ca0fe6"
+        },
+        "facts_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "7419c35251ab5aa82c9dd7cbcc850c27831f86784c602e3ab6d5cdb832ec9280",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 14,
+        "subject_id": "mnd_1",
+        "ts": "2026-10-19T16:00:50.740Z",
+        "type": "challenge",
+        "v": 2
+      },
+      "leaf_hash": "3a66dbb65eb91b80ce3a1ae07d95f91efcfba02b267d2abe150217cb4fa8d703",
+      "seq": 14
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "deployment": "DEMO",
+          "exp": "2026-10-19T16:05:53.207688Z",
+          "nonce": "F73ADA0E",
+          "nonce_secret_sha256": "07cb7c53ce9c70e78ea1828d693162b255fd7dacf1d73186614b27e10eb00bcd",
+          "params": {
+            "currency": "CZK",
+            "deployment": "DEMO",
+            "mandate_no": 1,
+            "max_count": 20,
+            "max_per_payment_minor": 8000000,
+            "max_total_minor": 25000000,
+            "nonce": "F73ADA0E",
+            "payee_count": 3,
+            "payee_registry_version": 1,
+            "payee_scope": "existing_only",
+            "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+            "require_vop": [
+              "MTCH"
+            ],
+            "role": "treasury",
+            "sig_index": 2,
+            "sig_total": 2,
+            "subject_hash": "0a31d3be31447844560b32a6a4b704f92621bcd30b0f0db594a4126dc69b34e0",
+            "valid_from": "2026-10-19T16:00:50.669819Z",
+            "valid_until": "2026-10-20T16:00:49Z"
+          },
+          "profile": "safe3-mono-16x4",
+          "purpose": "MANDATE",
+          "role": "treasury",
+          "subject_hash": "0a31d3be31447844560b32a6a4b704f92621bcd30b0f0db594a4126dc69b34e0",
+          "subject_id": "mnd_1",
+          "template": "MANDATE",
+          "text_sha256": "e99b81d4c9204e5441419177c277d10c6717674fa273de684735e169bbdf580c"
+        },
+        "facts_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "cc296b87090afa4395ba7d08e1953ea000404b0813776c87f442e510ce5cda39",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 15,
+        "subject_id": "mnd_1",
+        "ts": "2026-10-19T16:00:53.214Z",
+        "type": "challenge",
+        "v": 2
+      },
+      "leaf_hash": "691ece0c8001303cf2e931ce601f1cff4a5426c9b4e4e8dcea6347377e6d8be5",
+      "seq": 15
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "fields": {
+            "currency": "CZK",
+            "max_anom": 40,
+            "max_count": 20,
+            "max_per_payment_minor": 8000000,
+            "max_total_minor": 25000000,
+            "payee_registry_hash": "b6fc03c4f077419f3d08e4403915bb4a478344b5276b88578f5e05bf95b81045",
+            "payee_registry_version": 1,
+            "payee_scope": "existing_only",
+            "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+            "require_vop": [
+              "MTCH"
+            ],
+            "valid_from": "2026-10-19T16:00:50.669819Z",
+            "valid_until": "2026-10-20T16:00:49Z"
+          },
+          "mandate_id": "mnd_1",
+          "mandate_no": 1,
+          "nonce": "B108D9D2",
+          "role": "clerk",
+          "sig_index": 1,
+          "sig_total": 2,
+          "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+          "status": "PENDING_SIG_TREASURY"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 16,
+        "subject_id": "mnd_1",
+        "ts": "2026-10-19T16:00:53.242Z",
+        "type": "mandate_signed",
+        "v": 2
+      },
+      "leaf_hash": "b8ba8bc96de6989affffb349abf6615c81f7c57b5ec7281cbbbfb1a355e7dc62",
+      "seq": 16
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "accepted": true,
+          "error": null,
+          "nonce": "B108D9D2",
+          "purpose": "MANDATE",
+          "role": "clerk",
+          "sig": "0x1b1850cd3e4d140b99942cfa5bee847a8ac2fe25deffd303b59abb1b1ecde1eb4ad48749ee7f386f21a073f2e7263035b6425d5179b18b9fc92b880e34a127e61c",
+          "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+          "text_sha256": "d2cddbea503ae8c0c13b3ff12f0fb5a5ebfb4499933685d38e0978b2e9ca0fe6"
+        },
+        "facts_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "0aaabcb64ef2eff9a38fd8bdbd6e197587b15e3331ab8905f0701de08576f9ec",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 17,
+        "subject_id": "mnd_1",
+        "ts": "2026-10-19T16:00:53.264Z",
+        "type": "signature",
+        "v": 2
+      },
+      "leaf_hash": "2a1beb84ef5324ac12111df50f6040e34a408228b665076b6d87eccd0c037555",
+      "seq": 17
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "fields": {
+            "currency": "CZK",
+            "max_anom": 40,
+            "max_count": 20,
+            "max_per_payment_minor": 8000000,
+            "max_total_minor": 25000000,
+            "payee_registry_hash": "b6fc03c4f077419f3d08e4403915bb4a478344b5276b88578f5e05bf95b81045",
+            "payee_registry_version": 1,
+            "payee_scope": "existing_only",
+            "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+            "require_vop": [
+              "MTCH"
+            ],
+            "valid_from": "2026-10-19T16:00:50.669819Z",
+            "valid_until": "2026-10-20T16:00:49Z"
+          },
+          "mandate_id": "mnd_1",
+          "mandate_no": 1,
+          "nonce": "F73ADA0E",
+          "role": "treasury",
+          "sig_index": 2,
+          "sig_total": 2,
+          "signer_address": "0xac34739e1e424a377b23e0ffedb1f70f26e64f11",
+          "status": "ACTIVE"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 18,
+        "subject_id": "mnd_1",
+        "ts": "2026-10-19T16:00:53.401Z",
+        "type": "mandate_signed",
+        "v": 2
+      },
+      "leaf_hash": "13c39357281c41556464ef973e311c9db4d0a0cd96daff2d5a21fa48a5665b21",
+      "seq": 18
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "accepted": true,
+          "error": null,
+          "nonce": "F73ADA0E",
+          "purpose": "MANDATE",
+          "role": "treasury",
+          "sig": "0xd9286bf1f79026dbcb88a6dec17e320e3ecaa003bcc23a14bf2af22e49e767164461c3b5112e845fd88681a66891430346d45ead02b918fb01288c022a04d9cc1c",
+          "signer_address": "0xac34739e1e424a377b23e0ffedb1f70f26e64f11",
+          "text_sha256": "e99b81d4c9204e5441419177c277d10c6717674fa273de684735e169bbdf580c"
+        },
+        "facts_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "0a31d3be31447844560b32a6a4b704f92621bcd30b0f0db594a4126dc69b34e0",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 19,
+        "subject_id": "mnd_1",
+        "ts": "2026-10-19T16:00:53.422Z",
+        "type": "signature",
+        "v": 2
+      },
+      "leaf_hash": "d1ae548787f6704e6422a859008b3ef62a2730ac4cd02bf609b328462750548f",
+      "seq": 19
+    },
+    {
+      "event": {
+        "actor": "tools",
+        "data": {
+          "hints": [],
+          "invoice": {
+            "amount_minor": 1450000,
+            "currency": "CZK",
+            "invoice_no": "FV-160049-1",
+            "invoice_ref": "doc_43592996ab5306ac",
+            "issue_date": "2026-10-09",
+            "reason_code": "DUE",
+            "vendor_id": "ven_12345678",
+            "vs": "1600491"
+          },
+          "proposal_id": "prp_1"
+        },
+        "facts_digest": "d00140f334abf83c043a41bdc0d3e59634f0f82830b4668216f5d2fa73a6ab6d",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c2f30c95822859503fa85e2332d268ff93824d9124092286781ae1b510c7f0d6",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 20,
+        "subject_id": "prp_1",
+        "ts": "2026-10-19T16:00:54.136Z",
+        "type": "proposal",
+        "v": 2
+      },
+      "leaf_hash": "33bc4e0c0f0c1235bcb9a87a9f4d85fb473d9c9901d9ae7f19ce29bb1ffef9a5",
+      "seq": 20
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "facts": [
+            {
+              "display_line": "WITHIN MANDATE",
+              "evidence": {
+                "amount_minor": 1450000,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "spent_minor": 0
+              },
+              "id": "F-MANDATE",
+              "kind": "F",
+              "label": "Within mandate limits",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "WARNLIST CLEAR",
+              "evidence": {
+                "domains": [
+                  "acme.cz"
+                ],
+                "name": "ACME s.r.o."
+              },
+              "id": "F-WARNLIST",
+              "kind": "F",
+              "label": "Regulator warning lists (MostlyRight): no name or domain match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "SANCTIONS CLEAR",
+              "evidence": {
+                "ico": "12345678",
+                "name": "ACME s.r.o."
+              },
+              "id": "F-SANCTION",
+              "kind": "F",
+              "label": "EU financial sanctions, entities (MostlyRight): no match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "VOP MTCH",
+              "evidence": {
+                "account_found": true,
+                "bank_code": "0800",
+                "code": "MTCH",
+                "country": "CZ",
+                "participant": true,
+                "score": 100
+              },
+              "id": "F-VOP",
+              "kind": "F",
+              "label": "Verification of Payee (simulated): MTCH",
+              "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ADIS ACCT YES",
+              "evidence": {
+                "account_published": true,
+                "as_of": "2026-10-19T06:00:00Z",
+                "dic": "CZ12345678",
+                "payer_found": true,
+                "source": "adis-cache",
+                "unreliable": false
+              },
+              "id": "F-VAT",
+              "kind": "F",
+              "label": "Account published in VAT registry (ADIS): yes",
+              "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "BANK DOMESTIC",
+              "evidence": {
+                "bank_code": "0800",
+                "country": "CZ",
+                "found": true,
+                "kind": "bank",
+                "vendor_country": "CZ"
+              },
+              "id": "F-BANK",
+              "kind": "F",
+              "label": "Bank from IBAN: Bank 0800 (CZ)",
+              "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "IBAN SEEN 962D",
+              "evidence": {
+                "first_seen": "2024-03-01T00:00:00Z",
+                "found": true,
+                "hours": 23104
+              },
+              "id": "F-FIRSTSEEN",
+              "kind": "F",
+              "label": "IBAN first seen in payee registry: 962 days ago",
+              "prov": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ANOM 0/100",
+              "evidence": {
+                "features": "",
+                "score": 0,
+                "tool_calls": 0,
+                "vendor_id": "ven_12345678"
+              },
+              "id": "F-ANOM",
+              "kind": "F",
+              "label": "Action anomaly score (tool-call log): 0/100",
+              "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "severity": "INFO"
+            }
+          ],
+          "snapshots": {
+            "adis": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+            "bank_codes": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+            "mostlyright": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+            "registry": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+            "toollog": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "vop": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc"
+          },
+          "subject_id": "prp_1"
+        },
+        "facts_digest": "d00140f334abf83c043a41bdc0d3e59634f0f82830b4668216f5d2fa73a6ab6d",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c2f30c95822859503fa85e2332d268ff93824d9124092286781ae1b510c7f0d6",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 21,
+        "subject_id": "prp_1",
+        "ts": "2026-10-19T16:00:54.162Z",
+        "type": "facts",
+        "v": 2
+      },
+      "leaf_hash": "9426b5652b2552c36392d06c553932e0eac1f7733ac71dfc1031ea7779e77627",
+      "seq": 21
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "decision": "allow",
+          "inputs": {
+            "facts": {
+              "facts": [
+                {
+                  "display_line": "WITHIN MANDATE",
+                  "evidence": {
+                    "amount_minor": 1450000,
+                    "max_per_payment_minor": 8000000,
+                    "max_total_minor": 25000000,
+                    "spent_minor": 0
+                  },
+                  "id": "F-MANDATE",
+                  "kind": "F",
+                  "label": "Within mandate limits",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "WARNLIST CLEAR",
+                  "evidence": {
+                    "domains": [
+                      "acme.cz"
+                    ],
+                    "name": "ACME s.r.o."
+                  },
+                  "id": "F-WARNLIST",
+                  "kind": "F",
+                  "label": "Regulator warning lists (MostlyRight): no name or domain match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SANCTIONS CLEAR",
+                  "evidence": {
+                    "ico": "12345678",
+                    "name": "ACME s.r.o."
+                  },
+                  "id": "F-SANCTION",
+                  "kind": "F",
+                  "label": "EU financial sanctions, entities (MostlyRight): no match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "VOP MTCH",
+                  "evidence": {
+                    "account_found": true,
+                    "bank_code": "0800",
+                    "code": "MTCH",
+                    "country": "CZ",
+                    "participant": true,
+                    "score": 100
+                  },
+                  "id": "F-VOP",
+                  "kind": "F",
+                  "label": "Verification of Payee (simulated): MTCH",
+                  "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ADIS ACCT YES",
+                  "evidence": {
+                    "account_published": true,
+                    "as_of": "2026-10-19T06:00:00Z",
+                    "dic": "CZ12345678",
+                    "payer_found": true,
+                    "source": "adis-cache",
+                    "unreliable": false
+                  },
+                  "id": "F-VAT",
+                  "kind": "F",
+                  "label": "Account published in VAT registry (ADIS): yes",
+                  "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "BANK DOMESTIC",
+                  "evidence": {
+                    "bank_code": "0800",
+                    "country": "CZ",
+                    "found": true,
+                    "kind": "bank",
+                    "vendor_country": "CZ"
+                  },
+                  "id": "F-BANK",
+                  "kind": "F",
+                  "label": "Bank from IBAN: Bank 0800 (CZ)",
+                  "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "IBAN SEEN 962D",
+                  "evidence": {
+                    "first_seen": "2024-03-01T00:00:00Z",
+                    "found": true,
+                    "hours": 23104
+                  },
+                  "id": "F-FIRSTSEEN",
+                  "kind": "F",
+                  "label": "IBAN first seen in payee registry: 962 days ago",
+                  "prov": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ANOM 0/100",
+                  "evidence": {
+                    "features": "",
+                    "score": 0,
+                    "tool_calls": 0,
+                    "vendor_id": "ven_12345678"
+                  },
+                  "id": "F-ANOM",
+                  "kind": "F",
+                  "label": "Action anomaly score (tool-call log): 0/100",
+                  "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "severity": "INFO"
+                }
+              ],
+              "facts_digest": "d00140f334abf83c043a41bdc0d3e59634f0f82830b4668216f5d2fa73a6ab6d"
+            },
+            "state": {
+              "history": [],
+              "mandate": {
+                "count": 0,
+                "mandate_id": "mnd_1",
+                "max_anom": 40,
+                "max_count": 20,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "payee_registry_version": 1,
+                "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+                "require_vop": [
+                  "MTCH"
+                ],
+                "spent_minor": 0,
+                "status": "ACTIVE",
+                "valid_from": "2026-10-19T16:00:50.669819Z",
+                "valid_until": "2026-10-20T16:00:49Z"
+              },
+              "now": "2026-10-19T16:00:53.767801Z",
+              "payee": {
+                "active_iban": true,
+                "in_network": true,
+                "status": "ACTIVE"
+              },
+              "proposals": [],
+              "reg_hit": true
+            },
+            "subject": {
+              "invoice": {
+                "amount_minor": 1450000,
+                "invoice_no": "FV-160049-1",
+                "issue_date": "2026-10-09",
+                "vendor_id": "ven_12345678"
+              },
+              "proposal_id": "prp_1"
+            }
+          },
+          "mandate_id": "mnd_1",
+          "rule_ids": [],
+          "subject_id": "prp_1"
+        },
+        "facts_digest": "d00140f334abf83c043a41bdc0d3e59634f0f82830b4668216f5d2fa73a6ab6d",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c2f30c95822859503fa85e2332d268ff93824d9124092286781ae1b510c7f0d6",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 22,
+        "subject_id": "prp_1",
+        "ts": "2026-10-19T16:00:54.191Z",
+        "type": "decision",
+        "v": 2
+      },
+      "leaf_hash": "0c35d88225e7d737d48caadf0e7a6583173c6af389c1d4d249b3023e82f7eaeb",
+      "seq": 22
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "amount_minor": 1450000,
+          "authorization": {
+            "kind": "mandate",
+            "mandate_id": "mnd_1"
+          },
+          "currency": "CZK",
+          "iban": "CZ6508000000192000145399",
+          "proposal_id": "prp_1",
+          "tx_id": "tx_aaa77024e314701a",
+          "vendor_id": "ven_12345678"
+        },
+        "facts_digest": "d00140f334abf83c043a41bdc0d3e59634f0f82830b4668216f5d2fa73a6ab6d",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c2f30c95822859503fa85e2332d268ff93824d9124092286781ae1b510c7f0d6",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 23,
+        "subject_id": "prp_1",
+        "ts": "2026-10-19T16:00:54.218Z",
+        "type": "execution",
+        "v": 2
+      },
+      "leaf_hash": "9eb02615793d7ae61cc3cf7d298e8cc4ddb6de673e8761aedfdd2cf6ebdae62a",
+      "seq": 23
+    },
+    {
+      "event": {
+        "actor": "rail",
+        "data": {
+          "format": "pain.001.001.09",
+          "msg_id": "AG1-tx_aaa77024e314701a",
+          "status": "ACTC",
+          "tx_id": "tx_aaa77024e314701a",
+          "xml_c14n_sha256": "1160ce2873d7719667ba8cd1c958dc5614cd385d4b24e83b0ac2ad3121baae20"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 24,
+        "subject_id": "tx_aaa77024e314701a",
+        "ts": "2026-10-19T16:00:54.334Z",
+        "type": "rail_submitted",
+        "v": 2
+      },
+      "leaf_hash": "ae72a1f596dd3341f8361fb4342d4a6f98bd3841061cb4a14db23c27641cbdb5",
+      "seq": 24
+    },
+    {
+      "event": {
+        "actor": "tools",
+        "data": {
+          "hints": [],
+          "invoice": {
+            "amount_minor": 2000000,
+            "currency": "CZK",
+            "invoice_no": "FV-160049-2",
+            "invoice_ref": "doc_43592996ab5306ac",
+            "issue_date": "2026-09-29",
+            "reason_code": "DUE",
+            "vendor_id": "ven_12345678",
+            "vs": "1600492"
+          },
+          "proposal_id": "prp_2"
+        },
+        "facts_digest": "6d972c3af2211899fda7b8a59ec8d6be285f7da4017449f69865f4f103770d56",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "841454beaa018664e1710629b3c31914e98f3c7c491986180e2daf934affc093",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 25,
+        "subject_id": "prp_2",
+        "ts": "2026-10-19T16:00:54.458Z",
+        "type": "proposal",
+        "v": 2
+      },
+      "leaf_hash": "1425b8ec61ca861110c5fa3454ce72ea339ec1a5649a06f1649307793a1fb17b",
+      "seq": 25
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "facts": [
+            {
+              "display_line": "WITHIN MANDATE",
+              "evidence": {
+                "amount_minor": 2000000,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "spent_minor": 1450000
+              },
+              "id": "F-MANDATE",
+              "kind": "F",
+              "label": "Within mandate limits",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "WARNLIST CLEAR",
+              "evidence": {
+                "domains": [
+                  "acme.cz"
+                ],
+                "name": "ACME s.r.o."
+              },
+              "id": "F-WARNLIST",
+              "kind": "F",
+              "label": "Regulator warning lists (MostlyRight): no name or domain match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "SANCTIONS CLEAR",
+              "evidence": {
+                "ico": "12345678",
+                "name": "ACME s.r.o."
+              },
+              "id": "F-SANCTION",
+              "kind": "F",
+              "label": "EU financial sanctions, entities (MostlyRight): no match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "VOP MTCH",
+              "evidence": {
+                "account_found": true,
+                "bank_code": "0800",
+                "code": "MTCH",
+                "country": "CZ",
+                "participant": true,
+                "score": 100
+              },
+              "id": "F-VOP",
+              "kind": "F",
+              "label": "Verification of Payee (simulated): MTCH",
+              "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ADIS ACCT YES",
+              "evidence": {
+                "account_published": true,
+                "as_of": "2026-10-19T06:00:00Z",
+                "dic": "CZ12345678",
+                "payer_found": true,
+                "source": "adis-cache",
+                "unreliable": false
+              },
+              "id": "F-VAT",
+              "kind": "F",
+              "label": "Account published in VAT registry (ADIS): yes",
+              "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "BANK DOMESTIC",
+              "evidence": {
+                "bank_code": "0800",
+                "country": "CZ",
+                "found": true,
+                "kind": "bank",
+                "vendor_country": "CZ"
+              },
+              "id": "F-BANK",
+              "kind": "F",
+              "label": "Bank from IBAN: Bank 0800 (CZ)",
+              "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "IBAN SEEN 962D",
+              "evidence": {
+                "first_seen": "2024-03-01T00:00:00Z",
+                "found": true,
+                "hours": 23104
+              },
+              "id": "F-FIRSTSEEN",
+              "kind": "F",
+              "label": "IBAN first seen in payee registry: 962 days ago",
+              "prov": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ANOM 10/100",
+              "evidence": {
+                "features": "round_amount",
+                "score": 10,
+                "tool_calls": 0,
+                "vendor_id": "ven_12345678"
+              },
+              "id": "F-ANOM",
+              "kind": "F",
+              "label": "Action anomaly score (tool-call log): 10/100",
+              "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "severity": "INFO"
+            }
+          ],
+          "snapshots": {
+            "adis": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+            "bank_codes": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+            "mostlyright": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+            "registry": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+            "toollog": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "vop": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc"
+          },
+          "subject_id": "prp_2"
+        },
+        "facts_digest": "6d972c3af2211899fda7b8a59ec8d6be285f7da4017449f69865f4f103770d56",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "841454beaa018664e1710629b3c31914e98f3c7c491986180e2daf934affc093",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 26,
+        "subject_id": "prp_2",
+        "ts": "2026-10-19T16:00:54.482Z",
+        "type": "facts",
+        "v": 2
+      },
+      "leaf_hash": "306620ca1eb95135e293110707351ee364197eb4af32050b0d7dd362a44ecda6",
+      "seq": 26
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "decision": "allow",
+          "inputs": {
+            "facts": {
+              "facts": [
+                {
+                  "display_line": "WITHIN MANDATE",
+                  "evidence": {
+                    "amount_minor": 2000000,
+                    "max_per_payment_minor": 8000000,
+                    "max_total_minor": 25000000,
+                    "spent_minor": 1450000
+                  },
+                  "id": "F-MANDATE",
+                  "kind": "F",
+                  "label": "Within mandate limits",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "WARNLIST CLEAR",
+                  "evidence": {
+                    "domains": [
+                      "acme.cz"
+                    ],
+                    "name": "ACME s.r.o."
+                  },
+                  "id": "F-WARNLIST",
+                  "kind": "F",
+                  "label": "Regulator warning lists (MostlyRight): no name or domain match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SANCTIONS CLEAR",
+                  "evidence": {
+                    "ico": "12345678",
+                    "name": "ACME s.r.o."
+                  },
+                  "id": "F-SANCTION",
+                  "kind": "F",
+                  "label": "EU financial sanctions, entities (MostlyRight): no match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "VOP MTCH",
+                  "evidence": {
+                    "account_found": true,
+                    "bank_code": "0800",
+                    "code": "MTCH",
+                    "country": "CZ",
+                    "participant": true,
+                    "score": 100
+                  },
+                  "id": "F-VOP",
+                  "kind": "F",
+                  "label": "Verification of Payee (simulated): MTCH",
+                  "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ADIS ACCT YES",
+                  "evidence": {
+                    "account_published": true,
+                    "as_of": "2026-10-19T06:00:00Z",
+                    "dic": "CZ12345678",
+                    "payer_found": true,
+                    "source": "adis-cache",
+                    "unreliable": false
+                  },
+                  "id": "F-VAT",
+                  "kind": "F",
+                  "label": "Account published in VAT registry (ADIS): yes",
+                  "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "BANK DOMESTIC",
+                  "evidence": {
+                    "bank_code": "0800",
+                    "country": "CZ",
+                    "found": true,
+                    "kind": "bank",
+                    "vendor_country": "CZ"
+                  },
+                  "id": "F-BANK",
+                  "kind": "F",
+                  "label": "Bank from IBAN: Bank 0800 (CZ)",
+                  "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "IBAN SEEN 962D",
+                  "evidence": {
+                    "first_seen": "2024-03-01T00:00:00Z",
+                    "found": true,
+                    "hours": 23104
+                  },
+                  "id": "F-FIRSTSEEN",
+                  "kind": "F",
+                  "label": "IBAN first seen in payee registry: 962 days ago",
+                  "prov": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ANOM 10/100",
+                  "evidence": {
+                    "features": "round_amount",
+                    "score": 10,
+                    "tool_calls": 0,
+                    "vendor_id": "ven_12345678"
+                  },
+                  "id": "F-ANOM",
+                  "kind": "F",
+                  "label": "Action anomaly score (tool-call log): 10/100",
+                  "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "severity": "INFO"
+                }
+              ],
+              "facts_digest": "6d972c3af2211899fda7b8a59ec8d6be285f7da4017449f69865f4f103770d56"
+            },
+            "state": {
+              "history": [
+                {
+                  "amount_minor": 1450000,
+                  "executed_at": "2026-10-19T16:00:54.218790Z",
+                  "vendor_id": "ven_12345678"
+                }
+              ],
+              "mandate": {
+                "count": 1,
+                "mandate_id": "mnd_1",
+                "max_anom": 40,
+                "max_count": 20,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "payee_registry_version": 1,
+                "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+                "require_vop": [
+                  "MTCH"
+                ],
+                "spent_minor": 1450000,
+                "status": "ACTIVE",
+                "valid_from": "2026-10-19T16:00:50.669819Z",
+                "valid_until": "2026-10-20T16:00:49Z"
+              },
+              "now": "2026-10-19T16:00:54.426416Z",
+              "payee": {
+                "active_iban": true,
+                "in_network": true,
+                "status": "ACTIVE"
+              },
+              "proposals": [
+                {
+                  "invoice": {
+                    "amount_minor": 1450000,
+                    "invoice_no": "FV-160049-1",
+                    "issue_date": "2026-10-09",
+                    "vendor_id": "ven_12345678"
+                  },
+                  "proposal_id": "prp_1",
+                  "status": "EXECUTED"
+                }
+              ],
+              "reg_hit": true
+            },
+            "subject": {
+              "invoice": {
+                "amount_minor": 2000000,
+                "invoice_no": "FV-160049-2",
+                "issue_date": "2026-09-29",
+                "vendor_id": "ven_12345678"
+              },
+              "proposal_id": "prp_2"
+            }
+          },
+          "mandate_id": "mnd_1",
+          "rule_ids": [],
+          "subject_id": "prp_2"
+        },
+        "facts_digest": "6d972c3af2211899fda7b8a59ec8d6be285f7da4017449f69865f4f103770d56",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "841454beaa018664e1710629b3c31914e98f3c7c491986180e2daf934affc093",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 27,
+        "subject_id": "prp_2",
+        "ts": "2026-10-19T16:00:54.504Z",
+        "type": "decision",
+        "v": 2
+      },
+      "leaf_hash": "fb7959357f9dffd0ade0ae4bb2e60edb1f3e299f251e601e74a181d7ab93eff6",
+      "seq": 27
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "amount_minor": 2000000,
+          "authorization": {
+            "kind": "mandate",
+            "mandate_id": "mnd_1"
+          },
+          "currency": "CZK",
+          "iban": "CZ6508000000192000145399",
+          "proposal_id": "prp_2",
+          "tx_id": "tx_ac20dd23052bed32",
+          "vendor_id": "ven_12345678"
+        },
+        "facts_digest": "6d972c3af2211899fda7b8a59ec8d6be285f7da4017449f69865f4f103770d56",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "841454beaa018664e1710629b3c31914e98f3c7c491986180e2daf934affc093",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 28,
+        "subject_id": "prp_2",
+        "ts": "2026-10-19T16:00:54.528Z",
+        "type": "execution",
+        "v": 2
+      },
+      "leaf_hash": "8a916168344a627fc760d86d68c3a12cb4e528b274b47a6f155b1910a75c81af",
+      "seq": 28
+    },
+    {
+      "event": {
+        "actor": "rail",
+        "data": {
+          "format": "pain.001.001.09",
+          "msg_id": "AG1-tx_ac20dd23052bed32",
+          "status": "ACTC",
+          "tx_id": "tx_ac20dd23052bed32",
+          "xml_c14n_sha256": "db58a2cedb006e05add3f0a93e97b75b1410038efbbe73efd09d5f52199b4f3a"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 29,
+        "subject_id": "tx_ac20dd23052bed32",
+        "ts": "2026-10-19T16:00:54.569Z",
+        "type": "rail_submitted",
+        "v": 2
+      },
+      "leaf_hash": "c8cd7c7fb4e5717698a8f50bb535265087873eee225962df72dc66b875684a6b",
+      "seq": 29
+    },
+    {
+      "event": {
+        "actor": "tools",
+        "data": {
+          "hints": [],
+          "invoice": {
+            "amount_minor": 3000000,
+            "currency": "CZK",
+            "invoice_no": "FV-160049-3",
+            "invoice_ref": "doc_43592996ab5306ac",
+            "issue_date": "2026-09-19",
+            "reason_code": "DUE",
+            "vendor_id": "ven_12345678",
+            "vs": "1600493"
+          },
+          "proposal_id": "prp_3"
+        },
+        "facts_digest": "c8f4019e3b363ada800e497ffc917d5b68b38b14c3070e776dbb71df61aec586",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c4da5998762c7c06994165bdcc0c6535a2ef42d660e304e6c4c8e89695dca7d4",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 30,
+        "subject_id": "prp_3",
+        "ts": "2026-10-19T16:00:54.763Z",
+        "type": "proposal",
+        "v": 2
+      },
+      "leaf_hash": "6b7ff28b61de711d67075108377f2f465fcfea0bd2c27e488d0b9d73b871041f",
+      "seq": 30
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "facts": [
+            {
+              "display_line": "WITHIN MANDATE",
+              "evidence": {
+                "amount_minor": 3000000,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "spent_minor": 3450000
+              },
+              "id": "F-MANDATE",
+              "kind": "F",
+              "label": "Within mandate limits",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "WARNLIST CLEAR",
+              "evidence": {
+                "domains": [
+                  "acme.cz"
+                ],
+                "name": "ACME s.r.o."
+              },
+              "id": "F-WARNLIST",
+              "kind": "F",
+              "label": "Regulator warning lists (MostlyRight): no name or domain match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "SANCTIONS CLEAR",
+              "evidence": {
+                "ico": "12345678",
+                "name": "ACME s.r.o."
+              },
+              "id": "F-SANCTION",
+              "kind": "F",
+              "label": "EU financial sanctions, entities (MostlyRight): no match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "VOP MTCH",
+              "evidence": {
+                "account_found": true,
+                "bank_code": "0800",
+                "code": "MTCH",
+                "country": "CZ",
+                "participant": true,
+                "score": 100
+              },
+              "id": "F-VOP",
+              "kind": "F",
+              "label": "Verification of Payee (simulated): MTCH",
+              "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ADIS ACCT YES",
+              "evidence": {
+                "account_published": true,
+                "as_of": "2026-10-19T06:00:00Z",
+                "dic": "CZ12345678",
+                "payer_found": true,
+                "source": "adis-cache",
+                "unreliable": false
+              },
+              "id": "F-VAT",
+              "kind": "F",
+              "label": "Account published in VAT registry (ADIS): yes",
+              "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "BANK DOMESTIC",
+              "evidence": {
+                "bank_code": "0800",
+                "country": "CZ",
+                "found": true,
+                "kind": "bank",
+                "vendor_country": "CZ"
+              },
+              "id": "F-BANK",
+              "kind": "F",
+              "label": "Bank from IBAN: Bank 0800 (CZ)",
+              "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "IBAN SEEN 962D",
+              "evidence": {
+                "first_seen": "2024-03-01T00:00:00Z",
+                "found": true,
+                "hours": 23104
+              },
+              "id": "F-FIRSTSEEN",
+              "kind": "F",
+              "label": "IBAN first seen in payee registry: 962 days ago",
+              "prov": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ANOM 10/100",
+              "evidence": {
+                "features": "round_amount",
+                "score": 10,
+                "tool_calls": 0,
+                "vendor_id": "ven_12345678"
+              },
+              "id": "F-ANOM",
+              "kind": "F",
+              "label": "Action anomaly score (tool-call log): 10/100",
+              "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "severity": "INFO"
+            }
+          ],
+          "snapshots": {
+            "adis": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+            "bank_codes": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+            "mostlyright": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+            "registry": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+            "toollog": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "vop": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc"
+          },
+          "subject_id": "prp_3"
+        },
+        "facts_digest": "c8f4019e3b363ada800e497ffc917d5b68b38b14c3070e776dbb71df61aec586",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c4da5998762c7c06994165bdcc0c6535a2ef42d660e304e6c4c8e89695dca7d4",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 31,
+        "subject_id": "prp_3",
+        "ts": "2026-10-19T16:00:54.786Z",
+        "type": "facts",
+        "v": 2
+      },
+      "leaf_hash": "2c2e50c376cf7ad5f181362425ac31300ce9f9a3fea370b186a7682f4aa066ae",
+      "seq": 31
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "decision": "allow",
+          "inputs": {
+            "facts": {
+              "facts": [
+                {
+                  "display_line": "WITHIN MANDATE",
+                  "evidence": {
+                    "amount_minor": 3000000,
+                    "max_per_payment_minor": 8000000,
+                    "max_total_minor": 25000000,
+                    "spent_minor": 3450000
+                  },
+                  "id": "F-MANDATE",
+                  "kind": "F",
+                  "label": "Within mandate limits",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "WARNLIST CLEAR",
+                  "evidence": {
+                    "domains": [
+                      "acme.cz"
+                    ],
+                    "name": "ACME s.r.o."
+                  },
+                  "id": "F-WARNLIST",
+                  "kind": "F",
+                  "label": "Regulator warning lists (MostlyRight): no name or domain match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SANCTIONS CLEAR",
+                  "evidence": {
+                    "ico": "12345678",
+                    "name": "ACME s.r.o."
+                  },
+                  "id": "F-SANCTION",
+                  "kind": "F",
+                  "label": "EU financial sanctions, entities (MostlyRight): no match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "VOP MTCH",
+                  "evidence": {
+                    "account_found": true,
+                    "bank_code": "0800",
+                    "code": "MTCH",
+                    "country": "CZ",
+                    "participant": true,
+                    "score": 100
+                  },
+                  "id": "F-VOP",
+                  "kind": "F",
+                  "label": "Verification of Payee (simulated): MTCH",
+                  "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ADIS ACCT YES",
+                  "evidence": {
+                    "account_published": true,
+                    "as_of": "2026-10-19T06:00:00Z",
+                    "dic": "CZ12345678",
+                    "payer_found": true,
+                    "source": "adis-cache",
+                    "unreliable": false
+                  },
+                  "id": "F-VAT",
+                  "kind": "F",
+                  "label": "Account published in VAT registry (ADIS): yes",
+                  "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "BANK DOMESTIC",
+                  "evidence": {
+                    "bank_code": "0800",
+                    "country": "CZ",
+                    "found": true,
+                    "kind": "bank",
+                    "vendor_country": "CZ"
+                  },
+                  "id": "F-BANK",
+                  "kind": "F",
+                  "label": "Bank from IBAN: Bank 0800 (CZ)",
+                  "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "IBAN SEEN 962D",
+                  "evidence": {
+                    "first_seen": "2024-03-01T00:00:00Z",
+                    "found": true,
+                    "hours": 23104
+                  },
+                  "id": "F-FIRSTSEEN",
+                  "kind": "F",
+                  "label": "IBAN first seen in payee registry: 962 days ago",
+                  "prov": "b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ANOM 10/100",
+                  "evidence": {
+                    "features": "round_amount",
+                    "score": 10,
+                    "tool_calls": 0,
+                    "vendor_id": "ven_12345678"
+                  },
+                  "id": "F-ANOM",
+                  "kind": "F",
+                  "label": "Action anomaly score (tool-call log): 10/100",
+                  "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "severity": "INFO"
+                }
+              ],
+              "facts_digest": "c8f4019e3b363ada800e497ffc917d5b68b38b14c3070e776dbb71df61aec586"
+            },
+            "state": {
+              "history": [
+                {
+                  "amount_minor": 1450000,
+                  "executed_at": "2026-10-19T16:00:54.218790Z",
+                  "vendor_id": "ven_12345678"
+                },
+                {
+                  "amount_minor": 2000000,
+                  "executed_at": "2026-10-19T16:00:54.528102Z",
+                  "vendor_id": "ven_12345678"
+                }
+              ],
+              "mandate": {
+                "count": 2,
+                "mandate_id": "mnd_1",
+                "max_anom": 40,
+                "max_count": 20,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "payee_registry_version": 1,
+                "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+                "require_vop": [
+                  "MTCH"
+                ],
+                "spent_minor": 3450000,
+                "status": "ACTIVE",
+                "valid_from": "2026-10-19T16:00:50.669819Z",
+                "valid_until": "2026-10-20T16:00:49Z"
+              },
+              "now": "2026-10-19T16:00:54.730120Z",
+              "payee": {
+                "active_iban": true,
+                "in_network": true,
+                "status": "ACTIVE"
+              },
+              "proposals": [
+                {
+                  "invoice": {
+                    "amount_minor": 1450000,
+                    "invoice_no": "FV-160049-1",
+                    "issue_date": "2026-10-09",
+                    "vendor_id": "ven_12345678"
+                  },
+                  "proposal_id": "prp_1",
+                  "status": "EXECUTED"
+                },
+                {
+                  "invoice": {
+                    "amount_minor": 2000000,
+                    "invoice_no": "FV-160049-2",
+                    "issue_date": "2026-09-29",
+                    "vendor_id": "ven_12345678"
+                  },
+                  "proposal_id": "prp_2",
+                  "status": "EXECUTED"
+                }
+              ],
+              "reg_hit": true
+            },
+            "subject": {
+              "invoice": {
+                "amount_minor": 3000000,
+                "invoice_no": "FV-160049-3",
+                "issue_date": "2026-09-19",
+                "vendor_id": "ven_12345678"
+              },
+              "proposal_id": "prp_3"
+            }
+          },
+          "mandate_id": "mnd_1",
+          "rule_ids": [],
+          "subject_id": "prp_3"
+        },
+        "facts_digest": "c8f4019e3b363ada800e497ffc917d5b68b38b14c3070e776dbb71df61aec586",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c4da5998762c7c06994165bdcc0c6535a2ef42d660e304e6c4c8e89695dca7d4",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 32,
+        "subject_id": "prp_3",
+        "ts": "2026-10-19T16:00:54.814Z",
+        "type": "decision",
+        "v": 2
+      },
+      "leaf_hash": "dc7860bc8c6fc8ba4985049b0722d69279859989d1ff1db46d895e6cb2a37f33",
+      "seq": 32
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "amount_minor": 3000000,
+          "authorization": {
+            "kind": "mandate",
+            "mandate_id": "mnd_1"
+          },
+          "currency": "CZK",
+          "iban": "CZ6508000000192000145399",
+          "proposal_id": "prp_3",
+          "tx_id": "tx_682ed5d048518652",
+          "vendor_id": "ven_12345678"
+        },
+        "facts_digest": "c8f4019e3b363ada800e497ffc917d5b68b38b14c3070e776dbb71df61aec586",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "c4da5998762c7c06994165bdcc0c6535a2ef42d660e304e6c4c8e89695dca7d4",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 33,
+        "subject_id": "prp_3",
+        "ts": "2026-10-19T16:00:54.840Z",
+        "type": "execution",
+        "v": 2
+      },
+      "leaf_hash": "ac802fc96d01564a05e440680eb4533f64f50421297d0dbe287d44cde05cc8fc",
+      "seq": 33
+    },
+    {
+      "event": {
+        "actor": "rail",
+        "data": {
+          "format": "pain.001.001.09",
+          "msg_id": "AG1-tx_682ed5d048518652",
+          "status": "ACTC",
+          "tx_id": "tx_682ed5d048518652",
+          "xml_c14n_sha256": "a672ab00aafbd13d5fd83c0a3f8837485468b1483c7101f178e678a94d147daa"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 34,
+        "subject_id": "tx_682ed5d048518652",
+        "ts": "2026-10-19T16:00:54.881Z",
+        "type": "rail_submitted",
+        "v": 2
+      },
+      "leaf_hash": "5b20697a0c329a7f4131b2d119b288e7380e9b81b7ee311fefe4f236ec45ae27",
+      "seq": 34
+    },
+    {
+      "event": {
+        "actor": "tools",
+        "data": {
+          "hints": [
+            {
+              "source": "agent",
+              "text": "CFO approved, pay today"
+            }
+          ],
+          "invoice": {
+            "amount_minor": 12500050,
+            "currency": "CZK",
+            "invoice_no": "BS-160049",
+            "invoice_ref": "doc_f44e64e75f3948e9",
+            "issue_date": "2026-10-19",
+            "reason_code": "DUE",
+            "vendor_id": "ven_87654321",
+            "vs": "1600499"
+          },
+          "proposal_id": "prp_4"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+        "inputs_digest": "5c2e12116f03367e385ac9061349f7de414a24a05eafdc68d67a267fdfd116bb",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 35,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.080Z",
+        "type": "proposal",
+        "v": 2
+      },
+      "leaf_hash": "23822453b5d515299b618d8c34a29d64338b258e42fda615ff9b1d880172df02",
+      "seq": 35
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "facts": [
+            {
+              "display_line": "OVER MANDATE CAP",
+              "evidence": {
+                "amount_minor": 12500050,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "spent_minor": 6450000
+              },
+              "id": "F-MANDATE",
+              "kind": "F",
+              "label": "Above mandate limit",
+              "severity": "WARN"
+            },
+            {
+              "display_line": "WARNLIST CLEAR",
+              "evidence": {
+                "domains": [
+                  "betaservis.cz"
+                ],
+                "name": "Beta Servis a.s."
+              },
+              "id": "F-WARNLIST",
+              "kind": "F",
+              "label": "Regulator warning lists (MostlyRight): no name or domain match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "SANCTIONS CLEAR",
+              "evidence": {
+                "ico": "87654321",
+                "name": "Beta Servis a.s."
+              },
+              "id": "F-SANCTION",
+              "kind": "F",
+              "label": "EU financial sanctions, entities (MostlyRight): no match",
+              "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "VOP MTCH",
+              "evidence": {
+                "account_found": true,
+                "bank_code": "0300",
+                "code": "MTCH",
+                "country": "CZ",
+                "participant": true,
+                "score": 100
+              },
+              "id": "F-VOP",
+              "kind": "F",
+              "label": "Verification of Payee (simulated): MTCH",
+              "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "ADIS ACCT YES",
+              "evidence": {
+                "account_published": true,
+                "as_of": "2026-10-19T06:00:00Z",
+                "dic": "CZ87654321",
+                "payer_found": true,
+                "source": "adis-cache",
+                "unreliable": false
+              },
+              "id": "F-VAT",
+              "kind": "F",
+              "label": "Account published in VAT registry (ADIS): yes",
+              "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "BANK DOMESTIC",
+              "evidence": {
+                "bank_code": "0300",
+                "country": "CZ",
+                "found": true,
+                "kind": "bank",
+                "vendor_country": "CZ"
+              },
+              "id": "F-BANK",
+              "kind": "F",
+              "label": "Bank from IBAN: Bank 0300 (CZ)",
+              "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "IBAN SEEN 1587D",
+              "evidence": {
+                "first_seen": "2022-06-15T00:00:00Z",
+                "found": true,
+                "hours": 38104
+              },
+              "id": "F-FIRSTSEEN",
+              "kind": "F",
+              "label": "IBAN first seen in payee registry: 1587 days ago",
+              "prov": "7f6981db647e19080701a9c648aa51914eeb9b7791670b980cd5ecec55e5094e",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "SPLIT 24H",
+              "evidence": {
+                "amount_minor": 12500050,
+                "max_per_payment_minor": 8000000,
+                "split_sum_minor": 0
+              },
+              "id": "F-SPLIT",
+              "kind": "F",
+              "label": "Vendor total in 24 h above per-payment cap",
+              "severity": "WARN"
+            },
+            {
+              "display_line": "ANOM 0/100",
+              "evidence": {
+                "features": "",
+                "score": 0,
+                "tool_calls": 0,
+                "vendor_id": "ven_87654321"
+              },
+              "id": "F-ANOM",
+              "kind": "F",
+              "label": "Action anomaly score (tool-call log): 0/100",
+              "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "severity": "INFO"
+            },
+            {
+              "display_line": "CFO approved, pay today",
+              "id": "H-AGENT",
+              "kind": "H",
+              "label": "hint from agent",
+              "severity": "INFO"
+            }
+          ],
+          "snapshots": {
+            "adis": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+            "bank_codes": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+            "mostlyright": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+            "registry": "7f6981db647e19080701a9c648aa51914eeb9b7791670b980cd5ecec55e5094e",
+            "toollog": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "vop": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc"
+          },
+          "subject_id": "prp_4"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+        "inputs_digest": "5c2e12116f03367e385ac9061349f7de414a24a05eafdc68d67a267fdfd116bb",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 36,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.104Z",
+        "type": "facts",
+        "v": 2
+      },
+      "leaf_hash": "d704d21295e3126abfaca7e867396e3d39e267b7fe3e35fe4dbbf562f0585732",
+      "seq": 36
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "decision": "challenge",
+          "inputs": {
+            "facts": {
+              "facts": [
+                {
+                  "display_line": "OVER MANDATE CAP",
+                  "evidence": {
+                    "amount_minor": 12500050,
+                    "max_per_payment_minor": 8000000,
+                    "max_total_minor": 25000000,
+                    "spent_minor": 6450000
+                  },
+                  "id": "F-MANDATE",
+                  "kind": "F",
+                  "label": "Above mandate limit",
+                  "severity": "WARN"
+                },
+                {
+                  "display_line": "WARNLIST CLEAR",
+                  "evidence": {
+                    "domains": [
+                      "betaservis.cz"
+                    ],
+                    "name": "Beta Servis a.s."
+                  },
+                  "id": "F-WARNLIST",
+                  "kind": "F",
+                  "label": "Regulator warning lists (MostlyRight): no name or domain match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SANCTIONS CLEAR",
+                  "evidence": {
+                    "ico": "87654321",
+                    "name": "Beta Servis a.s."
+                  },
+                  "id": "F-SANCTION",
+                  "kind": "F",
+                  "label": "EU financial sanctions, entities (MostlyRight): no match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "VOP MTCH",
+                  "evidence": {
+                    "account_found": true,
+                    "bank_code": "0300",
+                    "code": "MTCH",
+                    "country": "CZ",
+                    "participant": true,
+                    "score": 100
+                  },
+                  "id": "F-VOP",
+                  "kind": "F",
+                  "label": "Verification of Payee (simulated): MTCH",
+                  "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ADIS ACCT YES",
+                  "evidence": {
+                    "account_published": true,
+                    "as_of": "2026-10-19T06:00:00Z",
+                    "dic": "CZ87654321",
+                    "payer_found": true,
+                    "source": "adis-cache",
+                    "unreliable": false
+                  },
+                  "id": "F-VAT",
+                  "kind": "F",
+                  "label": "Account published in VAT registry (ADIS): yes",
+                  "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "BANK DOMESTIC",
+                  "evidence": {
+                    "bank_code": "0300",
+                    "country": "CZ",
+                    "found": true,
+                    "kind": "bank",
+                    "vendor_country": "CZ"
+                  },
+                  "id": "F-BANK",
+                  "kind": "F",
+                  "label": "Bank from IBAN: Bank 0300 (CZ)",
+                  "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "IBAN SEEN 1587D",
+                  "evidence": {
+                    "first_seen": "2022-06-15T00:00:00Z",
+                    "found": true,
+                    "hours": 38104
+                  },
+                  "id": "F-FIRSTSEEN",
+                  "kind": "F",
+                  "label": "IBAN first seen in payee registry: 1587 days ago",
+                  "prov": "7f6981db647e19080701a9c648aa51914eeb9b7791670b980cd5ecec55e5094e",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SPLIT 24H",
+                  "evidence": {
+                    "amount_minor": 12500050,
+                    "max_per_payment_minor": 8000000,
+                    "split_sum_minor": 0
+                  },
+                  "id": "F-SPLIT",
+                  "kind": "F",
+                  "label": "Vendor total in 24 h above per-payment cap",
+                  "severity": "WARN"
+                },
+                {
+                  "display_line": "ANOM 0/100",
+                  "evidence": {
+                    "features": "",
+                    "score": 0,
+                    "tool_calls": 0,
+                    "vendor_id": "ven_87654321"
+                  },
+                  "id": "F-ANOM",
+                  "kind": "F",
+                  "label": "Action anomaly score (tool-call log): 0/100",
+                  "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "CFO approved, pay today",
+                  "id": "H-AGENT",
+                  "kind": "H",
+                  "label": "hint from agent",
+                  "severity": "INFO"
+                }
+              ],
+              "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f"
+            },
+            "state": {
+              "history": [],
+              "mandate": {
+                "count": 3,
+                "mandate_id": "mnd_1",
+                "max_anom": 40,
+                "max_count": 20,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "payee_registry_version": 1,
+                "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+                "require_vop": [
+                  "MTCH"
+                ],
+                "spent_minor": 6450000,
+                "status": "ACTIVE",
+                "valid_from": "2026-10-19T16:00:50.669819Z",
+                "valid_until": "2026-10-20T16:00:49Z"
+              },
+              "now": "2026-10-19T16:00:54.984089Z",
+              "payee": {
+                "active_iban": true,
+                "in_network": false,
+                "status": "ACTIVE"
+              },
+              "proposals": [],
+              "reg_hit": true
+            },
+            "subject": {
+              "invoice": {
+                "amount_minor": 12500050,
+                "invoice_no": "BS-160049",
+                "issue_date": "2026-10-19",
+                "vendor_id": "ven_87654321"
+              },
+              "proposal_id": "prp_4"
+            }
+          },
+          "mandate_id": "mnd_1",
+          "rule_ids": [
+            "F-MANDATE",
+            "F-SPLIT",
+            "I-PER",
+            "I-SPLIT",
+            "I-WARN"
+          ],
+          "subject_id": "prp_4"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+        "inputs_digest": "5c2e12116f03367e385ac9061349f7de414a24a05eafdc68d67a267fdfd116bb",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 37,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.128Z",
+        "type": "decision",
+        "v": 2
+      },
+      "leaf_hash": "ccb3edca2a740d8c5108ffcf645bcaa155a3cf18b60992986a00ffb26253f26a",
+      "seq": 37
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "deployment": "DEMO",
+          "exp": "2026-10-19T16:05:54.984089Z",
+          "nonce": "4B37D5E2",
+          "nonce_secret_sha256": "23a0e6f069fa9d0576087a4fa040786e3927decef3e8ef4708e13a558539c4d2",
+          "params": {
+            "amount_minor": 12500050,
+            "currency": "CZK",
+            "deployment": "DEMO",
+            "exp": "2026-10-19T16:05:54.984089Z",
+            "facts": [
+              {
+                "display_line": "OVER MANDATE CAP",
+                "evidence": {
+                  "amount_minor": 12500050,
+                  "max_per_payment_minor": 8000000,
+                  "max_total_minor": 25000000,
+                  "spent_minor": 6450000
+                },
+                "id": "F-MANDATE",
+                "kind": "F",
+                "label": "Above mandate limit",
+                "severity": "WARN"
+              },
+              {
+                "display_line": "WARNLIST CLEAR",
+                "evidence": {
+                  "domains": [
+                    "betaservis.cz"
+                  ],
+                  "name": "Beta Servis a.s."
+                },
+                "id": "F-WARNLIST",
+                "kind": "F",
+                "label": "Regulator warning lists (MostlyRight): no name or domain match",
+                "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                "severity": "INFO"
+              },
+              {
+                "display_line": "SANCTIONS CLEAR",
+                "evidence": {
+                  "ico": "87654321",
+                  "name": "Beta Servis a.s."
+                },
+                "id": "F-SANCTION",
+                "kind": "F",
+                "label": "EU financial sanctions, entities (MostlyRight): no match",
+                "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                "severity": "INFO"
+              },
+              {
+                "display_line": "VOP MTCH",
+                "evidence": {
+                  "account_found": true,
+                  "bank_code": "0300",
+                  "code": "MTCH",
+                  "country": "CZ",
+                  "participant": true,
+                  "score": 100
+                },
+                "id": "F-VOP",
+                "kind": "F",
+                "label": "Verification of Payee (simulated): MTCH",
+                "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+                "severity": "INFO"
+              },
+              {
+                "display_line": "ADIS ACCT YES",
+                "evidence": {
+                  "account_published": true,
+                  "as_of": "2026-10-19T06:00:00Z",
+                  "dic": "CZ87654321",
+                  "payer_found": true,
+                  "source": "adis-cache",
+                  "unreliable": false
+                },
+                "id": "F-VAT",
+                "kind": "F",
+                "label": "Account published in VAT registry (ADIS): yes",
+                "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+                "severity": "INFO"
+              },
+              {
+                "display_line": "BANK DOMESTIC",
+                "evidence": {
+                  "bank_code": "0300",
+                  "country": "CZ",
+                  "found": true,
+                  "kind": "bank",
+                  "vendor_country": "CZ"
+                },
+                "id": "F-BANK",
+                "kind": "F",
+                "label": "Bank from IBAN: Bank 0300 (CZ)",
+                "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+                "severity": "INFO"
+              },
+              {
+                "display_line": "IBAN SEEN 1587D",
+                "evidence": {
+                  "first_seen": "2022-06-15T00:00:00Z",
+                  "found": true,
+                  "hours": 38104
+                },
+                "id": "F-FIRSTSEEN",
+                "kind": "F",
+                "label": "IBAN first seen in payee registry: 1587 days ago",
+                "prov": "7f6981db647e19080701a9c648aa51914eeb9b7791670b980cd5ecec55e5094e",
+                "severity": "INFO"
+              },
+              {
+                "display_line": "SPLIT 24H",
+                "evidence": {
+                  "amount_minor": 12500050,
+                  "max_per_payment_minor": 8000000,
+                  "split_sum_minor": 0
+                },
+                "id": "F-SPLIT",
+                "kind": "F",
+                "label": "Vendor total in 24 h above per-payment cap",
+                "severity": "WARN"
+              },
+              {
+                "display_line": "ANOM 0/100",
+                "evidence": {
+                  "features": "",
+                  "score": 0,
+                  "tool_calls": 0,
+                  "vendor_id": "ven_87654321"
+                },
+                "id": "F-ANOM",
+                "kind": "F",
+                "label": "Action anomaly score (tool-call log): 0/100",
+                "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "severity": "INFO"
+              }
+            ],
+            "iban": "CZ6203000000000123456789",
+            "nonce": "4B37D5E2",
+            "payee_name": "Beta Servis a.s.",
+            "proposal_no": 4,
+            "role": "clerk",
+            "sig_index": 1,
+            "sig_total": 1,
+            "subject_hash": "8c8e5070b6d86c330e7e7d65b319f9f17cec3944fe40daa688ee9cf8bbcace58",
+            "vs": "1600499"
+          },
+          "profile": "safe3-mono-16x4",
+          "purpose": "PAY",
+          "role": "clerk",
+          "subject_hash": "8c8e5070b6d86c330e7e7d65b319f9f17cec3944fe40daa688ee9cf8bbcace58",
+          "subject_id": "prp_4",
+          "template": "PAY",
+          "text_sha256": "d6ccd97433be8cc9bdc15b54a4f1098033175398f6303b66bd01a5619ecec59a"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+        "inputs_digest": "5c2e12116f03367e385ac9061349f7de414a24a05eafdc68d67a267fdfd116bb",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 38,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.157Z",
+        "type": "challenge",
+        "v": 2
+      },
+      "leaf_hash": "18ce7693af073a85ed7c8798cfda74d8c7493e50f8f22b075079cadd04c6ce33",
+      "seq": 38
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "decision": "challenge",
+          "inputs": {
+            "facts": {
+              "facts": [
+                {
+                  "display_line": "OVER MANDATE CAP",
+                  "evidence": {
+                    "amount_minor": 12500050,
+                    "max_per_payment_minor": 8000000,
+                    "max_total_minor": 25000000,
+                    "spent_minor": 6450000
+                  },
+                  "id": "F-MANDATE",
+                  "kind": "F",
+                  "label": "Above mandate limit",
+                  "severity": "WARN"
+                },
+                {
+                  "display_line": "WARNLIST CLEAR",
+                  "evidence": {
+                    "domains": [
+                      "betaservis.cz"
+                    ],
+                    "name": "Beta Servis a.s."
+                  },
+                  "id": "F-WARNLIST",
+                  "kind": "F",
+                  "label": "Regulator warning lists (MostlyRight): no name or domain match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SANCTIONS CLEAR",
+                  "evidence": {
+                    "ico": "87654321",
+                    "name": "Beta Servis a.s."
+                  },
+                  "id": "F-SANCTION",
+                  "kind": "F",
+                  "label": "EU financial sanctions, entities (MostlyRight): no match",
+                  "prov": "9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "VOP MTCH",
+                  "evidence": {
+                    "account_found": true,
+                    "bank_code": "0300",
+                    "code": "MTCH",
+                    "country": "CZ",
+                    "participant": true,
+                    "score": 100
+                  },
+                  "id": "F-VOP",
+                  "kind": "F",
+                  "label": "Verification of Payee (simulated): MTCH",
+                  "prov": "6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "ADIS ACCT YES",
+                  "evidence": {
+                    "account_published": true,
+                    "as_of": "2026-10-19T06:00:00Z",
+                    "dic": "CZ87654321",
+                    "payer_found": true,
+                    "source": "adis-cache",
+                    "unreliable": false
+                  },
+                  "id": "F-VAT",
+                  "kind": "F",
+                  "label": "Account published in VAT registry (ADIS): yes",
+                  "prov": "140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "BANK DOMESTIC",
+                  "evidence": {
+                    "bank_code": "0300",
+                    "country": "CZ",
+                    "found": true,
+                    "kind": "bank",
+                    "vendor_country": "CZ"
+                  },
+                  "id": "F-BANK",
+                  "kind": "F",
+                  "label": "Bank from IBAN: Bank 0300 (CZ)",
+                  "prov": "0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "IBAN SEEN 1587D",
+                  "evidence": {
+                    "first_seen": "2022-06-15T00:00:00Z",
+                    "found": true,
+                    "hours": 38104
+                  },
+                  "id": "F-FIRSTSEEN",
+                  "kind": "F",
+                  "label": "IBAN first seen in payee registry: 1587 days ago",
+                  "prov": "7f6981db647e19080701a9c648aa51914eeb9b7791670b980cd5ecec55e5094e",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "SPLIT 24H",
+                  "evidence": {
+                    "amount_minor": 12500050,
+                    "max_per_payment_minor": 8000000,
+                    "split_sum_minor": 0
+                  },
+                  "id": "F-SPLIT",
+                  "kind": "F",
+                  "label": "Vendor total in 24 h above per-payment cap",
+                  "severity": "WARN"
+                },
+                {
+                  "display_line": "ANOM 0/100",
+                  "evidence": {
+                    "features": "",
+                    "score": 0,
+                    "tool_calls": 0,
+                    "vendor_id": "ven_87654321"
+                  },
+                  "id": "F-ANOM",
+                  "kind": "F",
+                  "label": "Action anomaly score (tool-call log): 0/100",
+                  "prov": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                  "severity": "INFO"
+                },
+                {
+                  "display_line": "CFO approved, pay today",
+                  "id": "H-AGENT",
+                  "kind": "H",
+                  "label": "hint from agent",
+                  "severity": "INFO"
+                }
+              ],
+              "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f"
+            },
+            "state": {
+              "history": [],
+              "mandate": {
+                "count": 3,
+                "mandate_id": "mnd_1",
+                "max_anom": 40,
+                "max_count": 20,
+                "max_per_payment_minor": 8000000,
+                "max_total_minor": 25000000,
+                "payee_registry_version": 1,
+                "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+                "require_vop": [
+                  "MTCH"
+                ],
+                "spent_minor": 6450000,
+                "status": "ACTIVE",
+                "valid_from": "2026-10-19T16:00:50.669819Z",
+                "valid_until": "2026-10-20T16:00:49Z"
+              },
+              "now": "2026-10-19T16:00:55.255348Z",
+              "payee": {
+                "active_iban": true,
+                "in_network": false,
+                "status": "ACTIVE"
+              },
+              "proposals": [],
+              "reg_hit": true
+            },
+            "subject": {
+              "invoice": {
+                "amount_minor": 12500050,
+                "invoice_no": "BS-160049",
+                "issue_date": "2026-10-19",
+                "vendor_id": "ven_87654321"
+              },
+              "proposal_id": "prp_4"
+            }
+          },
+          "mandate_id": "mnd_1",
+          "recheck": true,
+          "rule_ids": [
+            "F-MANDATE",
+            "F-SPLIT",
+            "I-PER",
+            "I-SPLIT",
+            "I-WARN"
+          ],
+          "subject_id": "prp_4"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+        "inputs_digest": "e353b4f92ecf12d377c0e80a5a35d53b007fc42805739caa1461380d5476ea20",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 39,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.337Z",
+        "type": "decision",
+        "v": 2
+      },
+      "leaf_hash": "f18345aa062f5aeed12018e815179752c181bcf6f9332e717ff15c299d726187",
+      "seq": 39
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "accepted": true,
+          "error": null,
+          "nonce": "4B37D5E2",
+          "purpose": "PAY",
+          "role": "clerk",
+          "sig": "0x02a0587807ce3990b0c6bc06630674f69352a3bbebb7e5e953aa8930609be55e2fbc2f716ff762735888d750f0a18f5eb01a6231a88023bf2652da69d0448d561b",
+          "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+          "text_sha256": "d6ccd97433be8cc9bdc15b54a4f1098033175398f6303b66bd01a5619ecec59a"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "8c8e5070b6d86c330e7e7d65b319f9f17cec3944fe40daa688ee9cf8bbcace58",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 40,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.361Z",
+        "type": "signature",
+        "v": 2
+      },
+      "leaf_hash": "0edce71abe7dadca6d1d0bc36ef904cd94a9c80bf6b2e90b427a32ebaf7aa055",
+      "seq": 40
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "amount_minor": 12500050,
+          "authorization": {
+            "kind": "stepup",
+            "nonce": "4B37D5E2",
+            "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534"
+          },
+          "currency": "CZK",
+          "iban": "CZ6203000000000123456789",
+          "proposal_id": "prp_4",
+          "tx_id": "tx_f2cf27603fa01320",
+          "vendor_id": "ven_87654321"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+        "inputs_digest": "e353b4f92ecf12d377c0e80a5a35d53b007fc42805739caa1461380d5476ea20",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 41,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.385Z",
+        "type": "execution",
+        "v": 2
+      },
+      "leaf_hash": "e300bc9556cc9b92946b59ac7a3a61db4531679558ef3a218cfbd1e8cabbb101",
+      "seq": 41
+    },
+    {
+      "event": {
+        "actor": "rail",
+        "data": {
+          "format": "pain.001.001.09",
+          "msg_id": "AG1-tx_f2cf27603fa01320",
+          "status": "ACTC",
+          "tx_id": "tx_f2cf27603fa01320",
+          "xml_c14n_sha256": "59d66e4dbb72d18f8466cc98c7eb398c0f8ad30e69e4ab0601382813222bcefa"
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 42,
+        "subject_id": "tx_f2cf27603fa01320",
+        "ts": "2026-10-19T16:00:55.420Z",
+        "type": "rail_submitted",
+        "v": 2
+      },
+      "leaf_hash": "19181c27dca097bd9252665c2e399279881b35bb12763b96e2ec9e2988eb78de",
+      "seq": 42
+    },
+    {
+      "event": {
+        "actor": "executor",
+        "data": {
+          "accepted": false,
+          "error": "nonce_reused",
+          "nonce": "4B37D5E2",
+          "purpose": "PAY",
+          "role": "clerk",
+          "sig": "0x02a0587807ce3990b0c6bc06630674f69352a3bbebb7e5e953aa8930609be55e2fbc2f716ff762735888d750f0a18f5eb01a6231a88023bf2652da69d0448d561b",
+          "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534",
+          "text_sha256": "d6ccd97433be8cc9bdc15b54a4f1098033175398f6303b66bd01a5619ecec59a"
+        },
+        "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+        "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "inputs_digest": "8c8e5070b6d86c330e7e7d65b319f9f17cec3944fe40daa688ee9cf8bbcace58",
+        "log_id": "audit",
+        "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+        "seq": 43,
+        "subject_id": "prp_4",
+        "ts": "2026-10-19T16:00:55.745Z",
+        "type": "signature",
+        "v": 2
+      },
+      "leaf_hash": "bd0eaba7244d1a187444b9620f319732e630a60e8229176c5b829fe2a9b4863d",
+      "seq": 43
+    },
+    {
+      "event": {
+        "actor": "checkpointer",
+        "data": {
+          "cosigners": [
+            "airgap.example/demo/w1"
+          ],
+          "note_sha256": "cf1d1fc079bf802ee01d0ff164252fabdee49adf96c02c2f2b49542a6dc3dcb2",
+          "origin": "airgap.example/demo/audit",
+          "root_hash": "d1a25a63db4763e966fcc5dd684d22b271d5da9f05646f8b86fae30d02766638",
+          "size": 44
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 44,
+        "subject_id": null,
+        "ts": "2026-10-19T16:00:56.421Z",
+        "type": "checkpoint",
+        "v": 2
+      },
+      "leaf_hash": "86e0df4122a6391d7809fb65ab2c7d49e7bb32196fe9a252ac1b37b5ff4767b0",
+      "seq": 44
+    },
+    {
+      "event": {
+        "actor": "checkpointer",
+        "data": {
+          "cosigners": [
+            "airgap.example/demo/w1"
+          ],
+          "note_sha256": "868677e66d939e57be50c539ed7f774874266a8ee73d379913b74211a30f6995",
+          "origin": "airgap.example/demo/audit",
+          "root_hash": "e5d71ae61d18233f4df7f25ce86b8ff4da3856f53e59a1fe74bdf5f81c07ae01",
+          "size": 45
+        },
+        "facts_digest": null,
+        "hints_digest": null,
+        "inputs_digest": null,
+        "log_id": "audit",
+        "policy_hash": null,
+        "seq": 45,
+        "subject_id": null,
+        "ts": "2026-10-19T16:01:01.627Z",
+        "type": "checkpoint",
+        "v": 2
+      },
+      "leaf_hash": "e6ca75d98232d8b7e02f1f583aea1bee6cd75bead5e4d1f2c3a6b1dd95eb32d2",
+      "seq": 45
+    }
+  ],
+  "log_id": "audit",
+  "policies": {
+    "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd": {
+      "cedar_policies_text": "// Policy set 1 of 3 (CONTRACTS \u00a72.2, \u00a78.1): hard deny for payments.\n// Evaluated alone. Decision Deny <=> some forbid below is determining => outcome \"deny\".\n// P-BASE makes the set default-allow so that only the forbids decide.\n\n@id(\"P-BASE\")\npermit (principal is Mandate, action == Action::\"pay\", resource is Payee);\n\n@id(\"I-PAYEE\")\nforbid (principal, action == Action::\"pay\", resource is Payee)\nwhen { !resource.known || !resource.active };\n\n@id(\"I-DUP\")\nforbid (principal, action == Action::\"pay\", resource)\nwhen { context.dup };\n\n@id(\"I-AMOUNT\")\nforbid (principal, action == Action::\"pay\", resource)\nwhen { context.amount_doc_block };\n\n@id(\"I-BLOCK\")\nforbid (principal, action == Action::\"pay\", resource)\nwhen { context.block_hit };\n\n// Policy set 2 of 3 (CONTRACTS \u00a72.2, \u00a78.1): mandate allow for payments.\n// Evaluated alone, only when set 1 allowed. Allow => outcome \"allow\" (executed under the mandate).\n// Deny => outcome \"challenge\" (exact-sign step-up); rule_ids = determining forbid @ids,\n// or [\"I-MANDATE\"] when nothing is determining. Principal Mandate::\"none\" when no ACTIVE mandate; the cap\n// rules are guarded by status == \"ACTIVE\" so that only I-MANDATE (and payee/fact rules) fire then.\n\n@id(\"P-MANDATE\")\npermit (principal is Mandate, action == Action::\"pay\", resource is Payee)\nwhen { principal.status == \"ACTIVE\" && principal.policy_current };\n\n@id(\"I-MANDATE\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nunless { principal.status == \"ACTIVE\" && principal.policy_current };\n\n@id(\"I-EXP\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (context.now < principal.valid_from || context.now >= principal.valid_until) };\n\n@id(\"I-PER\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (context.amount_minor > principal.max_per_payment_minor) };\n\n@id(\"I-BUDGET\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (principal.spent_minor + context.amount_minor > principal.max_total_minor) };\n\n@id(\"I-COUNT\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (principal.count + 1 > principal.max_count) };\n\n@id(\"I-REGISTRY\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { !context.reg_hit };\n\n@id(\"I-VOP\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (!principal.require_vop.contains(context.vop)) };\n\n@id(\"I-ANOM\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (context.anom >= principal.max_anom) };\n\n@id(\"I-SPLIT\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { principal.status == \"ACTIVE\" && (context.split_sum + context.amount_minor > principal.max_per_payment_minor) };\n\n@id(\"I-Z\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { context.z_hit };\n\n@id(\"I-WARN\")\nforbid (principal is Mandate, action == Action::\"pay\", resource)\nwhen { context.warn_hit };\n\n// Policy set 3 of 3 (CONTRACTS \u00a76.1, R0): may the executor issue a CHG challenge for this change?\n// Evaluated when a change would enter SIG_CLERK and again before every CHG challenge.\n// Deny => no challenge (the device stays dark); rule_ids = determining forbid @ids.\n\n@id(\"P-CHG\")\npermit (principal is Change, action == Action::\"issue_chg_challenge\", resource is Payee);\n\n@id(\"I-ATTEST\")\nforbid (principal is Change, action == Action::\"issue_chg_challenge\", resource)\nwhen { principal.in_network && !principal.break_glass && context.attest_count < 2 };\n\n@id(\"I-CALLBACK\")\nforbid (principal is Change, action == Action::\"issue_chg_challenge\", resource)\nwhen { (!principal.in_network || principal.break_glass) && !context.callback_confirmed };\n\n@id(\"I-COOLOFF\")\nforbid (principal is Change, action == Action::\"issue_chg_challenge\", resource)\nwhen { context.now < principal.not_before };\n\n@id(\"I-BLOCK\")\nforbid (principal is Change, action == Action::\"issue_chg_challenge\", resource)\nwhen { context.block_hit };\n",
+      "cedar_schema": {
+        "": {
+          "actions": {
+            "issue_chg_challenge": {
+              "appliesTo": {
+                "context": {
+                  "attributes": {
+                    "attest_count": {
+                      "type": "Long"
+                    },
+                    "block_hit": {
+                      "type": "Boolean"
+                    },
+                    "callback_confirmed": {
+                      "type": "Boolean"
+                    },
+                    "now": {
+                      "type": "Long"
+                    }
+                  },
+                  "type": "Record"
+                },
+                "principalTypes": [
+                  "Change"
+                ],
+                "resourceTypes": [
+                  "Payee"
+                ]
+              }
+            },
+            "pay": {
+              "appliesTo": {
+                "context": {
+                  "attributes": {
+                    "amount_doc_block": {
+                      "type": "Boolean"
+                    },
+                    "amount_minor": {
+                      "type": "Long"
+                    },
+                    "anom": {
+                      "type": "Long"
+                    },
+                    "attest_count": {
+                      "type": "Long"
+                    },
+                    "block_hit": {
+                      "type": "Boolean"
+                    },
+                    "dup": {
+                      "type": "Boolean"
+                    },
+                    "now": {
+                      "type": "Long"
+                    },
+                    "reg_hit": {
+                      "type": "Boolean"
+                    },
+                    "split_sum": {
+                      "type": "Long"
+                    },
+                    "vop": {
+                      "type": "String"
+                    },
+                    "warn_count": {
+                      "type": "Long"
+                    },
+                    "warn_hit": {
+                      "type": "Boolean"
+                    },
+                    "z_hit": {
+                      "type": "Boolean"
+                    }
+                  },
+                  "type": "Record"
+                },
+                "principalTypes": [
+                  "Mandate"
+                ],
+                "resourceTypes": [
+                  "Payee"
+                ]
+              }
+            }
+          },
+          "entityTypes": {
+            "Change": {
+              "shape": {
+                "attributes": {
+                  "break_glass": {
+                    "type": "Boolean"
+                  },
+                  "in_network": {
+                    "type": "Boolean"
+                  },
+                  "not_before": {
+                    "type": "Long"
+                  },
+                  "state": {
+                    "type": "String"
+                  }
+                },
+                "type": "Record"
+              }
+            },
+            "Mandate": {
+              "shape": {
+                "attributes": {
+                  "count": {
+                    "type": "Long"
+                  },
+                  "max_anom": {
+                    "type": "Long"
+                  },
+                  "max_count": {
+                    "type": "Long"
+                  },
+                  "max_per_payment_minor": {
+                    "type": "Long"
+                  },
+                  "max_total_minor": {
+                    "type": "Long"
+                  },
+                  "payee_registry_version": {
+                    "type": "Long"
+                  },
+                  "policy_current": {
+                    "type": "Boolean"
+                  },
+                  "require_vop": {
+                    "element": {
+                      "type": "String"
+                    },
+                    "type": "Set"
+                  },
+                  "spent_minor": {
+                    "type": "Long"
+                  },
+                  "status": {
+                    "type": "String"
+                  },
+                  "valid_from": {
+                    "type": "Long"
+                  },
+                  "valid_until": {
+                    "type": "Long"
+                  }
+                },
+                "type": "Record"
+              }
+            },
+            "Payee": {
+              "shape": {
+                "attributes": {
+                  "active": {
+                    "type": "Boolean"
+                  },
+                  "in_network": {
+                    "type": "Boolean"
+                  },
+                  "known": {
+                    "type": "Boolean"
+                  }
+                },
+                "type": "Record"
+              }
+            }
+          }
+        }
+      },
+      "fact_severity_table": {
+        "F-AMOUNT-DOC": {
+          "match": "INFO",
+          "mismatch": "BLOCK",
+          "partial": "INFO",
+          "unavailable": "BLOCK"
+        },
+        "F-ANOM": {
+          "high": "WARN",
+          "low": "INFO"
+        },
+        "F-ATTEST": {
+          "break_glass": "INFO",
+          "insufficient": "BLOCK",
+          "quorum": "INFO"
+        },
+        "F-BANK": {
+          "domestic": "INFO",
+          "foreign_or_emi": "WARN"
+        },
+        "F-CALLBACK": {
+          "confirmed": "INFO",
+          "missing": "BLOCK",
+          "not_required": "INFO"
+        },
+        "F-DKIM": {
+          "fail": "BLOCK",
+          "pass": "INFO"
+        },
+        "F-DOMAIN": {
+          "lookalike": "BLOCK",
+          "match": "INFO"
+        },
+        "F-DOMAIN-AGE": {
+          "old": "INFO",
+          "young": "WARN"
+        },
+        "F-DUP": {
+          "duplicate": "BLOCK"
+        },
+        "F-FIRSTSEEN": {
+          "known": "INFO",
+          "new": "WARN"
+        },
+        "F-MANDATE": {
+          "no_mandate": "WARN",
+          "over_cap": "WARN",
+          "within": "INFO"
+        },
+        "F-NAME-TRANSLIT": {
+          "transliterated": "INFO"
+        },
+        "F-PSP": {
+          "licensed_inst_vop": "INFO",
+          "licensed_no_vop": "WARN",
+          "unknown": "WARN"
+        },
+        "F-SANCTION": {
+          "clear": "INFO",
+          "hit": "BLOCK"
+        },
+        "F-SPLIT": {
+          "split": "WARN"
+        },
+        "F-VAT": {
+          "not_published": "WARN",
+          "published": "INFO",
+          "unreliable": "BLOCK"
+        },
+        "F-VOP": {
+          "CMTC": "WARN",
+          "MTCH": "INFO",
+          "NMTC": "BLOCK",
+          "NOAP": "WARN"
+        },
+        "F-WARNLIST": {
+          "clear": "INFO",
+          "hit": "BLOCK"
+        },
+        "F-Z": {
+          "outlier": "WARN"
+        }
+      },
+      "params": {
+        "F-ATTEST": {
+          "kb_jwt_max_age_seconds": 900,
+          "min_distinct_classes": 2
+        },
+        "F-CALLBACK": {
+          "max_attempts": 3
+        },
+        "F-DOMAIN-AGE": {
+          "warn_days": 30
+        },
+        "F-FIRSTSEEN": {
+          "warn_hours": 72
+        },
+        "I-ANOM": {
+          "default_max_anom": 40
+        },
+        "I-DUP": {
+          "dup_amount_bp": 50,
+          "dup_days": 3
+        },
+        "I-SPLIT": {
+          "split_window_hours": 24
+        },
+        "I-Z": {
+          "z_threshold_milli": 3500
+        }
+      },
+      "policy_v": 2,
+      "translit_table": {
+        "\u00a0": " ",
+        "\u00c1": "A",
+        "\u00c4": "A",
+        "\u00c6": "AE",
+        "\u00c9": "E",
+        "\u00cd": "I",
+        "\u00d3": "O",
+        "\u00d4": "O",
+        "\u00d6": "O",
+        "\u00d8": "O",
+        "\u00da": "U",
+        "\u00dc": "U",
+        "\u00dd": "Y",
+        "\u00de": "TH",
+        "\u00df": "SS",
+        "\u00e1": "a",
+        "\u00e4": "a",
+        "\u00e6": "ae",
+        "\u00e9": "e",
+        "\u00ed": "i",
+        "\u00f3": "o",
+        "\u00f4": "o",
+        "\u00f6": "o",
+        "\u00f8": "o",
+        "\u00fa": "u",
+        "\u00fc": "u",
+        "\u00fd": "y",
+        "\u00fe": "th",
+        "\u010c": "C",
+        "\u010d": "c",
+        "\u010e": "D",
+        "\u010f": "d",
+        "\u0110": "D",
+        "\u0111": "d",
+        "\u011a": "E",
+        "\u011b": "e",
+        "\u0131": "i",
+        "\u0139": "L",
+        "\u013a": "l",
+        "\u013d": "L",
+        "\u013e": "l",
+        "\u0141": "L",
+        "\u0142": "l",
+        "\u0147": "N",
+        "\u0148": "n",
+        "\u0152": "OE",
+        "\u0153": "oe",
+        "\u0154": "R",
+        "\u0155": "r",
+        "\u0158": "R",
+        "\u0159": "r",
+        "\u0160": "S",
+        "\u0161": "s",
+        "\u0164": "T",
+        "\u0165": "t",
+        "\u016e": "U",
+        "\u016f": "u",
+        "\u017d": "Z",
+        "\u017e": "z",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201c": "\"",
+        "\u201d": "\"",
+        "\u201e": "\""
+      }
+    }
+  },
+  "pubkeys": {
+    "log": "airgap.example/demo/audit+05e38094+AYMB6t/Q61AckfFZgHBU50wiDz+u2PMzsCnuFTyhHJn2",
+    "w1": "airgap.example/demo/w1+a2e46ba2+BAx0bd3NtelGOJf81qgBU3uIEEGhPwhQTFiG21pddB3q",
+    "w2": "airgap.example/demo/w2+d10d72b1+BMkDZNJkVEhYYAhvvLF7aV31FiFFRPg2PUPSI9/6v44B"
+  },
+  "redacted": 0,
+  "render_profile": "safe3-mono-16x4",
+  "snapshots": {}
+}
