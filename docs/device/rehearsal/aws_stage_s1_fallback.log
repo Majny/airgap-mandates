@@ -1,0 +1,56 @@
+*** FALLBACK MODE: CLERK SIGNS ON THE EMULATOR (T3B1), NOT THE PHYSICAL DEVICE ***
+clerk    0x73d0385f4d8e00c5e6504c6030f47bf6212736a8  EMULATOR
+treasury 0xfa01a39f8abaeb660c3137f14a310d0b414b2a15  EMULATOR
+
+mandate mnd_1: sig_required=2
+AG1/DEMO MANDATE
+NO 1 CZK
+PER PAY 80000
+TOTAL 250000
+MAX 20 PAYMENTS
+EXISTING PAYEES
+TO 10-20 19:03
+ROLE CLERK 1/2
+FROM 10-19 19:03
+REQ VOP MTCH
+PAYEES 4 REG V1
+N C0DF4670
+P d33008c432bad2
+H 5b38064697c779
+
+--> CLERK on Safe 3 EMULATOR: auto-confirm (simulated human)
+clerk signed -> PENDING_SIG_TREASURY
+--> TREASURY on Safe 3 EMULATOR: auto-confirm (simulated human)
+mandate mnd_1 -> ACTIVE
+agent beat done
+agent PAY ven_12345678 FV-2026-0412 48400.00 CZK -> ALLOW (paid under the mandate) tx_aaa77024e314701a
+agent PAY ven_87654321 BS-2026/1187 12705.00 CZK -> ALLOW (paid under the mandate) tx_ac20dd23052bed32
+agent PAY ven_99887762 GT-26-0093 31460.00 CZK -> ALLOW (paid under the mandate) tx_682ed5d048518652
+agent PAY ven_77665546 DS-2026-0777 125000.50 CZK -> CHALLENGE ['F-MANDATE', 'I-PER', 'I-WARN'] prp_4
+paid under the mandate (ledger): 3
+proposal prp_4 ven_77665546 125000.50 CZK -> step-up; device shows:
+AG1/DEMO PAY 4
+125000.50 CZK
+CZ52 0100 0000
+0077 8899 0011
+DELTA STAVBY S.~
+VS 20260777
+EXP 10-19 19:10
+0 BLOCK 1 WARN
+OVER MANDATE CAP
+DOMAIN MATCH
++10 MORE 0 BLOCK
+ROLE CLERK 1/1
+N EBDBF8E3
+H 0a274674886b85
+
+--> CLERK on Safe 3 EMULATOR: auto-confirm (simulated human)
+clerk held to confirm -> payment_executed tx_f19fee3695ef4cde
+--> CLERK: replaying the captured signature (no device interaction)
+replay of the same signature -> 403 nonce_reused
+mandate spent 92565.00 CZK in 3 payments (the step-up is outside it)
+
+STAGE S1 OK (FALLBACK: EMULATOR CLERK)
+real 78.77
+user 0.55
+sys 0.11
