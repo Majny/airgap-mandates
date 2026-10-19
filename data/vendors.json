@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "vendor_id": "ven_12345678", "ico": "12345678", "name": "ACME s.r.o.", "domain": "acme.cz",
+    "iban": "CZ6508000000192000145399", "bic": "GIBACZPX", "country": "CZ",
+    "phone": "+420 600 000 001", "contact_email": "ap@acme.cz", "registered_since": "2024-03-01",
+    "in_network": true, "issuer_pins": [],
+    "iban_history": [{"iban": "CZ6508000000192000145399", "from": "2024-03-01", "to": null, "change_id": null}]
+  },
+  {
+    "vendor_id": "ven_87654321", "ico": "87654321", "name": "Beta Servis a.s.", "domain": "betaservis.cz",
+    "iban": "CZ6203000000000123456789", "bic": "CEKOCZPP", "country": "CZ",
+    "phone": "+420 600 000 002", "contact_email": "fakturace@betaservis.cz", "registered_since": "2022-06-15",
+    "in_network": false, "issuer_pins": [],
+    "iban_history": [{"iban": "CZ6203000000000123456789", "from": "2022-06-15", "to": null, "change_id": null}]
+  },
+  {
+    "vendor_id": "ven_99887762", "ico": "99887762", "name": "Gamma Tisk s.r.o.", "domain": "gammatisk.cz",
+    "iban": "CZ7501000000001155443322", "bic": "KOMBCZPP", "country": "CZ",
+    "phone": "+420 600 000 003", "contact_email": "ucetni@gammatisk.cz", "registered_since": "2023-09-12",
+    "in_network": true, "issuer_pins": [],
+    "iban_history": [{"iban": "CZ7501000000001155443322", "from": "2023-09-12", "to": null, "change_id": null}]
+  }
+]
