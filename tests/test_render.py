@@ -327,7 +327,8 @@ def test_chg_34_char_iban_keeps_break_rule():
     text = R.render_change(**chg_kwargs(new_iban=LONG_IBAN))
     p1, p2 = assert_s11(text)
     assert p1[3:] == ["NEW LC14 BOSL 1234", "    5678 9012 3456", "    7890 1234 56", "BANK BOSL LC"]
-    assert p2[1] == "OLD ..5399 2024-03"
+    # The carried OLD line yields its slot so the pinned ATT fact is never folded into "+N MORE".
+    assert p2[1:3] == ["ATT 2/3 ERP BANK", "VOP CMTC"] and "OLD ..5399 2024-03" not in p2
 
 
 def test_chg_lt_iban():

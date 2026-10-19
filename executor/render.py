@@ -104,6 +104,10 @@ FACT_ORDER = (
 _SEVERITIES = ("INFO", "WARN", "BLOCK")
 _TRUNC = "~"
 
+# CHG: the attestation result is what the human confirms; never folded into "+N MORE". F-CALLBACK is next in line
+# (on any screen that can exist it reads CALLBACK OK, R0) and is kept ahead of other facts when there is room.
+CHG_PINNED_FACTS = ("F-ATTEST", "F-CALLBACK")
+
 # Short role names for narrow profiles (`ROLE TREASURY 2/2` is 17 chars).
 ROLE_SHORT = {"TREASURY": "TREAS"}
 
@@ -414,16 +418,21 @@ def summary_line(facts: Sequence[Fact | Mapping[str, Any]] | None) -> str:
     return f"0 BLOCK {sum(1 for f in fs if f.severity == 'WARN')} WARN"
 
 
-def _fact_lines(fs: list[Fact], slots: int, width: int) -> list[str]:
+def _fact_lines(fs: list[Fact], slots: int, width: int, pinned: tuple[str, ...] = ()) -> list[str]:
     if slots < 0:
         raise RenderError("PAGES", "template exceeds the 2-page budget")
     if len(fs) <= slots:
         return [_fact_line(f, width) for f in fs]
     if slots == 0:
         raise RenderError("PAGES", "no slot for facts")
-    # Keep the most severe facts (WARN before INFO, then display order); show them in display order.
+    # Keep pinned facts in pin order (the first one is guaranteed), then the most severe (WARN before INFO, then
+    # display order); show the kept ones in display order.
     keep_n = slots - 1
-    by_priority = sorted(fs, key=lambda f: (0 if f.severity == "WARN" else 1, _fact_key(f)))
+    if pinned and keep_n < 1 and any(f.id == pinned[0] for f in fs):
+        raise RenderError("PAGES", f"no slot for pinned fact {pinned[0]}")
+    rank = {fid: i for i, fid in enumerate(pinned)}
+    by_priority = sorted(fs, key=lambda f: (rank.get(f.id, len(rank)), 0 if f.severity == "WARN" else 1,
+                                            _fact_key(f)))
     kept = set(id(f) for f in by_priority[:keep_n])
     shown = [f for f in fs if id(f) in kept]
     overflow = f"+{len(fs) - keep_n} MORE 0 BLOCK"
@@ -504,10 +513,16 @@ def _page1(cands: list[_L], prof: Profile) -> tuple[list[str], list[str]]:
 
 
 def _page2(head: list[str], carried: list[str], fs: list[Fact] | None, tail: list[str], prof: Profile,
-           *, summary_first: bool) -> list[str]:
+           *, summary_first: bool, pinned: tuple[str, ...] = ()) -> list[str]:
     body: list[str] = []
     if fs is not None:
-        body = _fact_lines(fs, prof.block_lines - len(head) - len(carried) - len(tail), prof.width)
+        slots = prof.block_lines - len(head) - len(carried) - len(tail)
+        if pinned and any(f.id == pinned[0] for f in fs) and len(fs) > slots:
+            # The guaranteed pinned fact plus the "+N MORE" line need 2 slots; carried lines (lower value) yield.
+            while carried and slots < 2:
+                carried = carried[:-1]
+                slots += 1
+        body = _fact_lines(fs, slots, prof.width, pinned)
     page = head + carried + body + tail
     if len(page) > prof.block_lines:
         raise RenderError("PAGES", "block 2 exceeds block_lines")
@@ -731,7 +746,7 @@ def render_change(
     page1, carried = _page1(cands, p)
     tail = ["COOLOFF DONE", _role_line(role, sig_index, sig_total, w), f"N {_nonce(nonce)}",
             _hash_line("H", subject_hash, "subject_hash", p)]
-    page2 = _page2([summary_line(fs)], carried, fs, tail, p, summary_first=True)
+    page2 = _page2([summary_line(fs)], carried, fs, tail, p, summary_first=True, pinned=CHG_PINNED_FACTS)
     return _finish(page1 + page2, p)
 
 
@@ -867,6 +882,7 @@ __all__ = [
     "PROFILE_UI",
     "ROLE_DISPLAY",
     "ROLE_SHORT",
+    "CHG_PINNED_FACTS",
     "TEMPLATES",
     "TRANSLIT",
     "Fact",
