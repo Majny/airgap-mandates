@@ -176,7 +176,7 @@ def test_s1_legit_invoice_emails_and_proposals_under_mandate():
         blocks = {k for k, (sev, _) in f.items() if sev == "BLOCK"}
         # Known WS-E gap (tests/test_amount_doc.py strict xfails): executor/docs/extract.py cannot read the fixture
         # ISDOC, so F-AMOUNT-DOC blocks the legit invoices. It must be the ONLY block.
-        assert blocks == {"F-AMOUNT-DOC"} and f["F-AMOUNT-DOC"] == ("BLOCK", "AMOUNT != DOC"), f
+        assert blocks == {"F-AMOUNT-DOC"} and f["F-AMOUNT-DOC"] == ("BLOCK", "AMOUNT DOC N/A"), f
         assert r["decision"]["decision"] == "deny" and not w.nonces_for(r["proposal"]["proposal_id"])
     m = w.mandate()
     assert m["sig_required"] == 2

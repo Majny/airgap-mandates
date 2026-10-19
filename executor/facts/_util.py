@@ -10,7 +10,7 @@ from typing import Any
 from executor.canonical import canonical_json
 from executor.models import Fact
 
-DISPLAY_WIDTH = 18
+DISPLAY_WIDTH = 16  # safe3-mono-16x4 body width (CONTRACTS §2.1); <= every profile's width
 
 # Snapshot name (FactSet.snapshots key, CONTRACTS §2.1) -> default path relative to the data dir.
 SNAPSHOT_FILES: dict[str, str] = {
