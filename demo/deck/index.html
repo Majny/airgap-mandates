@@ -301,7 +301,7 @@ svg text { font-family: inherit; }
       <li>Benchmark humans: a model, not a user study</li></ul></div>
   </div>
   <p class="foot">Second, independent witness (W2): deployed, trust setup pending. If it is not live on stage, say “W1 only, same account”. Full table: demo/REAL_VS_SIMULATED.md.</p>
-  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” Check W2 status before going on stage.</aside>
+  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” Check W2 status before going on stage. Known gaps if asked (demo/REAL_VS_SIMULATED.md): (1) callback code stored as unsalted SHA-256, readable by the portal role, fix = KMS HMAC; (2) clerk and treasury are distinct addresses, not yet distinct devices, fix = compare device certificate at enrolment; (3) demo issuer keys are shared across vendors and in the repo, labelled; (4) until FACTS-1 merges, the document check sits in the tools layer, not the executor.</aside>
 </section>
 
 <!-- 7 BUSINESS -->
