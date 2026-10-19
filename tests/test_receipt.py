@@ -134,3 +134,80 @@ def test_cli_receipt(r, env, tmp_path, capsys):
     rp.write_text(json.dumps(r), encoding="utf-8")
     assert va.main(["--receipt", str(rp)]) == 1
     assert f"receipt: seq {r['seq']}: leaf hash mismatch" in capsys.readouterr().out
+
+
+# ---- review fixes: tx authenticated against the entry, pinned keys, ledger seq sanity, CLI robustness
+
+
+@pytest.mark.parametrize("field,value", [("amount_minor", 1), ("iban", "CZ5508000000001234567899"),
+                                         ("vendor_id", "ven_99999999"), ("currency", "EUR"),
+                                         ("authorization", {"kind": "stepup"}), ("proposal_id", "prp_9")])
+def test_tampered_tx_fields(r, field, value):
+    r["tx"][field] = value
+    assert not receipt.verify_receipt(r)
+    assert any("does not match the logged execution" in p and field in p for p in receipt.receipt_problems(r))
+
+
+def test_tx_absent_only_entry_vouched(r, tmp_path, capsys):
+    r["tx"] = None
+    assert receipt.verify_receipt(r)
+    rp = tmp_path / "r.json"
+    rp.write_text(json.dumps(r), encoding="utf-8")
+    assert va.main(["--receipt", str(rp)]) == 0
+    assert "only the execution leaf (entry.data) is vouched for" in capsys.readouterr().out
+
+
+def test_pinned_receipt_keys(r, tmp_path):
+    pins = {"log": r["vkeys"]["log"], "w1": r["vkeys"]["w1"]}
+    assert receipt.verify_receipt(r, trusted_vkeys=pins)
+    # a self-consistent receipt from a log the attacker signed with their own keys verifies only unpinned
+    settings = make_settings(tmp_path, checkpoint_every_n_leaves=5)
+    store = FakeStore()
+    build_log(store, settings, ledger=True)
+    forged = receipt.receipt(TX, store=store, settings=settings)
+    assert receipt.verify_receipt(forged)
+    problems = receipt.receipt_problems(forged, trusted_vkeys=pins)
+    assert any(p.startswith("vkeys.log: receipt key") and "is not the pinned key" in p for p in problems)
+    assert any("checkpoint note" in p for p in problems)
+
+
+def test_cli_receipt_keys(r, env, tmp_path, capsys):
+    rp = tmp_path / "r.json"
+    rp.write_text(json.dumps(r), encoding="utf-8")
+    assert va.main(["--receipt", str(rp)]) == 0
+    out = capsys.readouterr().out
+    assert "self-asserted keys" in out and r["key_ids"]["log"] in out and r["key_ids"]["w1"] in out
+    kp = tmp_path / "k.json"
+    kp.write_text(json.dumps({"log": r["vkeys"]["log"], "w1": r["vkeys"]["w1"]}), encoding="utf-8")
+    assert va.main(["--receipt", str(rp), "--trust-keys", str(kp)]) == 0
+    out = capsys.readouterr().out
+    assert "pinned via --trust-keys" in out and "self-asserted" not in out
+    kp.write_text(json.dumps({"log": cp.vkeys(make_settings(tmp_path))["log"], "w1": r["vkeys"]["w1"]}),
+                  encoding="utf-8")
+    assert va.main(["--receipt", str(rp), "--trust-keys", str(kp)]) == 1
+    assert "is not the pinned key" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("payload", ["[1, 2]", '"x"', "3", '{"entry": "x", "seq": 1}'])
+def test_cli_receipt_not_an_object(tmp_path, capsys, payload):
+    rp = tmp_path / "r.json"
+    rp.write_text(payload, encoding="utf-8")
+    assert va.main(["--receipt", str(rp)]) == 1
+    out = capsys.readouterr().out
+    assert "RESULT: FAIL" in out and "malformed receipt" in out and "Traceback" not in out
+
+
+def test_ledger_row_seq_pointing_elsewhere_falls_back_to_scan(env):
+    store, settings = env
+    s2 = FakeStore()
+    s2.tables = copy.deepcopy(store.tables)
+    row = s2.get("ledger", {"tx_id": TX})
+    true_seq = row["seq"]
+    s2.put("ledger", {**row, "seq": 0})  # seq 0 is an enroll leaf
+    r2 = receipt.receipt(TX, store=s2, settings=settings)
+    assert r2["seq"] == true_seq and r2["entry"]["type"] == "execution" and r2["entry"]["data"]["tx_id"] == TX
+    # the inconsistent ledger row is carried as is and flagged, never silently trusted
+    assert any("does not match the logged execution (seq)" in p for p in receipt.receipt_problems(r2))
+    s2.put("ledger", {"tx_id": "tx_ffffffffffffffff", "seq": true_seq})  # row for a tx with no execution leaf
+    with pytest.raises(LookupError):
+        receipt.receipt("tx_ffffffffffffffff", store=s2, settings=settings)

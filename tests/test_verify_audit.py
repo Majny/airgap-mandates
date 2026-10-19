@@ -8,7 +8,7 @@ import json
 import pytest
 
 from executor.audit import checkpoint as cp
-from executor.audit import log
+from executor.audit import kms, log
 from executor.config import Settings
 from tests.ws_b_store import CLERK, FakeStore, build_log, demo_events, make_settings
 from tools import verify_audit as va
@@ -141,7 +141,9 @@ def test_w1_cosignature_removed(b):
     _fails(b, "signature quorum not met (valid: log; need log AND (w1 OR w2))")
     # with a log-only quorum the notes pass; only the checkpoint leaves still notice the stripped cosignature
     rep = va.verify(b, replay=False, quorum=va.parse_quorum("log"))
-    assert rep.problems and all("note_sha256 does not match" in p for p in rep.problems)
+    last = b["leaves"][-1]["seq"]  # the trailing checkpoint leaf no longer matches its note, so it is not exempt
+    assert rep.problems and all("note_sha256 does not match" in p or p == f"seq {last}: not covered by a witnessed "
+                                "checkpoint" for p in rep.problems), rep.problems
 
 
 def test_wrong_pubkey(b, tmp_path):
@@ -237,3 +239,172 @@ def test_parse_quorum():
     assert va.parse_quorum("log,w1|w2") == va.DEFAULT_QUORUM
     with pytest.raises(ValueError):
         va.parse_quorum("log,w3")
+
+
+# ---- review fixes: uncovered tail, key pinning, W2 cosignatures added later, semantics, CLI robustness
+
+
+def _uncovered_export(tmp_path, n_extra=2):
+    """A real log whose last leaves were appended after the last checkpoint (no tick)."""
+    settings = make_settings(tmp_path, checkpoint_every_n_leaves=5)
+    store = FakeStore()
+    build_log(store, settings)
+    lazy = make_settings(tmp_path, checkpoint_every_n_leaves=10_000, checkpoint_max_seconds=10**7)
+    for i in range(n_extra):
+        log.append(log.make_event("tool_call", {"session_id": "s2", "step": i, "tool": "list_vendors",
+                                                "args_sha256": "ab" * 32, "result": "ok", "rule_ids": [],
+                                                "untrusted_read": False}, subject_id=None, actor="agent"),
+                   store=store, settings=lazy)
+    return log.export("audit", store=store, settings=settings)
+
+
+def test_uncovered_tail_fails(tmp_path):
+    bundle = _uncovered_export(tmp_path)
+    n = len(bundle["leaves"])
+    rep = _fails(bundle, f"seq {n - 2}: not covered by a witnessed checkpoint",
+                 f"seq {n - 1}: not covered by a witnessed checkpoint")
+    assert rep.checked["uncovered_leaves"] == 3  # the old trailing checkpoint leaf is no longer the last leaf
+    rep = va.verify(bundle, replay=False, allow_uncovered_tail=True)
+    assert rep.ok, rep.problems
+    assert rep.checked["uncovered_leaves"] == 3
+    assert any("WARNING: 3 leaves NOT covered" in x for x in rep.notes)
+
+
+def test_trailing_checkpoint_leaf_is_the_only_exemption(b):
+    assert va.verify(b, replay=False).checked["uncovered_leaves"] == 0
+    b["leaves"][-1]["event"]["data"]["note_sha256"] = "00" * 32
+    b["leaves"][-1]["leaf_hash"] = log.leaf_hash(b["leaves"][-1]["event"])
+    _fails(b, f"seq {b['leaves'][-1]['seq']}: not covered by a witnessed checkpoint")
+
+
+def test_cli_allow_uncovered_tail(tmp_path, capsys):
+    p = tmp_path / "u.json"
+    p.write_text(json.dumps(_uncovered_export(tmp_path)), encoding="utf-8")
+    assert va.main([str(p), "--no-replay"]) == 1
+    assert "not covered by a witnessed checkpoint" in capsys.readouterr().out
+    assert va.main([str(p), "--no-replay", "--allow-uncovered-tail"]) == 0
+    out = capsys.readouterr().out
+    assert "RESULT: OK" in out and "WARNING: 3 leaves NOT covered" in out and "uncovered 3" in out
+
+
+def test_pinned_keys(b, tmp_path):
+    pins = {"log": b["pubkeys"]["log"], "w1": b["pubkeys"]["w1"]}
+    rep = va.verify(b, replay=False, trusted_vkeys=pins)
+    assert rep.ok and rep.pinned and set(rep.keys) == {"log", "w1"}
+    # an attacker re-builds and re-signs the whole log with their own keys: self-consistent, so it only fails pinned
+    forged = _export(tmp_path)
+    rep = va.verify(forged, replay=False)
+    assert rep.ok and not rep.pinned
+    _fails(forged, "pubkeys.log: bundle key", "is not the pinned key", "signature check failed", trusted_vkeys=pins)
+
+
+def test_pinned_keys_ignore_unpinned_bundle_w2(b, tmp_path):
+    """A bundle-supplied w2 key cannot satisfy the quorum when the auditor pinned only log + w1."""
+    other = make_settings(tmp_path)
+    w2 = cp.verifier_key(cp.witness_name(other, "w2"), kms.public_key(settings=other, key="w1"), cp.SIG_COSIGNATURE)
+    b["pubkeys"]["w2"] = w2
+    rep = va.verify(b, replay=False, trusted_vkeys={"log": b["pubkeys"]["log"], "w1": b["pubkeys"]["w1"]})
+    assert rep.ok and "w2" not in rep.keys
+
+
+def test_cli_trust_keys(b, tmp_path, capsys):
+    bp = tmp_path / "b.json"
+    bp.write_text(json.dumps(b), encoding="utf-8")
+    assert va.main([str(bp), "--no-replay"]) == 0
+    out = capsys.readouterr().out
+    assert "keys taken from the bundle (not pinned)" in out
+    assert cp.parse_vkey(b["pubkeys"]["log"])["key_id"].hex() in out
+    kp = tmp_path / "keys.json"
+    kp.write_text(json.dumps({"log": b["pubkeys"]["log"], "w1": b["pubkeys"]["w1"]}), encoding="utf-8")
+    assert va.main([str(bp), "--no-replay", "--trust-keys", str(kp)]) == 0
+    out = capsys.readouterr().out
+    assert "pinned via --trust-keys" in out and "not pinned" not in out
+    kp.write_text(json.dumps({"log": cp.vkeys(make_settings(tmp_path))["log"], "w1": b["pubkeys"]["w1"]}),
+                  encoding="utf-8")
+    assert va.main([str(bp), "--no-replay", "--trust-keys", str(kp)]) == 1
+    assert "is not the pinned key" in capsys.readouterr().out
+    kp.write_text("[1]", encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        va.main([str(bp), "--no-replay", "--trust-keys", str(kp)])
+    assert e.value.code == 2
+
+
+def _add_w2(b, tmp_path, idx, *, garbage=False):
+    """Append a W2 cosignature line to exported note `idx` after the fact (row 22b) and pin W2 in bundle pubkeys."""
+    w2s = make_settings(tmp_path / "w2")
+    name = cp.witness_name(w2s, "w2")
+    b["pubkeys"]["w2"] = cp.verifier_key(name, kms.public_key(settings=w2s, key="w1"), cp.SIG_COSIGNATURE)
+    note = b["checkpoints"][idx]
+    line = cp.cosign(cp.parse_note(note)["body"], name=name, settings=w2s, key="w1", timestamp=1_760_000_000)
+    if garbage:
+        raw = cp._unb64(line.split(" ")[2].strip())
+        line = cp.signature_line(name, raw[:20] + bytes([raw[20] ^ 1]) + raw[21:])
+    b["checkpoints"][idx] = note + line
+    return name
+
+
+def test_w2_cosignature_added_later(b, tmp_path):
+    _add_w2(b, tmp_path, 2)
+    rep = va.verify(b, replay=False)
+    assert rep.ok, rep.problems
+    assert rep.checked["checkpoint_sig_w2"] == 1 and rep.checked["checkpoint_leaves"] == len(b["checkpoints"])
+    # the trailing checkpoint leaf stays exempt when the LAST note gains a W2 line, and w2 alone meets the quorum
+    _add_w2(b, tmp_path, len(b["checkpoints"]) - 1)
+    rep = va.verify(b, replay=False, quorum=va.parse_quorum("log,w2"))
+    assert rep.checked["checkpoint_sig_w2"] == 2 and rep.checked["uncovered_leaves"] == 0
+    assert not [p for p in rep.problems if "not covered" in p or "note_sha256" in p]
+
+
+def test_w2_garbage_cosignature_fails(b, tmp_path):
+    _add_w2(b, tmp_path, 2, garbage=True)
+    size = cp.parse_note(b["checkpoints"][2])["size"]
+    _fails(b, f"checkpoint size {size}: signature check failed")
+
+
+def _drop(evs, pred):
+    return [ev for ev in evs if not pred(ev)]
+
+
+def test_challenge_execution_needs_pay_signature(tmp_path):
+    from tests.ws_b_store import _sig
+
+    evs = demo_events()
+    for ev in evs:
+        if ev["type"] == "decision" and ev["subject_id"] == "prp_2":
+            ev["data"]["decision"] = "challenge"
+    _fails(_export(tmp_path / "a", evs), "execution of prp_2 after a challenge decision")
+    i = next(k for k, ev in enumerate(evs) if ev["type"] == "execution" and ev["data"]["proposal_id"] == "prp_2")
+    evs[i:i] = _sig("P0000001", "PAY", "clerk", CLERK, "prp_2")
+    assert va.verify(_export(tmp_path / "b", evs), replay=False).ok
+
+
+def test_mandate_active_needs_all_signers(tmp_path):
+    evs = _drop(demo_events(), lambda ev: ev["type"] == "signature" and ev["data"]["nonce"] == "A0000001")
+    _fails(_export(tmp_path, evs), "mandate mnd_1 ACTIVE with 1 distinct accepted signer(s), needs 2")
+
+
+def test_change_active_needs_clerk_and_treasury(tmp_path):
+    evs = _drop(demo_events(), lambda ev: ev["type"] == "signature" and ev["data"]["nonce"] == "C0000001")
+    _fails(_export(tmp_path, evs), "change chg_1 reached ACTIVE without accepted CHG signatures from a clerk and a "
+                                   "treasury")
+
+
+def test_change_left_cooling_without_schedule(tmp_path):
+    evs = _drop(demo_events(), lambda ev: ev["type"] == "change_event")
+    _fails(_export(tmp_path, evs), "change chg_1 left COOLING without an earlier cooling_scheduled event")
+
+
+def test_cli_bad_quorum_is_usage_error(b, tmp_path, capsys):
+    bp = tmp_path / "b.json"
+    bp.write_text(json.dumps(b), encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        va.main([str(bp), "--quorum", "log,w9"])
+    assert e.value.code == 2
+    assert "bad quorum" in capsys.readouterr().err
+
+
+def test_cli_malformed_bundle_no_traceback(tmp_path, capsys):
+    bp = tmp_path / "b.json"
+    bp.write_text(json.dumps({"leaves": [1, "x"], "checkpoints": [3], "pubkeys": []}), encoding="utf-8")
+    assert va.main([str(bp), "--no-replay"]) == 1
+    assert "RESULT: FAIL" in capsys.readouterr().out
