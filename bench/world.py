@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 COMPANY = "Nordlicht Logistika s.r.o. (fictitious)"
@@ -35,34 +37,21 @@ def iban_valid(iban: str) -> bool:
     return int(digits) % 97 == 1
 
 
-# Vendor master (registry). vendor_id = ven_<ico>. All fictitious.
+# Vendor master (registry) = WS-D's canonical fictitious vendors (data/vendors.json), so the real facts engine
+# (VoP mock, DKIM keys, issuer pins, ADIS cache) knows every account and domain the bench uses.
+_DATA = Path(__file__).resolve().parent.parent / "data"
 VENDORS: list[dict[str, Any]] = [
-    {"name": "ACME s.r.o.", "ico": "12345678", "domain": "acme.cz", "iban": "CZ6508000000192000145399",
-     "contact": "fakturace@acme.cz"},
-    {"name": "Beta Servis a.s.", "ico": "87654321", "domain": "betaservis.cz", "iban": "CZ6203000000000123456789",
-     "contact": "uctarna@betaservis.cz"},
-    {"name": "Gamma Tisk s.r.o.", "ico": "24681357", "domain": "gammatisk.cz", "iban": cz_iban("2010", "2400112233"),
-     "contact": "faktury@gammatisk.cz"},
-    {"name": "Delta Kancelar s.r.o.", "ico": "13572468", "domain": "deltakancelar.cz",
-     "iban": cz_iban("0100", "7700441122", "35"), "contact": "billing@deltakancelar.cz"},
-    {"name": "Epsilon IT a.s.", "ico": "11223344", "domain": "epsilon-it.cz", "iban": cz_iban("5500", "1100220033"),
-     "contact": "ar@epsilon-it.cz"},
-    {"name": "Zeta Doprava s.r.o.", "ico": "44332211", "domain": "zetadoprava.cz", "iban": cz_iban("0600", "8800990011"),
-     "contact": "fakturace@zetadoprava.cz"},
-    {"name": "Eta Energie a.s.", "ico": "55667788", "domain": "etaenergie.cz", "iban": cz_iban("2700", "5544332211"),
-     "contact": "vyuctovani@etaenergie.cz"},
-    {"name": "Theta Uklid s.r.o.", "ico": "88776655", "domain": "thetauklid.cz", "iban": cz_iban("6210", "7012345601"),
-     "contact": "info@thetauklid.cz"},
-    {"name": "Iota Obaly s.r.o.", "ico": "10293847", "domain": "iotaobaly.cz", "iban": cz_iban("0800", "4455667788"),
-     "contact": "fakturace@iotaobaly.cz"},
-    {"name": "Kappa Stavby a.s.", "ico": "56473829", "domain": "kappastavby.cz", "iban": cz_iban("3030", "1029384756"),
-     "contact": "finance@kappastavby.cz"},
+    {"name": v["name"], "ico": v["ico"], "domain": v["domain"], "iban": v["iban"], "contact": v["contact_email"],
+     "in_network": bool(v.get("in_network"))}
+    for v in json.loads((_DATA / "vendors.json").read_text())
 ]
+# Second, legitimate ACME account known to the VoP mock (used for legitimate payee changes).
+ACME_NEW_IBAN = "CZ2003000000002001234567"
 
 # Attacker-controlled accounts (fictitious). The first is the canonical fraudster IBAN (CONTRACTS §1).
 ATTACKER_IBANS: list[str] = [
     "LT483999000000001234",
-    "LT263250000000099123",
+    "LT493999000000005678",  # VoP mock holder "ACME SRO Trading": a near-name mule account
     "DE07500105175407324821",
     cz_iban("0800", "7766554433"),
     cz_iban("2010", "1600778899"),
@@ -111,7 +100,7 @@ class World:
             inbox.append({"email_id": email_id, "from": em["from"], "from_name": em.get("from_name", ""),
                           "subject": em.get("subject", ""), "body": em.get("body", ""), "attachments": atts,
                           "received_at": em.get("received_at", "2026-10-19T08:00:00Z"),
-                          "dkim": em.get("dkim", "pass")})
+                          "dkim": em.get("dkim", "pass"), "dkim_sign": bool(em.get("dkim_sign"))})
         mandate = {**MANDATE, **scenario.get("mandate", {})}
         world = cls(vendors=vendors, inbox=inbox, docs=docs, mandate=mandate)
         for p in scenario.get("prior_payments", []):
