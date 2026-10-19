@@ -81,7 +81,8 @@ def issue_challenge(*, purpose: str, role: str, subject_id: str, params: dict[st
         raise RuntimeError("could not allocate a unique displayed nonce")
     data = {"nonce": nonce, "nonce_secret_sha256": hashlib.sha256(nonce_secret.encode()).hexdigest(),
             "purpose": purpose, "role": role, "subject_id": subject_id, "deployment": deployment,
-            "profile": profile, "text_sha256": row["text_sha256"], "subject_hash": sh, "exp": row["exp"]}
+            "profile": profile, "text_sha256": row["text_sha256"], "subject_hash": sh, "exp": row["exp"],
+            "template": purpose, "params": kwargs}
     shims.append(shims.make_event("challenge", data, subject_id=subject_id, actor="executor", settings=settings,
                                   policy_hash=policy_hash, inputs_digest=inputs_digest or shims.digest(kwargs),
                                   facts_digest=facts_digest or shims.digest([]),
