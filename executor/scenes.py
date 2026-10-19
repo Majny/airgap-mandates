@@ -216,9 +216,9 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
                          "agent")
         esc["agent->/signatures"] = _bad(st, r, "caller_not_allowed")["error"]
     st, r = env.call("POST", "/proposals", {"invoice": {
-        "vendor_id": "ven_87654321", "invoice_no": "BS-2026-1201", "invoice_ref": "doc_00000000000000b2",
+        "vendor_id": "ven_99887762", "invoice_no": "GT-26-0201", "invoice_ref": "doc_00000000000000c2",
         "issue_date": env.now.strftime("%Y-%m-%d"), "amount_minor": 9_120_000, "currency": "CZK",
-        "reason_code": "DUE"}, "hints": []}, "tools")  # over the cap, and distinct from S1's Beta invoice (I-DUP)
+        "reason_code": "DUE"}, "hints": []}, "tools")  # over the cap; Gamma is not paid in S1 (no I-DUP / I-SPLIT)
     dec = _ok(st, r, 201)["decision"]
     assert dec["decision"] == "challenge", f"expected an exact-sign challenge, got {dec['decision']} {dec['rule_ids']}"
     pay = dec["challenge"]
