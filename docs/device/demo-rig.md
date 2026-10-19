@@ -54,7 +54,12 @@ AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324 .venv/bin/python -m host.signer s1   # fa
 The replay step of S1 re-sends the captured signature; the human is not asked to sign twice.
 
 ## Checklist (T-30 min)
-- [ ] Device charged/plugged, unlocked (PIN), on the homescreen; auto-lock is 10 min, so unlock again just before.
+- [ ] Auto-lock set to the maximum on the demo device (Settings -> Auto-lock). Measured at H0: a USB drop or
+      auto-lock mid-flow blocks the host silently before the first prompt (the S1 rehearsal stalled ~3 min until
+      the device was re-plugged and unlocked).
+- [ ] Short USB-C data cable, firmly seated, strain-relieved with tape; no hub.
+- [ ] Re-plug if in doubt, unlock (PIN), homescreen visible, then `python -m host.signer info` shows `GENUINE` before
+      EACH beat.
 - [ ] `trezorctl list` shows the device; Suite closed.
 - [ ] Phone: Do Not Disturb, auto-lock off, exposure locked, zoom set, mirroring live on the projector.
 - [ ] One dry run of S1 end to end, then wipe nothing (the demo seed stays).
