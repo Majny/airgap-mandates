@@ -143,7 +143,7 @@ def _anom(ff: list[dict[str, Any]]) -> int:
 
 def cedar_context(subject: dict[str, Any], facts: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     """Context for action `pay` per cedar schema: amount_minor, vop, reg_hit, warn_hit, block_hit, warn_count,
-    anom, dup, split_sum, z_hit, now (epoch s), attest_count. [F] only."""
+    anom, dup, split_sum, z_hit, now (epoch s), attest_count, amount_doc_block. [F] only."""
     inv = subject["invoice"]
     ff = f_facts(facts)
     warn = [f for f in ff if f["severity"] == "WARN"]
@@ -161,4 +161,5 @@ def cedar_context(subject: dict[str, Any], facts: dict[str, Any], state: dict[st
         "z_hit": z_hit(inv, state.get("history") or []),
         "now": epoch(state["now"]),
         "attest_count": 0,
+        "amount_doc_block": any(f["id"] == "F-AMOUNT-DOC" and f["severity"] == "BLOCK" for f in ff),
     }

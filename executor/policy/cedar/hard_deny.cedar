@@ -13,6 +13,10 @@ when { !resource.known || !resource.active };
 forbid (principal, action == Action::"pay", resource)
 when { context.dup };
 
+@id("I-AMOUNT")
+forbid (principal, action == Action::"pay", resource)
+when { context.amount_doc_block };
+
 @id("I-BLOCK")
 forbid (principal, action == Action::"pay", resource)
 when { context.block_hit };

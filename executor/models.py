@@ -259,7 +259,7 @@ H_FACT_IDS: list[str] = ["H-AGENT", "H-UI"]
 
 # Cedar @id rule ids (CONTRACTS §8.1). P-* permits are never reported in rule_ids.
 RULE_IDS: list[str] = [
-    "I-PAYEE", "I-DUP", "I-BLOCK",
+    "I-PAYEE", "I-DUP", "I-AMOUNT", "I-BLOCK",
     "I-MANDATE", "I-EXP", "I-PER", "I-BUDGET", "I-COUNT", "I-REGISTRY", "I-VOP", "I-ANOM", "I-SPLIT", "I-Z", "I-WARN",
     "I-ATTEST", "I-CALLBACK", "I-COOLOFF",
     "I-NONCE",

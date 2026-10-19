@@ -61,7 +61,8 @@
               "split_sum": {"type": "Long"},
               "z_hit": {"type": "Boolean"},
               "now": {"type": "Long"},
-              "attest_count": {"type": "Long"}
+              "attest_count": {"type": "Long"},
+              "amount_doc_block": {"type": "Boolean"}
             }
           }
         }

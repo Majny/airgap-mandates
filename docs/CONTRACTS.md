@@ -127,7 +127,7 @@ order (§5.4). Values not listed are INFO.
 | `F-BANK` | `bank_codes` (bank-code list, IBAN → bank) | domestic → INFO; foreign or EMI for a CZ vendor → WARN | `BANK DOMESTIC`, `BANK FOREIGN EMI` |
 | `F-FIRSTSEEN` | `registry` history | IBAN first seen < 72 h → WARN | `IBAN NEW 2H`, `IBAN SEEN 400D` |
 | `F-DUP` (WS-A) | ledger | duplicate → BLOCK (deny) | `DUPLICATE INVOICE` |
-| `F-AMOUNT-DOC` (WS-A; WS-E `executor/docs`) | source document (`check_against_document`) | `match` → INFO; `mismatch` → BLOCK | `AMOUNT OK DOC`, `AMOUNT != DOC` |
+| `F-AMOUNT-DOC` (WS-D, extractor WS-E) | provenance-hashed source document (`invoice_ref`, `executor/docs/extract.py`) | match, or lower with `reason_code` `PARTIAL` → INFO; higher, lower without PARTIAL, currency/VS/due date/invoice_no/supplier ICO differ, or document missing / unextractable → **BLOCK** (fail closed). evidence `{invoice_amount_minor, doc_amount_minor, doc_sha256, invoice_ref, mismatched (comma-joined field names), reason_code}`, `prov` = `doc_sha256` | `AMOUNT OK DOC`, `AMOUNT != DOC` |
 | `F-SPLIT` (WS-A) | ledger | 24 h split → WARN (step-up) | `SPLIT 24H` |
 | `F-Z` (WS-A) | ledger | robust z > 3.5 → WARN (step-up) | `AMOUNT OUTLIER` |
 | `F-ANOM` (WS-E feeds, WS-D computes) | executor tool-call log (`tool_call` leaves) | score 0..100; ≥ 40 → WARN (step-up); **never allows** | `ANOM 10/100`, `ANOM 55/100` |
@@ -168,7 +168,7 @@ F-SANCTION and the MostlyRight leg of F-DOMAIN, and appears in `FactSet.snapshot
 - `mandate_id`: ACTIVE mandate evaluated, or `null`.
 - **Proposal decision** (pure `executor.policy.decide.decide()`, Cedar via `cedarpy`, tri-state, §8.1):
   1. Policy set `hard_deny` (Cedar, default-allow base `P-BASE`): any determining forbid (`I-PAYEE` unknown/inactive payee,
-     `I-DUP`, `I-BLOCK` any BLOCK fact) ⇒ **`deny`**.
+     `I-DUP`, `I-AMOUNT` amount ≠ source document, `I-BLOCK` any BLOCK fact) ⇒ **`deny`**.
   2. Else policy set `mandate_allow`: `P-MANDATE` permit and no forbid ⇒ **`allow`** (executed at once, §3.2).
   3. Else ⇒ **`challenge`** (PAY exact-sign step-up). Any WARN fact (`I-WARN`) or F-ANOM ≥ `max_anom` (`I-ANOM`) ⇒ challenge.
   H facts are not in the Cedar context at all (S3).
@@ -778,6 +778,7 @@ allowed if the cedarpy diagnostics prove awkward (decision Mon 16:00). There is 
 | id | set | rule | outcome |
 |---|---|---|---|
 | I-PAYEE | hard_deny | payee known, ACTIVE, with an ACTIVE IBAN in `registry` | deny |
+| I-AMOUNT | hard_deny | invoice amount and details equal the provenance-hashed source document (F-AMOUNT-DOC not BLOCK; mirrors the tools-λ `T-AMOUNT-MISMATCH`) | deny |
 | I-DUP | hard_deny | same normalized `invoice_no` for the vendor, or (vendor, amount ±50 bp, issue_date ±3 d) already EXECUTED/PENDING_SIG | deny |
 | I-BLOCK | hard_deny, change | any F fact BLOCK | deny / no CHG challenge |
 | I-MANDATE | mandate_allow | an ACTIVE mandate with the current `policy_hash` | challenge |
