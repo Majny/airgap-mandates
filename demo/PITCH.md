@@ -97,6 +97,7 @@ Run IDs:
 - **"Isn't the approver fatigued?"** No prompt for routine invoices; the over-cap and new-account prompts are the ones a bank wants seen [QB]. The quarantined agent mode gets 15-17 prompts per 100 cases, at the price of not acting on account-change emails [QB].
 - **"Does a better model fix it?"** Sonnet 4.5 refuses exfiltration and direct writes, but still pays 8 of 13 "new account" requests and 7 of 7 duplicates at A0 [SA].
 - **"How sure are you about 0%?"** 0/100 per cell, 95% Wilson upper bound 4% [QA]. It is 0 by construction for new accounts (R0 + attestations), and 0/10 per scripted host attack [SC].
+- **"How would a supervisor check this?"** Offline, with public keys obtained out of band: stock Go checks the log signature, our verifier re-checks every entry, decision and device approval, and a one-byte edit names the entry. Witnesses: W1 is in our account, W2 is unmodified litewitness with a simulated operator. We are "aligned with" DORA RTS 2024/1774 Art. 12 and PSD2 RTS Art. 5, never "compliant" (`docs/audit/SUPERVISOR.md`).
 - **Limits:**
   - one main model;
   - fictitious world of 3 vendors;
