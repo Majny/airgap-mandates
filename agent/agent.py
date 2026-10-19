@@ -118,9 +118,9 @@ class ToolsClient:
 # ---------------------------------------------------------------- quarantine
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
-_LOCAL_RE = re.compile(r"[a-z0-9._-]{1,32}")
-_SCREENED_TOOLS = ("inbox.list", "inbox.read", "invoice.extract")
-_KEEP_KEYS = ("kind",)  # set by our code, not by the sender
+# naive + A1: untrusted reads, and effect tools whose errors may echo document-derived text
+_SCREENED_TOOLS = ("inbox.list", "inbox.read", "invoice.extract", "payment.propose", "payee.request_change")
+_KEEP_KEYS = ("kind", "error", "rule_ids", "decision")  # set by our code, not by the sender
 
 
 class Quarantine:
@@ -137,12 +137,12 @@ class Quarantine:
         return h
 
     def sender(self, v: Any) -> str | None:
-        """Typed sender: the address only if its local part is a plain mailbox name, else a handle + @domain."""
+        """Typed sender: a handle for the local part (never verbatim: it is sender-chosen text) + @domain."""
         addr = _typed_email(v)
         if addr is None:
             return None
         local, domain = addr.rsplit("@", 1)
-        return addr if _LOCAL_RE.fullmatch(local) else f"{self.handle(local)}@{domain}"
+        return f"{self.handle(local)}@{domain}" if _typed_domain(domain) else None
 
     def view(self, tool: str, args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         if "error" in result:
@@ -259,7 +259,7 @@ def run_agent(task: str = TASK, *, mode: str | None = None, model: str | None = 
             tool_calls.append({"tool": tool, "args": args, "result": out})
             if tool == "payment.propose" and "error" not in out:
                 proposals.append(out)
-            if q is None and guardrails.enabled() and tool in _SCREENED_TOOLS and "error" not in out:
+            if q is None and guardrails.enabled() and tool in _SCREENED_TOOLS:  # errors too: they may echo documents
                 out = screen_result(tool, out, bedrock=bedrock)
             shown = q.view(tool, args, out) if q else out
             results.append({"toolResult": {"toolUseId": u["toolUseId"],

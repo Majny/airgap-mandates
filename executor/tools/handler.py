@@ -1,15 +1,15 @@
 """Tools λ handler (POST /tools/{name}). CONTRACTS.md v2 §4.1 #18, §4.5. Owner: WS-E.
 
-Order per call: claim (session_id, step) (T-STEP-REUSE) -> manifest hash pin -> known tool -> argument schema -> Cedar tool policy (A2) -> executor call with the
+Order per call: request check (step int >= 0, canonical args; else logged 400) -> claim (session_id, step) (T-STEP-REUSE) -> manifest hash pin -> known tool -> argument schema -> Cedar tool policy (A2) -> executor call with the
 tools role (no token passthrough; in-process dispatch on memory/moto, SigV4 HTTP to the executor on aws) -> one
 `tool_call` leaf + `tool_calls` row (F-ANOM toollog). Untrusted content is returned wrapped in <untrusted> tags.
 """
 from __future__ import annotations
 
-import email.utils
+import hashlib
 import json
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import jsonschema
@@ -40,7 +40,8 @@ MAIL_TEMPLATES: dict[str, str] = {
 }
 _VAR_RE = re.compile(r"^[A-Za-z0-9 ._/:-]{0,40}$")
 _VAR_SHAPE = {"date": re.compile(r"^\d{4}-\d{2}-\d{2}$"), "po": re.compile(r"^PO-[A-Za-z0-9-]{1,20}$")}
-_DIGIT_RUN_RE = re.compile(r"\d{5,}")  # an IBAN split over several messages needs runs of digits
+_PO_RE = re.compile(r"PO-[A-Za-z0-9-]+")
+_DATE_RANGE = (date(2020, 1, 1), date(2035, 12, 31))
 
 
 # ---------------------------------------------------------------- executor transport
@@ -164,13 +165,14 @@ def _email_docs(email_id: str, *, store: Any, settings: Any) -> tuple[bytes, lis
     return raw, extract.documents(raw)
 
 
-def _find_doc(doc_id: str, *, store: Any, settings: Any) -> tuple[str, dict[str, Any]]:
+def _find_doc(doc_id: str, *, store: Any, settings: Any) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+    """(email_id, document, all documents of that email)."""
     emails = _executor("GET", "/inbox", None, store=store, settings=settings)["emails"]
     for e in emails:
         _, docs = _email_docs(e["email_id"], store=store, settings=settings)
         for d in docs:
             if d["doc_id"] == doc_id:
-                return e["email_id"], d
+                return e["email_id"], d, docs
     raise ApiError(ErrorCode.NOT_FOUND, f"document {doc_id}")
 
 
@@ -181,13 +183,16 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
     if name == "inbox.read":
         raw, docs = _email_docs(args["email_id"], store=store, settings=settings)
         hdr = extract.headers(raw)
-        return {"email_id": args["email_id"], "from": _single_address(hdr["From"]), "subject": hdr["Subject"],
+        # sender = the ingest row's from_addr (parsed from the raw header by the DKIM path), never a decoded header:
+        # an RFC 2047 display name can decode to an address-like string
+        row = next((e for e in ex("GET", "/inbox")["emails"] if e.get("email_id") == args["email_id"]), {})
+        return {"email_id": args["email_id"], "from": row.get("from_addr") or None, "subject": hdr["Subject"],
                 "documents": [{"doc_id": d["doc_id"], "kind": d["kind"], "name": d["name"]} for d in docs],
                 "content": _untrusted(f"email:{args['email_id']}", "\n\n".join(
                     d["text"] if d["kind"] == "body" else f"--- attachment {d['name']} ({d['doc_id']}) ---\n{d['text']}"
                     for d in docs))}
     if name == "invoice.extract":
-        email_id, doc = _find_doc(args["doc_id"], store=store, settings=settings)
+        email_id, doc, _ = _find_doc(args["doc_id"], store=store, settings=settings)
         return {"email_id": email_id, "draft": extract.extract_draft(doc)}
     if name == "vendor.lookup":
         if args.get("vendor_id"):
@@ -214,11 +219,14 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
                 "remaining_minor": m["max_total_minor"] - m.get("spent_minor", 0),
                 "remaining_count": m["max_count"] - m.get("count", 0), "valid_until": m["valid_until"]}
     if name == "payment.propose":
-        email_id, doc = _find_doc(args["invoice_ref"], store=store, settings=settings)
+        email_id, doc, docs = _find_doc(args["invoice_ref"], store=store, settings=settings)
         vendor = ex("GET", f"/vendors/{args['vendor_id']}")
-        inv, warn = invoice_from_document(args, extract.extract_draft(doc), vendor, settings=settings)
+        siblings = [extract.extract_draft(d) for d in docs if d["doc_id"] != doc["doc_id"]]
+        draft = extract.extract_draft(doc)
+        inv, warn = invoice_from_document(args, draft, vendor, settings=settings, siblings=siblings)
         inv["email_id"] = email_id
-        _check_cumulative(inv, extract.extract_draft(doc)["fields"]["amount_minor"], store=store, settings=settings)
+        cap = max(a for d in [draft, *siblings] if (a := d["fields"]["amount_minor"]) is not None)
+        _check_cumulative(inv, cap, store=store, settings=settings)
         out = ex("POST", "/proposals", {"invoice": inv, "hints": hints})
         return {"proposal_id": out["proposal"]["proposal_id"], "decision": out["decision"]["decision"],
                 "rule_ids": out["decision"].get("rule_ids", []), "tx_id": (out.get("tx") or {}).get("tx_id"),
@@ -235,8 +243,9 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
             raise ApiError(ErrorCode.INVALID_REQUEST, f"unknown template {args['template_id']}")
         vars_ = {k: str(v) for k, v in (args.get("vars") or {}).items()}
         bad = [k for k, v in vars_.items() if not _VAR_RE.match(v)
-               or (k in _VAR_SHAPE and not _VAR_SHAPE[k].match(v))
-               or (_DIGIT_RUN_RE.search(v) and not (k == "invoice_no" and v in _sender_invoice_nos(args["to"], ex)))]
+               or (k in _VAR_SHAPE and not _VAR_SHAPE[k].match(v))]
+        if not bad:
+            bad = _unbound_vars(vars_, args["to"], ex)
         if bad:
             raise ApiError(ErrorCode.INVALID_REQUEST, f"template vars not allowed: {bad}")
         try:
@@ -248,33 +257,53 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
     raise ApiError(ErrorCode.NOT_FOUND, f"tool {name}")
 
 
-def _single_address(header: str) -> str | None:
-    """The one address of a From header (display name dropped); None unless there is exactly one."""
-    addrs = [a for _, a in email.utils.getaddresses([header]) if a]
-    return addrs[0].lower() if len(addrs) == 1 and "@" in addrs[0] else None
-
-
-def _sender_invoice_nos(to: str, ex: Any) -> set[str]:
-    """invoice_no values on the documents of emails received from the recipient's domain."""
+def _sender_documents(to: str, ex: Any) -> list[dict[str, Any]]:
+    """Documents of the emails received from the recipient's domain."""
     domain = to.rsplit("@", 1)[-1].lower()
-    out: set[str] = set()
+    out: list[dict[str, Any]] = []
     for e in ex("GET", "/inbox")["emails"]:
         if str(e.get("from_domain", "")).lower() != domain:
             continue
         try:
-            docs = extract.documents(bytes(ex("GET", f"/inbox/{e['email_id']}/raw")))
+            out += extract.documents(bytes(ex("GET", f"/inbox/{e['email_id']}/raw")))
         except ApiError:  # unreadable email: contributes nothing (fail closed)
             continue
-        out |= {n for d in docs if (n := extract.extract_draft(d)["fields"]["invoice_no"])}
     return out
 
 
+def _unbound_vars(vars_: dict[str, str], to: str, ex: Any) -> list[str]:
+    """Vars carrying digits must mean something (an IBAN split over messages needs digits): invoice_no and po must
+    appear in the recipient's own documents, date must be a real calendar date in 2020..2035. Other vars: no digits."""
+    digits = {k: v for k, v in vars_.items() if any(c.isdigit() for c in v)}
+    if not digits:
+        return []
+    docs = _sender_documents(to, ex) if {"invoice_no", "po"} & set(digits) else []
+    bad = []
+    for k, v in digits.items():
+        if k == "invoice_no":
+            ok = v in {n for d in docs if (n := extract.extract_draft(d)["fields"]["invoice_no"])}
+        elif k == "po":
+            ok = any(v in _PO_RE.findall(d["text"]) for d in docs)
+        elif k == "date":
+            try:
+                ok = _DATE_RANGE[0] <= date.fromisoformat(v) <= _DATE_RANGE[1]
+            except ValueError:
+                ok = False
+        else:
+            ok = False
+        if not ok:
+            bad.append(k)
+    return bad
+
+
 def _check_cumulative(inv: dict[str, Any], doc_amount: int, *, store: Any, settings: Any) -> None:
-    """PARTIAL cannot add up past the document: live proposals (EXECUTED/PENDING_SIG) for this invoice_ref count."""
-    rows = _executor("GET", "/proposals", None, store=store, settings=settings,
-                     query={"vendor_id": inv["vendor_id"]})["proposals"]
+    """PARTIAL cannot add up past the email's document: live proposals (EXECUTED/PENDING_SIG) of the same email
+    (body and attachments are one invoice) or the same invoice_ref count, whatever their vendor."""
+    rows = _executor("GET", "/proposals", None, store=store, settings=settings)["proposals"]
+    email_id = inv.get("email_id")
     prior = sum(int(r["invoice"]["amount_minor"]) for r in rows if r.get("status") in ("EXECUTED", "PENDING_SIG")
-                and (r.get("invoice") or {}).get("invoice_ref") == inv["invoice_ref"])
+                and ((r.get("invoice") or {}).get("invoice_ref") == inv["invoice_ref"]
+                     or (email_id and (r.get("invoice") or {}).get("email_id") == email_id)))
     if prior + int(inv["amount_minor"]) > doc_amount:
         raise DocMismatch(["T-AMOUNT-MISMATCH"],
                           f"amount {inv['amount_minor']} + earlier proposals {prior} > document {doc_amount}")
@@ -288,15 +317,33 @@ class DocMismatch(ApiError):
         self.rule_ids = rule_ids
 
 
+_SIBLING_FIELDS = ("invoice_no", "issue_date", "supplier_ico")
+
+
+def bind_to_email(draft: dict[str, Any], siblings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The draft with invoice_no / issue_date / supplier_ico taken from the other documents of the same email when
+    it lacks them (exactly one distinct value there, else left empty): the body and the ISDOC attachment of one
+    email are one invoice, so I-DUP and the ICO check see the same values whichever document the agent cites."""
+    fields = dict(draft["fields"])
+    for k in _SIBLING_FIELDS:
+        values = {v for s in siblings if (v := s["fields"].get(k))}
+        if not fields.get(k) and len(values) == 1:
+            fields[k] = values.pop()
+    return {**draft, "fields": fields}
+
+
 def invoice_from_document(args: dict[str, Any], draft: dict[str, Any], vendor: dict[str, Any], *,
-                          settings: Any) -> tuple[dict[str, Any], list[str]]:
+                          settings: Any, siblings: list[dict[str, Any]] | None = None
+                          ) -> tuple[dict[str, Any], list[str]]:
     """Build the proposal invoice from the document, never from the agent (P3 for amounts, VS, dates).
 
     The agent's amount/currency/vs/due/invoice_no only have to *agree* with the document: any disagreement raises
     DocMismatch (T-AMOUNT-MISMATCH for the amount, T-DOC-MISMATCH otherwise) and nothing reaches the executor.
     amount_minor below the document amount is allowed only with reason_code PARTIAL. A document without an amount
-    fails closed (T-DOC-MISSING). Returns (invoice, WARN rule ids for fallbacks).
+    fails closed (T-DOC-MISSING). Missing invoice_no / issue_date / supplier_ico come from the other documents of the
+    same email (`siblings`, bind_to_email). Returns (invoice, WARN rule ids for fallbacks).
     """
+    draft = bind_to_email(draft, siblings or [])
     f = draft["fields"]
     problems = extract.check_against_document(draft, args, vendor.get("ico"))
     if problems:
@@ -329,10 +376,14 @@ class _Strict(dict):
 def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) -> dict[str, Any]:
     """Check manifest hash, evaluate the Cedar tool policy (A2), log a tool_call leaf, call the executor
     with the tools role (no token passthrough), mask IBANs to '..<last4>' in vendor.lookup results."""
-    args = dict(request.get("args") or {})
     spec = TOOL_MANIFEST.get(name)
     effect = spec["effect"] if spec else ("decoy" if name in DECOY_TOOLS else "unknown")
     untrusted = effect == "read_untrusted"
+    problem = _request_problem(request)
+    if problem:  # before anything is reserved: no 'pending' row, one logged leaf, 400
+        seq = _log_invalid(name, request, untrusted=untrusted, store=store, settings=settings)
+        raise ApiError(ErrorCode.INVALID_REQUEST, problem, {"rule_ids": [], "seq": seq})
+    args = dict(request.get("args") or {})
     log = lambda result, rule_ids: _log(name, request, result, rule_ids, untrusted=untrusted,  # noqa: E731
                                         store=store, settings=settings)
 
@@ -342,6 +393,22 @@ def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) 
                    row=False)
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, f"step {request['step']} already used in this session",
                        {"rule_ids": ["T-STEP-REUSE"], "seq": seq})
+    try:
+        return _call_reserved(name, request, args, spec, effect, history, log, store=store, settings=settings)
+    except Exception:
+        key = {"session_id": request["session_id"], "sk": f"{request['step']:06d}"}
+        if (store.get("tool_calls", key) or {}).get("result") == "pending":  # never leave a stale 'pending' row
+            try:
+                log("error", [])
+            except Exception:  # noqa: BLE001 - the row at least must not stay pending
+                store.put("tool_calls", {**key, "tool": name, "result": "error", "rule_ids": [],
+                                         "untrusted_read": untrusted, "at": now(settings).strftime(_AT_FMT)})
+        raise
+
+
+def _call_reserved(name: str, request: dict[str, Any], args: dict[str, Any], spec: dict[str, Any] | None,
+                   effect: str, history: list[dict[str, Any]], log: Any, *, store: Any,
+                   settings: Any) -> dict[str, Any]:
     if request["manifest_sha256"] != manifest_sha256():
         seq = log("forbidden", ["T-MANIFEST"])
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, "tool manifest hash mismatch",
@@ -374,6 +441,36 @@ def call_tool(name: str, request: dict[str, Any], *, store: Any, settings: Any) 
     rule_ids = rule_ids + (result.pop("_warn", None) or [])
     seq = log("ok", rule_ids)
     return {"result": result, "seq": seq}
+
+
+def _request_problem(request: dict[str, Any]) -> str | None:
+    """Why the request cannot be logged canonically (step not an int >= 0, floats/NaN in args), or None."""
+    step = request.get("step")
+    if type(step) is not int or step < 0:
+        return "step must be an integer >= 0"
+    if not isinstance(request.get("session_id"), str):
+        return "session_id must be a string"
+    if not isinstance(request.get("args", {}), dict):
+        return "args must be an object"
+    try:
+        canonical_json(request.get("args") or {})
+    except (TypeError, ValueError) as e:
+        return f"args are not canonical JSON ({type(e).__name__}: no floats/NaN)"
+    return None
+
+
+def _log_invalid(name: str, request: dict[str, Any], *, untrusted: bool, store: Any, settings: Any) -> int:
+    """tool_call leaf for a request that cannot be canonicalised (no tool_calls row is written)."""
+    try:
+        raw = json.dumps(request.get("args"), sort_keys=True, default=repr).encode()
+    except (TypeError, ValueError):
+        raw = repr(request.get("args")).encode()
+    step = request.get("step")
+    data = {"session_id": str(request.get("session_id")), "step": step if type(step) is int else -1, "tool": name,
+            "args_sha256": hashlib.sha256(raw).hexdigest(), "result": "error", "rule_ids": [],
+            "untrusted_read": untrusted}
+    return shims.append(shims.make_event("tool_call", data, subject_id=data["session_id"], actor="tools",
+                                         settings=settings), store=store, settings=settings)
 
 
 def _pop_hints(name: str, args: dict[str, Any]) -> list[dict[str, Any]]:

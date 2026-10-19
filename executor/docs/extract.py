@@ -182,7 +182,8 @@ def check_against_document(draft: dict[str, Any], claimed: dict[str, Any], vendo
     claimed keys (all optional except amount_minor): amount_minor, reason_code, currency, vs, due (or due_date),
     invoice_no. Rules: T-DOC-MISSING (no machine-readable amount/currency: fail closed); T-AMOUNT-MISMATCH (higher than
     the document, or lower without reason_code PARTIAL); T-DOC-MISMATCH (other field differs, or the document's
-    supplier ICO is not the vendor's). Shared by the tools λ (A2) and the facts engine (F-AMOUNT-DOC, A3).
+    supplier ICO is not the vendor's; invoice_no compares case-insensitively). Reasons name fields and amounts only,
+    never a document string (they reach the agent as error messages). Shared by the tools λ (A2) and the facts engine (F-AMOUNT-DOC, A3).
     """
     f = draft["fields"]
     if f["amount_minor"] is None or f["currency"] is None:
@@ -194,8 +195,9 @@ def check_against_document(draft: dict[str, Any], claimed: dict[str, Any], vendo
     due = claimed.get("due") or claimed.get("due_date")
     for name, value, field in (("currency", claimed.get("currency"), "currency"), ("vs", claimed.get("vs"), "vs"),
                                ("due", due, "due_date"), ("invoice_no", claimed.get("invoice_no"), "invoice_no")):
-        if value and f[field] and str(value) != str(f[field]):
-            out.append(("T-DOC-MISMATCH", f"{name} {value!r} != document {f[field]!r}"))
+        same = str(value).casefold() == str(f[field]).casefold() if name == "invoice_no" else str(value) == str(f[field])
+        if value and f[field] and not same:  # field name only: document strings never reach an error message
+            out.append(("T-DOC-MISMATCH", f"{name} differs from the document"))
     if f["supplier_ico"] and f["supplier_ico"] != vendor_ico:
         out.append(("T-DOC-MISMATCH", "document supplier ICO is not this vendor"))
     return out
