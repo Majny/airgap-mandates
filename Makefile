@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown
+.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -52,8 +52,15 @@ scene-s3:  ## demo beat S3 (takeover rejected via tripwire, then legit 2/3 VCs -
 verify:  ## verify an audit export offline
 	$(PY) -m tools.verify_audit
 
-deploy:  ## deploy to AWS eu-central-1 (the demo runs here; WS-E)
-	@echo "TODO WS-E: CDK/SAM deploy (AIRGAP_BACKEND=aws, eu-central-1)" && exit 1
+deploy:  ## deploy to AWS eu-central-1 (the demo runs here; WS-E): build zip, cdk deploy, post-deploy wiring
+	infra/build_lambda.sh
+	cd infra && (test -d .venv || (uv venv -q --python 3.12 .venv && uv pip install -q --python .venv/bin/python -r requirements.txt)) && \
+	  AWS_PROFILE=$${AWS_PROFILE:-hackathon} npx --yes aws-cdk@2 deploy --require-approval never AirgapMandates
+	infra/post_deploy.sh
 
 teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
-	@echo "TODO WS-E: teardown" && exit 1
+	infra/teardown.sh
+
+checkpoint-now:  ## invoke airgap-checkpointer once (signed checkpoint + W1 cosign now, for the demo beat)
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} aws lambda invoke --region eu-central-1 --function-name airgap-checkpointer \
+	  --cli-binary-format raw-in-base64-out --payload '{"action":"tick","log_id":"audit"}' /dev/stdout

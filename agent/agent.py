@@ -19,7 +19,7 @@ import secrets
 import time
 from typing import Any, Callable
 
-from agent import llm
+from agent import guardrails, llm
 from agent.extractor import extract_invoice, handle_of
 from executor.tools.manifest import TOOL_MANIFEST, manifest_sha256
 
@@ -226,6 +226,9 @@ def run_agent(task: str = TASK, *, mode: str | None = None, model: str | None = 
             tool_calls.append({"tool": tool, "args": args, "result": out})
             if tool == "payment.propose" and "error" not in out:
                 proposals.append(out)
+            if q is None and guardrails.enabled() and isinstance(out.get("content"), str):
+                out = {**out}
+                out["content"], out["a1"] = guardrails.screen(out["content"], source=tool, bedrock=bedrock)
             shown = q.view(tool, args, out) if q else out
             results.append({"toolResult": {"toolUseId": u["toolUseId"],
                                            "content": [{"text": json.dumps(shown, default=str)[:6000]}]}})

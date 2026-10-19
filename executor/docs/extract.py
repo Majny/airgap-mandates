@@ -60,23 +60,36 @@ _SPAYD_RE = re.compile(r"SPD\*1\.0\*[^\s]+")
 _ISDOC = {
     "invoice_no": r"<ID>([^<]{1,64})</ID>",
     "issue_date": r"<IssueDate>(\d{4}-\d{2}-\d{2})</IssueDate>",
-    "due_date": r"<PaymentDueDate>(\d{4}-\d{2}-\d{2})</PaymentDueDate>",
-    "amount": r"<PayableAmount>([0-9]+(?:[.,][0-9]{1,2})?)</PayableAmount>",
-    "currency": r"<LocalCurrencyCode>([A-Z]{3})</LocalCurrencyCode>",
+    "due_date": r"<(?:Payment)?DueDate>(\d{4}-\d{2}-\d{2})</(?:Payment)?DueDate>",
+    "amount": r"<PayableAmount[^>]*>([0-9]+(?:[.,][0-9]{1,2})?)</PayableAmount>",
+    "currency": r"(?:<LocalCurrencyCode>([A-Z]{3})</LocalCurrencyCode>|<PayableAmount[^>]*currency=\"([A-Z]{3})\")",
     "vs": r"<VariableSymbol>([0-9]{1,10})</VariableSymbol>",
     "iban": r"<IBAN>([A-Z]{2}[0-9]{2}[A-Z0-9 ]{11,40})</IBAN>",
-    "ico": r"<AccountingSupplierParty>.*?<ID>([0-9]{8})</ID>",
-    "name": r"<AccountingSupplierParty>.*?<Name>([^<]{1,120})</Name>",
+    "ico": r"<(?:AccountingSupplierParty|Supplier)>.*?<(?:ID|ICO)>([0-9]{8})</(?:ID|ICO)>",
+    "name": r"<(?:AccountingSupplierParty|Supplier)>.*?<Name>([^<]{1,120})</Name>",
 }
+_AMT = r"([0-9][0-9  ]*(?:[.,][0-9]{1,2})?)"
 _TEXT = {
     "invoice_no": r"(?:invoice|faktura|fa[kc]tura [cč].|invoice no\.?|[cč]íslo faktury)\s*(?:no\.?|number|[cč].)?\s*[:#]?\s*([A-Z0-9][A-Z0-9/_-]{1,63})",
     "issue_date": r"(?:issue date|issued|datum vystaven[ií]|vystaveno)\s*:?\s*(\d{4}-\d{2}-\d{2}|\d{1,2}\.\s?\d{1,2}\.\s?\d{4})",
     "due_date": r"(?:due date|due|splatnost|datum splatnosti)\s*:?\s*(\d{4}-\d{2}-\d{2}|\d{1,2}\.\s?\d{1,2}\.\s?\d{4})",
-    "amount": r"(?:amount|total|k úhradě|celkem|částka)\s*:?\s*([0-9][0-9 ]*(?:[.,][0-9]{1,2})?)\s*(CZK|EUR|Kč)?",
+    "amount": r"(?:amount|total|k úhradě|celkem|částka)\s*:?\s*(?:(CZK|EUR|Kč)\s*)?" + _AMT + r"\s*(CZK|EUR|Kč)?",
     "vs": r"(?:VS|variabiln[ií] symbol|variable symbol)\s*:?\s*([0-9]{1,10})\b",
-    "iban": r"(?:IBAN)\s*:?\s*([A-Z]{2}[0-9]{2}(?:\s?[A-Z0-9]){11,30})",
+    "iban": r"(?:IBAN|account|[uú][cč]et|bankovn[ií] spojen[ií])\s*:?\s*([A-Z]{2}[0-9]{2}(?:\s?[A-Z0-9]){11,30})",
     "ico": r"(?:I[CČ]O?|reg\.?\s*no\.?)\s*:?\s*([0-9]{8})\b",
 }
+
+
+def _iban(s: str | None) -> str | None:
+    """Longest mod-97-valid prefix (greedy patterns can swallow the next word); else None."""
+    if not s:
+        return None
+    s = re.sub(r"\s", "", s).upper()
+    for n in range(min(len(s), 34), 14, -1):
+        c = s[:n]
+        if re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]+", c) and int("".join(str(int(ch, 36)) for ch in c[4:] + c[:4])) % 97 == 1:
+            return c
+    return None
 
 
 def _date(s: str | None) -> str | None:
@@ -90,7 +103,7 @@ def _date(s: str | None) -> str | None:
 def _minor(s: str | None) -> int | None:
     if not s:
         return None
-    s = s.replace(" ", "").replace(",", ".")
+    s = s.replace(" ", "").replace("\u00a0", "").replace(",", ".")
     try:
         whole, _, frac = s.partition(".")
         return int(whole) * 100 + int((frac + "00")[:2])
@@ -119,7 +132,7 @@ def extract_draft(doc: dict[str, Any]) -> dict[str, Any]:
         for k, rx in _ISDOC.items():
             m = re.search(rx, text, re.S)
             if m:
-                found[k] = m.group(1).strip()
+                found[k] = next(g for g in m.groups() if g).strip()
     sp = _spayd(text)
     if sp:
         source = source if source == "isdoc" else "spayd"
@@ -129,12 +142,17 @@ def extract_draft(doc: dict[str, Any]) -> dict[str, Any]:
     for k, rx in _TEXT.items():
         if k not in found:
             m = re.search(rx, text, re.I)
-            if m:
+            if not m:
+                continue
+            if k == "amount":
+                found[k] = m.group(2).strip()
+                cur = m.group(1) or m.group(3)
+                if cur and "currency" not in found:
+                    found["currency"] = "CZK" if cur == "Kč" else cur.upper()
+            else:
                 found[k] = m.group(1).strip()
-                if k == "amount" and m.lastindex and m.lastindex >= 2 and m.group(2) and "currency" not in found:
-                    found["currency"] = "CZK" if m.group(2) == "Kč" else m.group(2)
 
-    iban = re.sub(r"\s", "", found["iban"]).upper() if found.get("iban") else None
+    iban = _iban(found.get("iban"))
     fields = {
         "invoice_no": found.get("invoice_no"),
         "issue_date": _date(found.get("issue_date")),
