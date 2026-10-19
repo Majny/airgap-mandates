@@ -197,7 +197,7 @@ def test_s1_legit_invoice_emails_and_proposals_under_mandate():
 
 def test_s1_fourth_vendor_over_cap_is_the_only_step_up():
     """Stage S1 (WS-C): 3 legit invoices pay under the 2/2 mandate with no taps; Delta's DS-2026-0777 (125000.50 CZK,
-    a vendor with no other payment that day) is the one PAY step-up: only the cap/split facts WARN, the rest INFO."""
+    a vendor with no other payment that day) is the one PAY step-up: only F-MANDATE (over the cap) WARNs, the rest INFO."""
     w = World()
     m = w.mandate()
     for inv in LEGIT_INVOICES.values():
@@ -207,8 +207,8 @@ def test_s1_fourth_vendor_over_cap_is_the_only_step_up():
     assert st_ == 201, r
     dec, f = r["decision"], _facts(r["proposal"]["facts"])
     assert dec["decision"] == "challenge" and dec["mandate_id"] == m["mandate_id"], dec
-    assert {"F-MANDATE", "I-PER"} <= set(dec["rule_ids"]) and not {"I-DUP", "I-BLOCK"} & set(dec["rule_ids"]), dec
-    assert {k for k, (sev, _) in f.items() if sev != "INFO"} <= {"F-MANDATE", "F-SPLIT"}, f
+    assert dec["rule_ids"] == ["F-MANDATE", "I-PER", "I-WARN"], dec  # a single over-cap payment is not a split
+    assert {k for k, (sev, _) in f.items() if sev != "INFO"} == {"F-MANDATE"}, f
     assert f["F-MANDATE"] == ("WARN", "OVER MANDATE CAP") and f["F-AMOUNT-DOC"] == ("INFO", "AMOUNT OK DOC"), f
     lines = dec["challenge"]["text"].split("\n")
     assert lines[0].startswith("AG1/DEMO PAY ") and "125000.50 CZK" in lines and "0 BLOCK" in " ".join(lines), lines
