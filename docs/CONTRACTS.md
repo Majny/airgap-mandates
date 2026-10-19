@@ -571,6 +571,10 @@ H 5a0c7e19d3b4f2
 - Fact slots = 7 − (summary + carried + fixed lines). If facts overflow, the most severe are kept (WARN before INFO, then
   display order), shown in display order, and the last slot becomes `+N MORE 0 BLOCK` (N = omitted facts). The summary
   always counts all F facts. Dropping never changes the decision; the full list is in the payload and the audit log.
+- **Pinned facts (CHG):** `CHG_PINNED_FACTS = ("F-ATTEST", "F-CALLBACK")`. On a CHG screen F-ATTEST (`ATT k/3 ...` or
+  `ATT BREAK-GLASS`) is always shown and never folded into `+N MORE`: it is what the human confirms. F-CALLBACK is kept
+  next when there is room (on any screen that can exist it reads `CALLBACK OK`, R0). If the pinned line plus the
+  overflow line need room, a carried `OLD ..xxxx` line yields its slot.
 
 ### 5.5 Device goldens
 `tests/test_render_safe3.py` holds the §5.2 goldens byte for byte plus edge cases (LT IBAN, 34-char IBAN, 16-char name,

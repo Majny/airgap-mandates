@@ -310,10 +310,10 @@ def _scenario4(w: World) -> dict[str, Any]:
     assert len(lines) == 14 and lines[0] == f"AG1/DEMO CHG {c['change_no']}", text  # two 7-line blocks (§5.3)
     assert render.check_text(text, w.settings.render_profile)  # device pages valid (S11)
     assert lines[7] == "0 BLOCK 2 WARN" and "COOLOFF DONE" in lines and "ROLE CLERK 1/2" in lines, text
-    # The attestation count is in the signed facts (facts_digest) but NOT on the device: §5.4 overflow keeps WARN
-    # before INFO, so with 3 WARN facts F-ATTEST (INFO "ATT 2/3 ERP BANK") is folded into "+11 MORE 0 BLOCK".
+    # The attestation count is what the human confirms: F-ATTEST is pinned on CHG (render.CHG_PINNED_FACTS) and is
+    # never folded into "+N MORE", even behind WARN facts (§5.4).
     assert _facts(c["facts"])["F-ATTEST"] == ("INFO", "ATT 2/3 ERP BANK")
-    assert "ATT 2/3" not in text and any(x.endswith("MORE 0 BLOCK") for x in lines), text
+    assert "ATT 2/3 ERP BANK" in lines and any(x.endswith("MORE 0 BLOCK") for x in lines), text
     st_, r = w.sign(ch, w.clerk)
     assert st_ == 200 and r["effect"] == {"type": "change_advanced", "state": "SIG_TREASURY"}, r
     tch = r["challenge"]
