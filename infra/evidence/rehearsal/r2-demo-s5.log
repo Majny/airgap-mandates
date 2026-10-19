@@ -1,0 +1,6 @@
+AWS eu-central-1: https://ehhxkpbfcc.execute-api.eu-central-1.amazonaws.com/prod as airgap-auditor (read-only); keys pinned from KMS
+SEALED .local/demo/s5: 67 leaves, 2 checkpoints, receipt for tx_1b8e2d022d04d66d - verifies green
+seq 63 amount_minor 9120000 -> 9120001
+$ /Users/majny/Desktop/MyProjects/am-agent/.venv/bin/python -m tools.demo_bundle --from-aws https://ehhxkpbfcc.execute-api.eu-central-1.amazonaws.com/prod --out .local/demo/s5
+$ /Users/majny/Desktop/MyProjects/am-agent/.venv/bin/python -m tools.demo_bundle --tamper .local/demo/s5/bundle.json .local/demo/s5/bundle.tampered.json
+Wi-Fi off now, then WS-B's stage check: bash tools/offline_demo.sh .local/demo/s5 (noteverify + verify_audit --replay green; .local/demo/s5/bundle.tampered.json red at seq N)

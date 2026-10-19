@@ -4,5 +4,6 @@
     "eu-central-1b",
     "eu-central-1c"
   ],
-  "w1_log_vkey": "airgap.example/demo/audit+05e38094+AYMB6t/Q61AckfFZgHBU50wiDz+u2PMzsCnuFTyhHJn2"
+  "w1_log_vkey": "airgap.example/demo/audit+05e38094+AYMB6t/Q61AckfFZgHBU50wiDz+u2PMzsCnuFTyhHJn2",
+  "w2_vkey": "airgap.example/demo/w2+d10d72b1+BMkDZNJkVEhYYAhvvLF7aV31FiFFRPg2PUPSI9/6v44B"
 }

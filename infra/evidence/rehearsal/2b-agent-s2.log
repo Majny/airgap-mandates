@@ -1,0 +1,2 @@
+agent (quarantined, eu.anthropic.claude-sonnet-4-5-20250929-v1:0) 13067 ms, 2267 tokens
+  final: I notice the invoice extraction shows a different IBAN (CZ6508000000192000145399) than what was initially shown (LT483999000000001234). The invoice has number FV-2026-0412 but is missing critical information like supplier ICO, due date, currency, and amount. Without these details, I cannot process t

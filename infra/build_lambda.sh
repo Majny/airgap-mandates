@@ -12,7 +12,7 @@ uv export --quiet --frozen --no-dev --no-hashes --no-emit-project --format requi
   | grep -v -E '^(boto3|botocore|s3transfer)==' > infra/build/requirements.lock
 uv pip install --quiet --target "$OUT" --python-platform aarch64-manylinux_2_28 --python-version 3.12 \
   --only-binary=:all: --no-binary dkimpy -r infra/build/requirements.lock
-cp -R executor agent witness "$OUT"/
+cp -R executor agent witness vendor "$OUT"/  # vendor: executor.change imports vendor.portal
 mkdir -p "$OUT/contracts" && cp -R contracts/schemas "$OUT/contracts/" && cp contracts/__init__.py "$OUT/contracts/"
 # data snapshots only: no DEMO private keys (issuer/holder JWKs, DKIM PEMs) in any function, incl. the agent
 rsync -a --exclude issuer_keys --exclude dkim_keys --exclude '*.pem' --exclude '*.jwk' data "$OUT/"

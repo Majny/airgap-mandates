@@ -20,7 +20,6 @@ def test_scene_s3_legit_change_reaches_active():
 
 
 def test_host_reject_expired_change_gets_no_challenge_and_reason_is_kept():
-    from datetime import timedelta
 
     env = scenes.DemoEnv()
     st, r = env.call("POST", "/changes", {"vendor_id": scenes.ACME, "new_iban": scenes.TAKEOVER_IBAN,
@@ -36,6 +35,15 @@ def test_host_reject_expired_change_gets_no_challenge_and_reason_is_kept():
     _, r = env.call("POST", "/changes", {"vendor_id": scenes.ACME, "new_iban": scenes.LEGIT_NEW_IBAN,
                                          "email_id": scenes.LEGIT_CHANGE_EMAIL, "hints": []}, "tools")
     cid2 = r["change"]["change_id"]
-    env.at(env.now + timedelta(seconds=env.settings.change_ttl_seconds + 1))
+    env.advance(env.settings.change_ttl_seconds + 1)
     st, r = env.call("POST", f"/changes/{cid2}/reject", {"reason": "late"}, "host")
     assert (st, r["error"]) == (409, "state_conflict") and not env.nonces_for(cid2)
+
+
+def test_scene_s2_after_s1_on_the_same_ledger():
+    """Dress-rehearsal order on AWS: S1 then S2 without a reset in between."""
+    from executor import e2e
+
+    env = scenes.DemoEnv()
+    e2e.run(env.call, env.clerk, env.treasury, now=env.now, log=lambda s: None)
+    assert scenes.scene_s2(env, log=lambda s: None)["money_to_attacker_minor"] == 0

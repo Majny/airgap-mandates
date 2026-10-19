@@ -11,12 +11,25 @@ import os
 from pathlib import Path
 from typing import Any
 
-import httpx
+from urllib.parse import urlencode
 
 from host import compromised
 
 EXECUTOR = os.environ.get("AIRGAP_EXECUTOR_URL", "http://127.0.0.1:8000")
 FSM_STATES = ["PENDING_ATTEST", "CALLBACK_PENDING", "COOLING", "SIG_CLERK", "SIG_TREASURY", "ACTIVE"]
+# Beat order and cues from docs/STAGE.md (WS-C runbook) / ARCHITECTURE §14.
+BEATS = [
+    ("0:00 Hook", "Activity", "This agent is compromised right now. It still can't move a koruna."),
+    ("0:15 S1 normal day", "Activity", "Invoices pay under the signed mandate; the over-cap one lights the Safe 3. "
+                                       "Line 1 of the device = line 1 here."),
+    ("0:45 S2 lookalike + escalation + exfil", "Payee changes",
+     "Facts go red; the device stays dark (R0: nothing to approve). Escalations refused, exfil blocked."),
+    ("1:35 S3 takeover + deepfake, then legit", "Payee changes",
+     "DKIM green, ATT 0/3 = BLOCK: there is no button. Legit path: 2 of 3 attestations, cooling-off, clerk + treasury."),
+    ("2:30 S5 offline audit", "Audit", "Wi-Fi off. Stock Go noteverify + verify_audit green; one flipped byte is red."),
+    ("3:20 Bench + real vs simulated", "Bench", "Money to the attacker (frozen run): A0 571,077 CZK, A3 0 CZK, "
+                                             "also with a rubber-stamp human."),
+]
 SEV_COLOUR = {"BLOCK": "#b42318", "WARN": "#b54708", "INFO": "#067647"}
 CSS = """<style>
 html, body, [class*="css"] { font-size: 20px; }
@@ -30,17 +43,28 @@ html, body, [class*="css"] { font-size: 20px; }
 </style>"""
 
 
-def api(path: str, **query: Any) -> tuple[int, Any]:
+_CALL: Any = None
+
+
+def _call() -> Any:
+    """SigV4 to the AWS regional API as the principal's IAM role (host.signer.executor_call); plain HTTP locally."""
+    global _CALL
+    if _CALL is None:
+        from host.signer import executor_call
+        _CALL = executor_call(EXECUTOR)
+    return _CALL
+
+
+def api(path: str, who: str = "host", **query: Any) -> tuple[int, Any]:
+    q = {k: v for k, v in query.items() if v is not None}
     try:
-        r = httpx.get(EXECUTOR + path, params={k: v for k, v in query.items() if v is not None}, timeout=5)
-    except httpx.HTTPError as exc:
-        return 0, {"error": "unreachable", "message": str(exc)}
-    ct = r.headers.get("content-type", "")
-    return r.status_code, (r.json() if "json" in ct else r.text)
+        return _call()("GET", path + ("?" + urlencode(q) if q else ""), None, who)
+    except Exception as exc:  # noqa: BLE001 - unreachable executor, expired SSO credentials: show, never crash
+        return 0, {"error": "unreachable", "message": f"{type(exc).__name__}: {exc}"[:300]}
 
 
 def export_bundle() -> dict[str, Any] | None:
-    code, b = api("/audit/export", log_id="audit", from_seq=0)
+    code, b = api("/audit/export", "auditor", log_id="audit", from_seq=0)
     return b if code == 200 and isinstance(b, dict) else None
 
 
@@ -185,7 +209,7 @@ def tab_audit(st: Any) -> None:
     st.markdown("**Latest checkpoint (C2SP signed note)**")
     st.code(note if code == 200 else f"unavailable: {note}", language="text")
     if st.button("Verify export bundle now"):
-        code, bundle = api("/audit/export", log_id="audit", from_seq=0)
+        code, bundle = api("/audit/export", "auditor", log_id="audit", from_seq=0)
         if code != 200:
             st.error(bundle)
             return
@@ -229,8 +253,15 @@ def main() -> None:
         compromised.set_compromised(on)
         if isinstance(health, dict):
             st.caption(f"deployment {health.get('deployment')} · policy {str(health.get('policy_hash'))[:16]}")
+        beat = st.radio("Stage beat (docs/STAGE.md)", [b[0] for b in BEATS], index=0)
         if st.button("refresh"):
             st.rerun()
+    title, tab_name, cue = next(b for b in BEATS if b[0] == beat)
+    st.markdown(f"### {title}  \n{cue}  \n*look at: {tab_name}*")
+    clip = Path(__file__).resolve().parent.parent / "demo" / "assets" / "synthetic_cfo_call.mp3"
+    if title.startswith("1:35") and clip.exists():
+        st.caption("SYNTHETIC VOICE (Amazon Polly), fictional person: the 'CFO' pressing the clerk")
+        st.audio(clip.read_bytes(), format="audio/mpeg")
     if emulator_only():
         st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 5 attached)</span>',
                     unsafe_allow_html=True)

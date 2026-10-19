@@ -91,7 +91,7 @@ class TrezorDriver:
         if self._session is None:
             from trezorlib.client import PassphraseSetting, get_default_client
 
-            self._client = get_default_client(self.app_name, self.path)
+            self._client = self._open_client(get_default_client)
             # Passphrase policy (CONTRACTS §6): off, or entered on the device. Never typed on the host.
             f = self._client.features
             pp = PassphraseSetting.STANDARD_WALLET
@@ -99,6 +99,21 @@ class TrezorDriver:
                 pp = PassphraseSetting.ON_DEVICE
             self._session = self._client.get_session(passphrase=pp)
         return self._session
+
+    def _open_client(self, get_default_client: Any) -> Any:
+        """The emulator can miss trezorlib's short UDP ping right after a workflow ends: retry a few times."""
+        import time
+
+        from trezorlib.transport import TransportException
+
+        tries = 5 if self.path and self.path.startswith("udp:") else 1
+        for i in range(tries):
+            try:
+                return get_default_client(self.app_name, self.path)
+            except TransportException:
+                if i == tries - 1:
+                    raise
+                time.sleep(1.0)
 
     def close(self) -> None:
         try:
@@ -397,6 +412,25 @@ def run_s1(*, auto_treasury: bool = True, auto_clerk: bool | None = None, url: s
     return e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc))
 
 
+def run_scene(name: str, *, auto_treasury: bool = True, auto_clerk: bool | None = None) -> dict:
+    """WS-A's demo beats S2/S3 (executor.scenes, in-process memory backend with WS-D's seed data) with device
+    signers in place of the software keys. The seed already enrols data/enrollment.json; a device address that is
+    not active there (the fallback emulator clerk) is enrolled for this rehearsal only."""
+    from executor import scenes
+    from executor.store import seed
+
+    env = scenes.DemoEnv()
+    clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
+    active = {(r["address"], r["role"]) for r in env.store.scan("enrolled_signers") if r.get("active")}
+    for signer, role in ((clerk, "clerk"), (treasury, "treasury")):
+        if (signer.address, role) not in active:
+            seed.enroll_signer(env.store, signer.address, role, device=signer.device,
+                               label=f"{role} ({signer.device}, rehearsal)", settings=env.settings)
+    env.clerk, env.treasury = clerk, treasury
+    print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
+    return scenes.scene_s2(env) if name == "s2" else scenes.scene_s3(env)
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import json
@@ -412,12 +446,19 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("role", choices=sorted(ROLE_PATHS))
     sc.add_argument("--url", default=None)
     sc.add_argument("--transport", default=None)
+    scn = sub.add_parser("scene", help="run demo beat S2 or S3 in-process with device signers (rehearsal)")
+    scn.add_argument("name", choices=["s2", "s3"])
+    scn.add_argument("--manual-treasury", action="store_true")
+    scn.add_argument("--manual-clerk", action="store_true")
     sub.add_parser("info", help="show the connected devices and the mode")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
     if a.cmd == "s1":
         run_s1(auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None, url=a.url)
         print("\nS1 WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
+    elif a.cmd == "scene":
+        run_scene(a.name, auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None)
+        print(f"\n{a.name.upper()} WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
     elif a.cmd == "sign":
         print(json.dumps(sign_challenge(a.nonce, a.role, executor_url=a.url, transport=a.transport), indent=1))
     else:

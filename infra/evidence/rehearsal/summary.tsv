@@ -1,0 +1,14 @@
+0-reset	PASS	72s
+0b-load-inbox	PASS	5s
+0c-checkpoint	PASS	2s
+1-demo-s1	PASS	7s
+1b-checkpoint	PASS	0s
+2-agent-s1	PASS	42s
+2b-agent-s2	PASS	14s
+3-demo-s2	FAIL:2	4s
+4-demo-s3	PASS	52s
+4b-checkpoint	PASS	1s
+5-demo-s5	PASS	3s
+5b-offline	FAIL:1	1s
+6-reset	PASS	73s
+TOTAL	-	276s
