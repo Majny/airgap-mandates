@@ -1,0 +1,67 @@
+{
+  "checkpoint_note": "airgap.example/demo/audit\n45\n5dca5h0YIz9N9/Jc6GuP9No4VvU+WaH+dL31+BwHrgE=\npolicy sha256:3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd\ncode sha256:dec242c4a1d442936a09b4b217a5465fc33c1356d0b34dda3bdb6946507a92b0 pcr0 -\n\n\u2014 airgap.example/demo/audit BeOAlG+XUskF+8ZKlhrD62vJ/251pAItHuBa5ohskWAnNcIcNQf1NZ8ox+0I/c4ZgiNL8XWoF+cPcN9t+YFqjn+XOAM=\n\u2014 airgap.example/demo/w1 ouRrogAAAABq1j69MWDvLvbgJhTwpSeJrWP/LBHhgj/2GSA1+187JotibTy31SafDIskFjoMVImzYORt9pm1eOtWbvMF2TsfZAVYBA==\n\u2014 airgap.example/demo/w2 0Q1ysQAAAABq1j6+Lt9XhUlIIwNAsuVrXSldATKar5olCQjGEUEvbX1kTcL9lwjZFt7NVDwGj0VflbcgeOYogwDTSZWCDZVA/iaoDA==\n",
+  "entry": {
+    "actor": "executor",
+    "data": {
+      "amount_minor": 12500050,
+      "authorization": {
+        "kind": "stepup",
+        "nonce": "4B37D5E2",
+        "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534"
+      },
+      "currency": "CZK",
+      "iban": "CZ6203000000000123456789",
+      "proposal_id": "prp_4",
+      "tx_id": "tx_f2cf27603fa01320",
+      "vendor_id": "ven_87654321"
+    },
+    "facts_digest": "a37836edc18919081d9fd2892892cc5f3b27b81ff65049b6577a9da48f37910f",
+    "hints_digest": "631e8cd75e797f335b6c767c10f6c11a3cd0eb30e9716f1642aa87d5fbdcc468",
+    "inputs_digest": "e353b4f92ecf12d377c0e80a5a35d53b007fc42805739caa1461380d5476ea20",
+    "log_id": "audit",
+    "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+    "seq": 41,
+    "subject_id": "prp_4",
+    "ts": "2026-10-19T16:00:55.385Z",
+    "type": "execution",
+    "v": 2
+  },
+  "inclusion_proof": [
+    "0edce71abe7dadca6d1d0bc36ef904cd94a9c80bf6b2e90b427a32ebaf7aa055",
+    "803b9a2628e56b7481bff08c43bd4a95a3a3151c925b2936805663a7254b2036",
+    "86e0df4122a6391d7809fb65ab2c7d49e7bb32196fe9a252ac1b37b5ff4767b0",
+    "ffe1a1805b04816b9983a4017289bafd7be51bba067dfb5f6b0495202fbb1d93",
+    "4e4decb6f1e8d11abb08afb2aeccc55a45b6f7c04096e4e978ed51f6cbe60151"
+  ],
+  "key_ids": {
+    "log": "05e38094",
+    "w1": "a2e46ba2"
+  },
+  "leaf_hash": "e300bc9556cc9b92946b59ac7a3a61db4531679558ef3a218cfbd1e8cabbb101",
+  "seq": 41,
+  "tree_size": 45,
+  "tx": {
+    "amount_minor": 12500050,
+    "authorization": {
+      "kind": "stepup",
+      "nonce": "4B37D5E2",
+      "signer_address": "0xd27e1d0cbfb015686365b9d02cebf86e55770534"
+    },
+    "currency": "CZK",
+    "executed_at": "2026-10-19T16:00:55.385034Z",
+    "iban": "CZ6203000000000123456789",
+    "proposal_id": "prp_4",
+    "rail": {
+      "status": "ACTC",
+      "xml_c14n_sha256": "59d66e4dbb72d18f8466cc98c7eb398c0f8ad30e69e4ab0601382813222bcefa"
+    },
+    "seq": 41,
+    "tx_id": "tx_f2cf27603fa01320",
+    "vendor_id": "ven_87654321",
+    "vs": "1600499"
+  },
+  "vkeys": {
+    "log": "airgap.example/demo/audit+05e38094+AYMB6t/Q61AckfFZgHBU50wiDz+u2PMzsCnuFTyhHJn2",
+    "w1": "airgap.example/demo/w1+a2e46ba2+BAx0bd3NtelGOJf81qgBU3uIEEGhPwhQTFiG21pddB3q"
+  }
+}
