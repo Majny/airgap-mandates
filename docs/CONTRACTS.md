@@ -695,7 +695,7 @@ restrictions the output is byte-identical to RFC 8785 JCS (`tests/test_canonical
   `base64(keyid4 || uint64be(t) || sig)`, verified against torchwood v0.10.0; cosigner vkey
   `name+<keyid(0x04) hex>+<base64(0x04 || pubkey)>`, parsed by `torchwood.NewCosignatureVerifier`); 400 old size >
   checkpoint size, 409 stale (`text/x.tlog.size` body), 403 bad signature, 404 unknown origin, 422 bad proof.
-  Size check and persistence are **one** conditional write on `witness_state`. Refusals append `witness_refusal`.
+  Size check and persistence are **one** conditional write on `witness_state`. W1 never writes the audit log (S7: the witness is a separate trust domain): it returns the refusal, and the **checkpointer/relay** appends `witness_refusal`. W1 trusts the log key via a pinned vkey (`AIRGAP_W1_LOG_VKEY`), not via KMS access to the log key.
   W1 = witness λ (own role, own KMS key, own table); W2 = unmodified litewitness on its own EC2 instance and key
   (`AIRGAP_W2_URL`), "independent supervisor witness (simulated operator)". Quorum: `log AND (W1 OR W2)`.
 - **Storage**: leaves in DynamoDB `audit`; every checkpoint and leaf batch also to S3 `AIRGAP_ANCHOR_BUCKET` with
@@ -826,6 +826,8 @@ demo scene unless `backend == "aws"` and `aws_region == "eu-central-1"`; the UI 
 | `AIRGAP_SONNET_BUDGET` | `50` | Sonnet requests/min team-wide (enforced in code) |
 | `AGENT_MODE` | `quarantined` | `naive` (A0 baseline) \| `quarantined` (CaMeL-style) |
 | `AIRGAP_GATEWAY` | `local` | `agentcore` (AgentCore Gateway + Policy) \| `local` (cedarpy twin) |
+| `AIRGAP_CODE_SHA256` | — | deployed code hash for checkpoint `code` extension line (base64 or hex; set by CDK from Lambda CodeSha256; local fallback = sha256 over `executor/*.py`) |
+| `AIRGAP_W1_LOG_VKEY` | — | pinned signed-note vkey of the log key that W1 accepts (W1 role needs no KMS access to the log key) |
 | `AIRGAP_TREZOR_PATH` | — (USB autodetect) | e.g. `udp:127.0.0.1:21324` for the emulator |
 
 Local dev (`make dev`): `AIRGAP_BACKEND=memory uvicorn executor.app:app --port 8000` — the executor as a plain Python
