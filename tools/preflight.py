@@ -5,7 +5,8 @@ Checks, in stage order:
   emulator  T3B1 emulator up for the treasury (udp:127.0.0.1:21324)
   mode      AIRGAP_TREZOR_PATH unset (physical clerk) or udp:... (FALLBACK: emulator clerk), printed loudly
   aws       operator credentials valid (sts), airgap-host assumable, GET /health 200 as host
-  deploy    /health policy_hash == this checkout's policy_hash; code_sha256 == the deployed executor Lambda's
+  deploy    /health policy_hash == this checkout's policy_hash; code_sha256 == the deployed executor Lambda's;
+            laptop HEAD == /health git_rev and the working tree is clean (the agent CLI reads local data/)
   data      data/mostlyright/snapshot.sqlite sha256 == committed snapshot.sha256 (else `make data`)
   offline   tools/noteverify built (.local/bin/noteverify), docs/audit/demo bundle present and verifying offline
   bedrock   planner + extractor model ids resolvable (control plane, no tokens); --deep: one 1-token call each
@@ -136,6 +137,23 @@ def check_aws(r: Report, url: str) -> dict | None:
     return health if st == 200 else None
 
 
+def check_git_rev(r: Report, health: dict) -> None:
+    def git(*args: str) -> str:
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+
+    head = git("rev-parse", "HEAD")
+    dirty = [ln for ln in git("status", "--porcelain").splitlines() if ln.strip()]
+    rev = health.get("git_rev")
+    if not rev:
+        r.add("WARN", "laptop rev == deployed", f"/health has no git_rev yet; HEAD {head[:12]}"
+              + (f", {len(dirty)} uncommitted change(s)" if dirty else ""), required=False)
+        return
+    same = head.startswith(rev) or rev.startswith(head)
+    r.add("OK" if same and not dirty else "FAIL", "laptop rev == deployed", f"HEAD {head[:12]} vs deployed {rev[:12]}"
+          + ("" if same else f" -> git checkout {rev[:12]}")
+          + (f"; working tree has {len(dirty)} uncommitted change(s) -> commit/stash them" if dirty else ""))
+
+
 def check_deploy(r: Report, health: dict) -> None:
     import boto3
 
@@ -242,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         r.add("SKIP", "deploy hashes", "" if "deploy" in skip else "no /health", required="deploy" in skip)
     else:
         check_deploy(r, health)
+        check_git_rev(r, health)
     if "data" in skip:
         r.add("SKIP", "data", "", required=False)
     else:
