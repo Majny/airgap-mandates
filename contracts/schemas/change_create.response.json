@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/change_create.response.json",
+  "title": "change_create.response",
+  "type": "object",
+  "properties": {
+    "change": {
+      "$ref": "common.json#/$defs/change"
+    },
+    "decision": {
+      "$ref": "common.json#/$defs/decision"
+    }
+  },
+  "required": [
+    "change",
+    "decision"
+  ],
+  "additionalProperties": false
+}

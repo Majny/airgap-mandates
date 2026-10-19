@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/attestation_create.response.json",
+  "title": "attestation_create.response",
+  "type": "object",
+  "properties": {
+    "attestation": {
+      "$ref": "common.json#/$defs/attestation"
+    },
+    "challenges": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/challenge_ref"
+      }
+    }
+  },
+  "required": [
+    "attestation",
+    "challenges"
+  ],
+  "additionalProperties": false
+}

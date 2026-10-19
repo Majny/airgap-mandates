@@ -1,0 +1,35 @@
+{
+  "endpoint": "POST /signatures",
+  "status": 200,
+  "request": {
+    "nonce": "0C55A1",
+    "role": "clerk",
+    "sig": "0x70fac0602f1d58a8953404e43efefe4e72af78d9b1b2dedef296224a2a148a0770fac0602f1d58a8953404e43efefe4e72af78d9b1b2dedef296224a2a148a071b"
+  },
+  "response": {
+    "nonce": "0C55A1",
+    "purpose": "PAY",
+    "subject_id": "prp_41",
+    "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+    "effect": {
+      "type": "payment_executed",
+      "tx_id": "tx_41"
+    },
+    "tx": {
+      "tx_id": "tx_41",
+      "proposal_id": "prp_41",
+      "vendor_id": "ven_87654321",
+      "iban": "CZ6203000000000123456789",
+      "amount_minor": 12500000,
+      "currency": "CZK",
+      "vs": "2026104",
+      "authorization": {
+        "kind": "stepup",
+        "nonce": "0C55A1",
+        "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b"
+      },
+      "leaf_index": 48,
+      "executed_at": "2026-10-19T12:02:03Z"
+    }
+  }
+}

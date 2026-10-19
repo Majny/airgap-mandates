@@ -1,0 +1,9 @@
+{
+  "endpoint": "GET /receipts/{tx_id}",
+  "status": 404,
+  "request": null,
+  "response": {
+    "error": "not_found",
+    "message": "tx_999 not found"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/change_list.response.json",
+  "title": "change_list.response",
+  "type": "object",
+  "properties": {
+    "changes": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/change"
+      }
+    }
+  },
+  "required": [
+    "changes"
+  ],
+  "additionalProperties": false
+}

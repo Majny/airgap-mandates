@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/egress_block.decision.json",
+  "title": "egress_block.decision",
+  "type": "object",
+  "properties": {
+    "decision": {
+      "const": "block"
+    },
+    "rule_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "E-ALLOWLIST",
+          "E-DLP-IBAN",
+          "E-DLP-ICO",
+          "E-DLP-NAME",
+          "E-DLP-CARD",
+          "E-DLP-COUNT",
+          "E-ENCODED",
+          "E-URLDATA"
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rule_id": {
+            "enum": [
+              "E-ALLOWLIST",
+              "E-DLP-IBAN",
+              "E-DLP-ICO",
+              "E-DLP-NAME",
+              "E-DLP-CARD",
+              "E-DLP-COUNT",
+              "E-ENCODED",
+              "E-URLDATA"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "rule_id",
+          "detail",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "decision",
+    "rule_ids",
+    "findings"
+  ],
+  "additionalProperties": false
+}

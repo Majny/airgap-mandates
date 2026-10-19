@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "log_id": "audit",
+  "seq": 60,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "state_transition",
+  "actor": "executor",
+  "subject_id": "chg_8",
+  "data": {
+    "change_id": "chg_8",
+    "from": "COOLING",
+    "to": "SIG_CLERK",
+    "reason": "cooling elapsed"
+  }
+}

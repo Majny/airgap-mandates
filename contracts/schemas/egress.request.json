@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/egress.request.json",
+  "title": "egress.request",
+  "type": "object",
+  "properties": {
+    "tool": {
+      "enum": [
+        "send_email",
+        "http_get",
+        "http_post",
+        "upload"
+      ]
+    },
+    "target": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content_b64": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/=]+$"
+          }
+        },
+        "required": [
+          "name",
+          "content_b64"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "context_ref": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tool",
+    "target",
+    "content"
+  ],
+  "additionalProperties": false
+}

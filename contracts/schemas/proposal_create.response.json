@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/proposal_create.response.json",
+  "title": "proposal_create.response",
+  "type": "object",
+  "properties": {
+    "proposal": {
+      "$ref": "common.json#/$defs/proposal"
+    },
+    "decision": {
+      "$ref": "common.json#/$defs/decision"
+    },
+    "tx": {
+      "anyOf": [
+        {
+          "$ref": "common.json#/$defs/ledger_tx"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "proposal",
+    "decision",
+    "tx"
+  ],
+  "additionalProperties": false
+}

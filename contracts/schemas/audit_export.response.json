@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/audit_export.response.json",
+  "title": "audit_export.response",
+  "type": "object",
+  "properties": {
+    "log_id": {
+      "enum": [
+        "audit",
+        "attest"
+      ]
+    },
+    "leaves": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "event": {
+            "$ref": "common.json#/$defs/audit_event"
+          },
+          "leaf_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "seq",
+          "event",
+          "leaf_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "sths": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/sth_signed"
+      }
+    },
+    "anchors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "s3_key": {
+            "type": "string"
+          },
+          "sth": {
+            "$ref": "common.json#/$defs/sth_signed"
+          },
+          "tsa_token_b64": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/=]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "s3_key",
+          "sth",
+          "tsa_token_b64"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "public_keys": {
+      "type": "object",
+      "properties": {
+        "executor": {
+          "type": "string"
+        },
+        "witness": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "executor",
+        "witness"
+      ],
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "log_id",
+    "leaves",
+    "sths",
+    "anchors",
+    "public_keys",
+    "policy"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "log_id": "audit",
+  "seq": 34,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "proposal",
+  "actor": "agent",
+  "subject_id": "prp_38",
+  "data": {
+    "proposal_id": "prp_38",
+    "invoice": {
+      "invoice_no": "FV-2026-0412",
+      "issue_date": "2026-10-15",
+      "due_date": "2026-10-29",
+      "vendor_ico": "12345678",
+      "vendor_name": "ACME s.r.o.",
+      "iban": "CZ6508000000192000145399",
+      "amount_minor": 1450000,
+      "currency": "CZK",
+      "vs": "20260412",
+      "email_id": "eml_a1b2c3d4e5f60718"
+    },
+    "hints": []
+  }
+}

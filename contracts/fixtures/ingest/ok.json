@@ -1,0 +1,13 @@
+{
+  "endpoint": "POST /ingest",
+  "status": 201,
+  "request": {
+    "raw_b64": "RnJvbTogdWNldG5pQGFjbWUtY3ouY29tDQo=",
+    "received_at": "2026-10-19T12:00:00Z"
+  },
+  "response": {
+    "email_id": "eml_9a8b7c6d5e4f3021",
+    "from_domain": "acme-cz.com",
+    "received_at": "2026-10-19T12:00:00Z"
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "endpoint": "GET /changes/{change_id}",
+  "status": 200,
+  "request": null,
+  "response": {
+    "change_id": "chg_8",
+    "change_no": 8,
+    "state": "SIG_CLERK",
+    "vendor_id": "ven_12345678",
+    "vendor_ico": "12345678",
+    "vendor_name": "ACME s.r.o.",
+    "old_iban": "CZ6508000000192000145399",
+    "new_iban": "CZ8601000000000099887766",
+    "email_id": "eml_9a8b7c6d5e4f3021",
+    "in_network": true,
+    "facts": [
+      {
+        "id": "F-ATTEST",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Vendor attestation for new IBAN",
+        "display_line": "dodavatel 2/3: ANO",
+        "evidence": {
+          "signed": 2,
+          "threshold": 2,
+          "signers": 3
+        }
+      },
+      {
+        "id": "F-DOMAIN",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Sender domain vs registry",
+        "display_line": "domena acme.cz = registr",
+        "evidence": {
+          "from_domain": "acme.cz",
+          "registry_domain": "acme.cz",
+          "distance": 0
+        }
+      },
+      {
+        "id": "F-DKIM",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "DKIM signature",
+        "display_line": "DKIM ok d=acme.cz",
+        "evidence": {
+          "d": "acme.cz",
+          "valid": true
+        }
+      },
+      {
+        "id": "F-BANK",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Bank from IBAN",
+        "display_line": "banka: Komercni banka",
+        "evidence": {
+          "country": "CZ",
+          "bank_code": "0100"
+        }
+      },
+      {
+        "id": "F-DPH",
+        "kind": "F",
+        "severity": "WARN",
+        "label": "Account published in VAT registry",
+        "display_line": "DPH ucet: NE",
+        "evidence": {
+          "account_published": false
+        }
+      }
+    ],
+    "not_before": "2026-10-19T12:01:30Z",
+    "expires_at": "2026-10-19T13:00:00Z",
+    "callback": {
+      "status": "none",
+      "code_exp": null
+    },
+    "signatures": [],
+    "pending_challenge": {
+      "nonce": "A0B1C2",
+      "purpose": "CHG",
+      "role": "clerk",
+      "subject_id": "chg_8",
+      "exp": "2026-10-19T12:10:00Z",
+      "text": "AIRGAP CHG #8 n:A0B1C2 exp:14:10\nACME s.r.o. ICO 12345678\nOLD CZ65 0800 0000\n    1920 0014 5399\nNEW CZ86 0100 0000\n    0000 9988 7766\n[F] DPH ucet: NE\n[F] +4 dalsi fakta (0 BLOCK)",
+      "text_sha256": "a14ab9e74e145bc88076be5de396ba6e897925cfb615fb1eb4dbc9f77003bc72",
+      "width": 32,
+      "line_count": 8
+    },
+    "history": [
+      {
+        "from": null,
+        "to": "REQUESTED",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "created"
+      },
+      {
+        "from": "REQUESTED",
+        "to": "FACTS_DONE",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "facts computed"
+      },
+      {
+        "from": "FACTS_DONE",
+        "to": "ATTESTATION_CHECK",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "auto"
+      },
+      {
+        "from": "ATTESTATION_CHECK",
+        "to": "COOLING",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "attestation 2/3"
+      },
+      {
+        "from": "COOLING",
+        "to": "SIG_CLERK",
+        "at": "2026-10-19T12:01:30Z",
+        "reason": "cooling elapsed"
+      }
+    ],
+    "created_at": "2026-10-19T12:00:00Z"
+  }
+}

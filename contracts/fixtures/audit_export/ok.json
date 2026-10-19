@@ -1,0 +1,159 @@
+{
+  "endpoint": "GET /audit/export",
+  "status": 200,
+  "request": null,
+  "response": {
+    "log_id": "audit",
+    "leaves": [
+      {
+        "seq": 34,
+        "event": {
+          "v": 1,
+          "log_id": "audit",
+          "seq": 34,
+          "ts": "2026-10-19T12:02:03.120Z",
+          "type": "proposal",
+          "actor": "agent",
+          "subject_id": "prp_38",
+          "data": {
+            "proposal_id": "prp_38",
+            "invoice": {
+              "invoice_no": "FV-2026-0412",
+              "issue_date": "2026-10-15",
+              "due_date": "2026-10-29",
+              "vendor_ico": "12345678",
+              "vendor_name": "ACME s.r.o.",
+              "iban": "CZ6508000000192000145399",
+              "amount_minor": 1450000,
+              "currency": "CZK",
+              "vs": "20260412",
+              "email_id": "eml_a1b2c3d4e5f60718"
+            },
+            "hints": []
+          }
+        },
+        "leaf_hash": "e2af90ddb2be7b4c76739ace9b23a346df53a4c853e899754c564be1262095b0"
+      },
+      {
+        "seq": 35,
+        "event": {
+          "v": 1,
+          "log_id": "audit",
+          "seq": 35,
+          "ts": "2026-10-19T12:02:03.120Z",
+          "type": "facts",
+          "actor": "executor",
+          "subject_id": "prp_38",
+          "data": {
+            "subject_id": "prp_38",
+            "facts": [
+              {
+                "id": "F-DPH",
+                "kind": "F",
+                "severity": "INFO",
+                "label": "Account published in VAT registry",
+                "display_line": "DPH ucet: ANO",
+                "evidence": {
+                  "account_published": true
+                }
+              },
+              {
+                "id": "F-BANK",
+                "kind": "F",
+                "severity": "INFO",
+                "label": "Bank from IBAN",
+                "display_line": "banka: Ceska sporitelna",
+                "evidence": {
+                  "country": "CZ",
+                  "bank_code": "0800"
+                }
+              }
+            ]
+          }
+        },
+        "leaf_hash": "3734873986e5c8688f6196ecb358bade49a0b32b55b6aa47d73e7d368e65922c"
+      },
+      {
+        "seq": 36,
+        "event": {
+          "v": 1,
+          "log_id": "audit",
+          "seq": 36,
+          "ts": "2026-10-19T12:02:03.120Z",
+          "type": "decision",
+          "actor": "executor",
+          "subject_id": "prp_38",
+          "data": {
+            "subject_id": "prp_38",
+            "decision": "allow",
+            "rule_ids": [],
+            "mandate_id": "mnd_3",
+            "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812"
+          }
+        },
+        "leaf_hash": "455a9bf5045b2880eccace49e9e539f11886829f23f1dd8a284eab95eaf7675e"
+      },
+      {
+        "seq": 37,
+        "event": {
+          "v": 1,
+          "log_id": "audit",
+          "seq": 37,
+          "ts": "2026-10-19T12:02:03.120Z",
+          "type": "execution",
+          "actor": "executor",
+          "subject_id": "tx_38",
+          "data": {
+            "tx_id": "tx_38",
+            "proposal_id": "prp_38",
+            "vendor_id": "ven_12345678",
+            "iban": "CZ6508000000192000145399",
+            "amount_minor": 1450000,
+            "currency": "CZK",
+            "authorization": {
+              "kind": "mandate",
+              "mandate_id": "mnd_3"
+            }
+          }
+        },
+        "leaf_hash": "bfaff941e24869e00e9441d6616d0bc845e4396e9d1f5e6b58d9488548b1a318"
+      }
+    ],
+    "sths": [
+      {
+        "body": {
+          "log_id": "audit",
+          "tree_size": 40,
+          "root_hash": "446377f84a72d34f0c9f58cb73668e91510e9c1dd107b030640367ac955b6b98",
+          "timestamp": 1792411200000
+        },
+        "executor_sig": "MEUCIQDexampleexecutorsig0000000000000000000000000AiAexample000000000000000000000000==",
+        "witness_sig": "MEUCIQDexamplewitnesssig00000000000000000000000000AiAexample000000000000000000000000=="
+      }
+    ],
+    "anchors": [
+      {
+        "s3_key": "audit-anchor/audit/000000000040.json",
+        "sth": {
+          "body": {
+            "log_id": "audit",
+            "tree_size": 40,
+            "root_hash": "446377f84a72d34f0c9f58cb73668e91510e9c1dd107b030640367ac955b6b98",
+            "timestamp": 1792411200000
+          },
+          "executor_sig": "MEUCIQDexampleexecutorsig0000000000000000000000000AiAexample000000000000000000000000==",
+          "witness_sig": "MEUCIQDexamplewitnesssig00000000000000000000000000AiAexample000000000000000000000000=="
+        },
+        "tsa_token_b64": "MIIC"
+      }
+    ],
+    "public_keys": {
+      "executor": "-----BEGIN PUBLIC KEY-----\\n...",
+      "witness": "-----BEGIN PUBLIC KEY-----\\n..."
+    },
+    "policy": {
+      "policy_v": 1,
+      "rules": []
+    }
+  }
+}

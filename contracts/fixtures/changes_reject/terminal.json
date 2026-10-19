@@ -1,0 +1,14 @@
+{
+  "endpoint": "POST /changes/{change_id}/reject",
+  "status": 409,
+  "request": {
+    "reason": "x"
+  },
+  "response": {
+    "error": "state_conflict",
+    "message": "change chg_8 is ACTIVE",
+    "details": {
+      "state": "ACTIVE"
+    }
+  }
+}

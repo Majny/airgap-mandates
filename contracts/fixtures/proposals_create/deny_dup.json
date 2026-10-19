@@ -1,0 +1,160 @@
+{
+  "endpoint": "POST /proposals",
+  "status": 201,
+  "request": {
+    "invoice": {
+      "invoice_no": "FV2026412",
+      "issue_date": "2026-10-15",
+      "due_date": "2026-10-29",
+      "vendor_ico": "12345678",
+      "vendor_name": "ACME s.r.o.",
+      "iban": "CZ6508000000192000145399",
+      "amount_minor": 1450000,
+      "currency": "CZK",
+      "vs": "20260412",
+      "email_id": "eml_0f1e2d3c4b5a6978"
+    }
+  },
+  "response": {
+    "proposal": {
+      "proposal_id": "prp_42",
+      "proposal_no": 42,
+      "status": "DENIED",
+      "vendor_id": "ven_12345678",
+      "invoice": {
+        "invoice_no": "FV2026412",
+        "issue_date": "2026-10-15",
+        "due_date": "2026-10-29",
+        "vendor_ico": "12345678",
+        "vendor_name": "ACME s.r.o.",
+        "iban": "CZ6508000000192000145399",
+        "amount_minor": 1450000,
+        "currency": "CZK",
+        "vs": "20260412",
+        "email_id": "eml_0f1e2d3c4b5a6978"
+      },
+      "hints": [],
+      "facts": [
+        {
+          "id": "F-DPH",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Account published in VAT registry",
+          "display_line": "DPH ucet: ANO",
+          "evidence": {
+            "account_published": true
+          }
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Bank from IBAN",
+          "display_line": "banka: Ceska sporitelna",
+          "evidence": {
+            "country": "CZ",
+            "bank_code": "0800"
+          }
+        },
+        {
+          "id": "F-DUP",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Duplicate invoice",
+          "display_line": "duplicita FV-2026-0412",
+          "evidence": {
+            "matched": "prp_38"
+          }
+        }
+      ],
+      "decision": {
+        "decision": "deny",
+        "rule_ids": [
+          "F-DUP",
+          "I-DUP"
+        ],
+        "facts": [
+          {
+            "id": "F-DPH",
+            "kind": "F",
+            "severity": "INFO",
+            "label": "Account published in VAT registry",
+            "display_line": "DPH ucet: ANO",
+            "evidence": {
+              "account_published": true
+            }
+          },
+          {
+            "id": "F-BANK",
+            "kind": "F",
+            "severity": "INFO",
+            "label": "Bank from IBAN",
+            "display_line": "banka: Ceska sporitelna",
+            "evidence": {
+              "country": "CZ",
+              "bank_code": "0800"
+            }
+          },
+          {
+            "id": "F-DUP",
+            "kind": "F",
+            "severity": "BLOCK",
+            "label": "Duplicate invoice",
+            "display_line": "duplicita FV-2026-0412",
+            "evidence": {
+              "matched": "prp_38"
+            }
+          }
+        ],
+        "mandate_id": "mnd_3",
+        "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812"
+      },
+      "challenge_nonce": null,
+      "tx_id": null,
+      "created_at": "2026-10-19T12:02:00Z"
+    },
+    "decision": {
+      "decision": "deny",
+      "rule_ids": [
+        "F-DUP",
+        "I-DUP"
+      ],
+      "facts": [
+        {
+          "id": "F-DPH",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Account published in VAT registry",
+          "display_line": "DPH ucet: ANO",
+          "evidence": {
+            "account_published": true
+          }
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Bank from IBAN",
+          "display_line": "banka: Ceska sporitelna",
+          "evidence": {
+            "country": "CZ",
+            "bank_code": "0800"
+          }
+        },
+        {
+          "id": "F-DUP",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Duplicate invoice",
+          "display_line": "duplicita FV-2026-0412",
+          "evidence": {
+            "matched": "prp_38"
+          }
+        }
+      ],
+      "mandate_id": "mnd_3",
+      "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812"
+    },
+    "tx": null
+  }
+}

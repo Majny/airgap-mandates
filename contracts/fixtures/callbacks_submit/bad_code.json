@@ -1,0 +1,12 @@
+{
+  "endpoint": "POST /callbacks/{change_id}",
+  "status": 403,
+  "request": {
+    "code": "000000",
+    "outcome": "confirm"
+  },
+  "response": {
+    "error": "callback_code_invalid",
+    "message": "wrong or expired callback code"
+  }
+}

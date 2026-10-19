@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/mandate_create.response.json",
+  "title": "mandate_create.response",
+  "type": "object",
+  "properties": {
+    "mandate": {
+      "$ref": "common.json#/$defs/mandate"
+    },
+    "challenge": {
+      "$ref": "common.json#/$defs/challenge_ref"
+    }
+  },
+  "required": [
+    "mandate",
+    "challenge"
+  ],
+  "additionalProperties": false
+}

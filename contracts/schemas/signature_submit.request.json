@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/signature_submit.request.json",
+  "title": "signature_submit.request",
+  "type": "object",
+  "properties": {
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{6}$"
+    },
+    "role": {
+      "enum": [
+        "clerk",
+        "treasury",
+        "jednatel",
+        "ucetni",
+        "financni"
+      ]
+    },
+    "sig": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "displayed_text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nonce",
+    "role",
+    "sig"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/callback_submit.request.json",
+  "title": "callback_submit.request",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "pattern": "^[0-9]{6}$"
+    },
+    "outcome": {
+      "enum": [
+        "confirm",
+        "deny"
+      ]
+    }
+  },
+  "required": [
+    "code",
+    "outcome"
+  ],
+  "additionalProperties": false
+}

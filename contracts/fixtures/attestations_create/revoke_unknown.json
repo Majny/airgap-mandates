@@ -1,0 +1,13 @@
+{
+  "endpoint": "POST /attestations",
+  "status": 404,
+  "request": {
+    "action": "revoke",
+    "ico": "12345678",
+    "revokes_v": 9
+  },
+  "response": {
+    "error": "not_found",
+    "message": "attestation 12345678#9 not found"
+  }
+}

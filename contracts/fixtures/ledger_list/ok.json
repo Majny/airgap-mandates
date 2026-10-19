@@ -1,0 +1,24 @@
+{
+  "endpoint": "GET /ledger",
+  "status": 200,
+  "request": null,
+  "response": {
+    "txs": [
+      {
+        "tx_id": "tx_38",
+        "proposal_id": "prp_38",
+        "vendor_id": "ven_12345678",
+        "iban": "CZ6508000000192000145399",
+        "amount_minor": 1450000,
+        "currency": "CZK",
+        "vs": "20260412",
+        "authorization": {
+          "kind": "mandate",
+          "mandate_id": "mnd_3"
+        },
+        "leaf_index": 37,
+        "executed_at": "2026-10-19T12:02:03Z"
+      }
+    ]
+  }
+}

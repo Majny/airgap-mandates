@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "log_id": "audit",
+  "seq": 52,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "signature",
+  "actor": "host",
+  "subject_id": "chg_7",
+  "data": {
+    "nonce": "4F2A9C",
+    "purpose": "CHG",
+    "role": "clerk",
+    "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+    "text_sha256": "6c7b43a905cd635d7445adc8a971ed5204cf69fdbf1791325c5711c5e4b0d99e",
+    "sig": "0x6b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e36b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e31b",
+    "accepted": false,
+    "error": "vendor_attestation_missing"
+  }
+}

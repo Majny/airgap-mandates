@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/ledger_tx.json",
+  "title": "ledger_tx",
+  "$ref": "common.json#/$defs/ledger_tx"
+}

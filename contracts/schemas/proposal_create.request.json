@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/proposal_create.request.json",
+  "title": "proposal_create.request",
+  "type": "object",
+  "properties": {
+    "invoice": {
+      "$ref": "common.json#/$defs/invoice"
+    },
+    "hints": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/hint"
+      }
+    }
+  },
+  "required": [
+    "invoice"
+  ],
+  "additionalProperties": false
+}

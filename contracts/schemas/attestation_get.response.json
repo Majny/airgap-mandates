@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/attestation_get.response.json",
+  "title": "attestation_get.response",
+  "type": "object",
+  "properties": {
+    "attestation": {
+      "anyOf": [
+        {
+          "$ref": "common.json#/$defs/attestation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "policy": {
+      "$ref": "common.json#/$defs/vendor_policy"
+    },
+    "inclusion_proof": {
+      "anyOf": [
+        {
+          "$ref": "common.json#/$defs/inclusion_proof"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "attestation",
+    "policy",
+    "inclusion_proof"
+  ],
+  "additionalProperties": false
+}

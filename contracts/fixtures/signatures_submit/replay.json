@@ -1,0 +1,13 @@
+{
+  "endpoint": "POST /signatures",
+  "status": 403,
+  "request": {
+    "nonce": "91BC02",
+    "role": "clerk",
+    "sig": "0x153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde1b"
+  },
+  "response": {
+    "error": "nonce_reused",
+    "message": "challenge 91BC02 already used"
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "POST /mandates": {
+    "request": "mandate_create.request",
+    "response": "mandate_create.response",
+    "error": "error"
+  },
+  "GET /mandates/active": {
+    "request": null,
+    "response": "mandate",
+    "error": "error"
+  },
+  "GET /mandates/{mandate_id}": {
+    "request": null,
+    "response": "mandate",
+    "error": "error"
+  },
+  "POST /proposals": {
+    "request": "proposal_create.request",
+    "response": "proposal_create.response",
+    "error": "error"
+  },
+  "GET /proposals": {
+    "request": null,
+    "response": "proposal_list.response",
+    "error": "error"
+  },
+  "GET /proposals/{proposal_id}": {
+    "request": null,
+    "response": "proposal",
+    "error": "error"
+  },
+  "POST /changes": {
+    "request": "change_create.request",
+    "response": "change_create.response",
+    "error": "error"
+  },
+  "GET /changes": {
+    "request": null,
+    "response": "change_list.response",
+    "error": "error"
+  },
+  "GET /changes/{change_id}": {
+    "request": null,
+    "response": "change",
+    "error": "error"
+  },
+  "POST /changes/{change_id}/reject": {
+    "request": "change_reject.request",
+    "response": "change",
+    "error": "error"
+  },
+  "GET /challenges/{nonce}": {
+    "request": null,
+    "response": "challenge",
+    "error": "error"
+  },
+  "POST /signatures": {
+    "request": "signature_submit.request",
+    "response": "signature_submit.response",
+    "error": "error"
+  },
+  "POST /callbacks/{change_id}": {
+    "request": "callback_submit.request",
+    "response": "change",
+    "error": "error"
+  },
+  "GET /portal/notifications": {
+    "request": null,
+    "response": "notifications.response",
+    "error": "error"
+  },
+  "POST /attestations": {
+    "request": "attestation_create.request",
+    "response": "attestation_create.response",
+    "error": "error"
+  },
+  "GET /attestations/{ico}": {
+    "request": null,
+    "response": "attestation_get.response",
+    "error": "error"
+  },
+  "POST /egress": {
+    "request": "egress.request",
+    "response": "egress.response",
+    "error": "error"
+  },
+  "GET /audit/export": {
+    "request": null,
+    "response": "audit_export.response",
+    "error": "error"
+  },
+  "GET /receipts/{tx_id}": {
+    "request": null,
+    "response": "receipt",
+    "error": "error"
+  },
+  "GET /vendors": {
+    "request": null,
+    "response": "vendor_list.response",
+    "error": "error"
+  },
+  "GET /vendors/{vendor_id}": {
+    "request": null,
+    "response": "vendor",
+    "error": "error"
+  },
+  "GET /ledger": {
+    "request": null,
+    "response": "ledger_list.response",
+    "error": "error"
+  },
+  "POST /ingest": {
+    "request": "ingest.request",
+    "response": "ingest.response",
+    "error": "error"
+  },
+  "GET /inbox": {
+    "request": null,
+    "response": "inbox_list.response",
+    "error": "error"
+  },
+  "GET /health": {
+    "request": null,
+    "response": "health.response",
+    "error": "error"
+  }
+}

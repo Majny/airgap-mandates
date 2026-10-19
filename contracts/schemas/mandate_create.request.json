@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/mandate_create.request.json",
+  "title": "mandate_create.request",
+  "type": "object",
+  "properties": {
+    "max_per_payment_minor": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_total_minor": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "payee_scope": {
+      "const": "existing_only"
+    },
+    "valid_until": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+    },
+    "currency": {
+      "const": "CZK"
+    }
+  },
+  "required": [
+    "max_per_payment_minor",
+    "max_total_minor",
+    "max_count",
+    "payee_scope",
+    "valid_until",
+    "currency"
+  ],
+  "additionalProperties": false
+}

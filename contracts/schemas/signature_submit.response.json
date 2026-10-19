@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/signature_submit.response.json",
+  "title": "signature_submit.response",
+  "type": "object",
+  "properties": {
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{6}$"
+    },
+    "purpose": {
+      "enum": [
+        "MANDATE",
+        "CHG",
+        "PAY",
+        "VENDOR_ATTEST"
+      ]
+    },
+    "subject_id": {
+      "type": "string"
+    },
+    "signer_address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{40}$"
+    },
+    "effect": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "mandate_activated",
+            "payment_executed",
+            "change_advanced",
+            "attestation_signed",
+            "attestation_published"
+          ]
+        },
+        "state": {
+          "type": "string"
+        },
+        "tx_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "mandate": {
+      "$ref": "common.json#/$defs/mandate"
+    },
+    "proposal": {
+      "$ref": "common.json#/$defs/proposal"
+    },
+    "tx": {
+      "$ref": "common.json#/$defs/ledger_tx"
+    },
+    "change": {
+      "$ref": "common.json#/$defs/change"
+    },
+    "attestation": {
+      "$ref": "common.json#/$defs/attestation"
+    }
+  },
+  "required": [
+    "nonce",
+    "purpose",
+    "subject_id",
+    "signer_address",
+    "effect"
+  ],
+  "additionalProperties": false
+}

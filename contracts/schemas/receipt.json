@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/receipt.json",
+  "title": "receipt",
+  "type": "object",
+  "properties": {
+    "tx": {
+      "$ref": "common.json#/$defs/ledger_tx"
+    },
+    "inclusion_proof": {
+      "$ref": "common.json#/$defs/inclusion_proof"
+    },
+    "receipt_sig": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/=]+$"
+    },
+    "key_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tx",
+    "inclusion_proof",
+    "receipt_sig",
+    "key_id"
+  ],
+  "additionalProperties": false
+}

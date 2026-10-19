@@ -1,0 +1,14 @@
+{
+  "endpoint": "POST /egress",
+  "status": 200,
+  "request": {
+    "tool": "send_email",
+    "target": "fakturace@acme.cz",
+    "content": "Dobry den, fakturu FV-2026-0412 jsme prijali. Dekujeme."
+  },
+  "response": {
+    "decision": "allow",
+    "rule_ids": [],
+    "findings": []
+  }
+}

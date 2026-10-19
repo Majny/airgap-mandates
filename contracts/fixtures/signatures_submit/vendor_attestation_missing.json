@@ -1,0 +1,16 @@
+{
+  "endpoint": "POST /signatures",
+  "status": 403,
+  "request": {
+    "nonce": "4F2A9C",
+    "role": "clerk",
+    "sig": "0x6b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e36b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e31b"
+  },
+  "response": {
+    "error": "vendor_attestation_missing",
+    "message": "ACME s.r.o. 0/3 signatures for new IBAN",
+    "details": {
+      "state": "ATTESTATION_CHECK"
+    }
+  }
+}

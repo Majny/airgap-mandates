@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "log_id": "audit",
+  "seq": 37,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "execution",
+  "actor": "executor",
+  "subject_id": "tx_38",
+  "data": {
+    "tx_id": "tx_38",
+    "proposal_id": "prp_38",
+    "vendor_id": "ven_12345678",
+    "iban": "CZ6508000000192000145399",
+    "amount_minor": 1450000,
+    "currency": "CZK",
+    "authorization": {
+      "kind": "mandate",
+      "mandate_id": "mnd_3"
+    }
+  }
+}

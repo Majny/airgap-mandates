@@ -1,0 +1,241 @@
+{
+  "endpoint": "POST /changes",
+  "status": 201,
+  "request": {
+    "vendor_ico": "12345678",
+    "new_iban": "LT483999000000001234",
+    "email_id": "eml_9a8b7c6d5e4f3021",
+    "hints": [
+      {
+        "source": "agent",
+        "text": "zmena banky, urgent"
+      }
+    ]
+  },
+  "response": {
+    "change": {
+      "change_id": "chg_7",
+      "change_no": 7,
+      "state": "ATTESTATION_CHECK",
+      "vendor_id": "ven_12345678",
+      "vendor_ico": "12345678",
+      "vendor_name": "ACME s.r.o.",
+      "old_iban": "CZ6508000000192000145399",
+      "new_iban": "LT483999000000001234",
+      "email_id": "eml_9a8b7c6d5e4f3021",
+      "in_network": true,
+      "facts": [
+        {
+          "id": "F-DOMAIN",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Sender domain vs registry",
+          "display_line": "acme-cz.com != acme.cz",
+          "evidence": {
+            "from_domain": "acme-cz.com",
+            "registry_domain": "acme.cz",
+            "distance": 1
+          }
+        },
+        {
+          "id": "F-ATTEST",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Vendor attestation for new IBAN",
+          "display_line": "dodavatel 0/3",
+          "evidence": {
+            "signed": 0,
+            "threshold": 2,
+            "signers": 3
+          }
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Bank from IBAN",
+          "display_line": "banka: EMI Litva (fiktivni)",
+          "evidence": {
+            "country": "LT",
+            "bank_code": "39990"
+          }
+        },
+        {
+          "id": "F-DPH",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Account published in VAT registry",
+          "display_line": "DPH ucet: NE",
+          "evidence": {
+            "account_published": false
+          }
+        },
+        {
+          "id": "F-DKIM",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "DKIM signature",
+          "display_line": "DKIM ok d=acme-cz.com",
+          "evidence": {
+            "d": "acme-cz.com",
+            "valid": true
+          }
+        },
+        {
+          "id": "F-FIRSTSEEN",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Domain first seen in inbox",
+          "display_line": "domena poprve 2h",
+          "evidence": {
+            "hours": 2
+          }
+        },
+        {
+          "id": "H-AGENT",
+          "kind": "H",
+          "severity": "INFO",
+          "label": "Agent stated reason",
+          "display_line": "agent: \"zmena banky, urgent\""
+        }
+      ],
+      "not_before": null,
+      "expires_at": "2026-10-19T13:00:00Z",
+      "callback": {
+        "status": "none",
+        "code_exp": null
+      },
+      "signatures": [],
+      "pending_challenge": {
+        "nonce": "4F2A9C",
+        "purpose": "CHG",
+        "role": "clerk",
+        "subject_id": "chg_7",
+        "exp": "2026-10-19T12:05:00Z",
+        "text": "AIRGAP CHG #7 n:4F2A9C exp:14:05\nACME s.r.o. ICO 12345678\nOLD CZ65 0800 0000\n    1920 0014 5399\nNEW LT48 3999 0000 0000 1234\n[F] dodavatel 0/3\n[F] acme-cz.com != acme.cz\n[F] +5 dalsi fakta (0 BLOCK)",
+        "text_sha256": "6c7b43a905cd635d7445adc8a971ed5204cf69fdbf1791325c5711c5e4b0d99e",
+        "width": 32,
+        "line_count": 8
+      },
+      "history": [
+        {
+          "from": null,
+          "to": "REQUESTED",
+          "at": "2026-10-19T12:00:00Z",
+          "reason": "created"
+        },
+        {
+          "from": "REQUESTED",
+          "to": "FACTS_DONE",
+          "at": "2026-10-19T12:00:00Z",
+          "reason": "facts computed"
+        },
+        {
+          "from": "FACTS_DONE",
+          "to": "ATTESTATION_CHECK",
+          "at": "2026-10-19T12:00:00Z",
+          "reason": "auto"
+        }
+      ],
+      "created_at": "2026-10-19T12:00:00Z"
+    },
+    "decision": {
+      "decision": "deny",
+      "rule_ids": [
+        "F-ATTEST",
+        "F-BANK",
+        "F-DOMAIN",
+        "F-DPH",
+        "F-FIRSTSEEN"
+      ],
+      "facts": [
+        {
+          "id": "F-DOMAIN",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Sender domain vs registry",
+          "display_line": "acme-cz.com != acme.cz",
+          "evidence": {
+            "from_domain": "acme-cz.com",
+            "registry_domain": "acme.cz",
+            "distance": 1
+          }
+        },
+        {
+          "id": "F-ATTEST",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Vendor attestation for new IBAN",
+          "display_line": "dodavatel 0/3",
+          "evidence": {
+            "signed": 0,
+            "threshold": 2,
+            "signers": 3
+          }
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Bank from IBAN",
+          "display_line": "banka: EMI Litva (fiktivni)",
+          "evidence": {
+            "country": "LT",
+            "bank_code": "39990"
+          }
+        },
+        {
+          "id": "F-DPH",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Account published in VAT registry",
+          "display_line": "DPH ucet: NE",
+          "evidence": {
+            "account_published": false
+          }
+        },
+        {
+          "id": "F-DKIM",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "DKIM signature",
+          "display_line": "DKIM ok d=acme-cz.com",
+          "evidence": {
+            "d": "acme-cz.com",
+            "valid": true
+          }
+        },
+        {
+          "id": "F-FIRSTSEEN",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Domain first seen in inbox",
+          "display_line": "domena poprve 2h",
+          "evidence": {
+            "hours": 2
+          }
+        },
+        {
+          "id": "H-AGENT",
+          "kind": "H",
+          "severity": "INFO",
+          "label": "Agent stated reason",
+          "display_line": "agent: \"zmena banky, urgent\""
+        }
+      ],
+      "mandate_id": null,
+      "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
+      "challenge": {
+        "nonce": "4F2A9C",
+        "purpose": "CHG",
+        "role": "clerk",
+        "subject_id": "chg_7",
+        "exp": "2026-10-19T12:05:00Z",
+        "text": "AIRGAP CHG #7 n:4F2A9C exp:14:05\nACME s.r.o. ICO 12345678\nOLD CZ65 0800 0000\n    1920 0014 5399\nNEW LT48 3999 0000 0000 1234\n[F] dodavatel 0/3\n[F] acme-cz.com != acme.cz\n[F] +5 dalsi fakta (0 BLOCK)",
+        "text_sha256": "6c7b43a905cd635d7445adc8a971ed5204cf69fdbf1791325c5711c5e4b0d99e",
+        "width": 32,
+        "line_count": 8
+      }
+    }
+  }
+}

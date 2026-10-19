@@ -1,0 +1,11 @@
+{
+  "endpoint": "GET /health",
+  "status": 200,
+  "request": null,
+  "response": {
+    "status": "ok",
+    "backend": "memory",
+    "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
+    "render_width": 32
+  }
+}

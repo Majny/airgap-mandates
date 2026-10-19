@@ -1,0 +1,123 @@
+{
+  "endpoint": "POST /changes/{change_id}/reject",
+  "status": 200,
+  "request": {
+    "reason": "klerk: podvod"
+  },
+  "response": {
+    "change_id": "chg_7",
+    "change_no": 7,
+    "state": "REJECTED",
+    "vendor_id": "ven_12345678",
+    "vendor_ico": "12345678",
+    "vendor_name": "ACME s.r.o.",
+    "old_iban": "CZ6508000000192000145399",
+    "new_iban": "LT483999000000001234",
+    "email_id": "eml_9a8b7c6d5e4f3021",
+    "in_network": true,
+    "facts": [
+      {
+        "id": "F-DOMAIN",
+        "kind": "F",
+        "severity": "BLOCK",
+        "label": "Sender domain vs registry",
+        "display_line": "acme-cz.com != acme.cz",
+        "evidence": {
+          "from_domain": "acme-cz.com",
+          "registry_domain": "acme.cz",
+          "distance": 1
+        }
+      },
+      {
+        "id": "F-ATTEST",
+        "kind": "F",
+        "severity": "BLOCK",
+        "label": "Vendor attestation for new IBAN",
+        "display_line": "dodavatel 0/3",
+        "evidence": {
+          "signed": 0,
+          "threshold": 2,
+          "signers": 3
+        }
+      },
+      {
+        "id": "F-BANK",
+        "kind": "F",
+        "severity": "WARN",
+        "label": "Bank from IBAN",
+        "display_line": "banka: EMI Litva (fiktivni)",
+        "evidence": {
+          "country": "LT",
+          "bank_code": "39990"
+        }
+      },
+      {
+        "id": "F-DPH",
+        "kind": "F",
+        "severity": "WARN",
+        "label": "Account published in VAT registry",
+        "display_line": "DPH ucet: NE",
+        "evidence": {
+          "account_published": false
+        }
+      },
+      {
+        "id": "F-DKIM",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "DKIM signature",
+        "display_line": "DKIM ok d=acme-cz.com",
+        "evidence": {
+          "d": "acme-cz.com",
+          "valid": true
+        }
+      },
+      {
+        "id": "F-FIRSTSEEN",
+        "kind": "F",
+        "severity": "WARN",
+        "label": "Domain first seen in inbox",
+        "display_line": "domena poprve 2h",
+        "evidence": {
+          "hours": 2
+        }
+      },
+      {
+        "id": "H-AGENT",
+        "kind": "H",
+        "severity": "INFO",
+        "label": "Agent stated reason",
+        "display_line": "agent: \"zmena banky, urgent\""
+      }
+    ],
+    "not_before": null,
+    "expires_at": "2026-10-19T13:00:00Z",
+    "callback": {
+      "status": "none",
+      "code_exp": null
+    },
+    "signatures": [],
+    "pending_challenge": null,
+    "history": [
+      {
+        "from": null,
+        "to": "REQUESTED",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "created"
+      },
+      {
+        "from": "REQUESTED",
+        "to": "FACTS_DONE",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "facts computed"
+      },
+      {
+        "from": "FACTS_DONE",
+        "to": "ATTESTATION_CHECK",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "auto"
+      }
+    ],
+    "created_at": "2026-10-19T12:00:00Z"
+  }
+}

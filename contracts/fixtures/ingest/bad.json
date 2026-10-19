@@ -1,0 +1,11 @@
+{
+  "endpoint": "POST /ingest",
+  "status": 400,
+  "request": {
+    "raw_b64": "@@@"
+  },
+  "response": {
+    "error": "invalid_request",
+    "message": "raw_b64 is not base64"
+  }
+}

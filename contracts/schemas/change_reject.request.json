@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/change_reject.request.json",
+  "title": "change_reject.request",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false
+}

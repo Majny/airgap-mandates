@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/inbox_list.response.json",
+  "title": "inbox_list.response",
+  "type": "object",
+  "properties": {
+    "emails": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "email_id": {
+            "type": "string"
+          },
+          "from_addr": {
+            "type": "string"
+          },
+          "from_domain": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          }
+        },
+        "required": [
+          "email_id",
+          "from_addr",
+          "from_domain",
+          "subject",
+          "received_at"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "emails"
+  ],
+  "additionalProperties": false
+}

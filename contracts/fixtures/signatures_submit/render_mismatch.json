@@ -1,0 +1,17 @@
+{
+  "endpoint": "POST /signatures",
+  "status": 403,
+  "request": {
+    "nonce": "4F2A9C",
+    "role": "clerk",
+    "sig": "0x6b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e36b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e31b",
+    "displayed_text": "AIRGAP CHG #7 n:4F2A9C exp:14:05\nACME s.r.o. OK\nVoP OK"
+  },
+  "response": {
+    "error": "render_mismatch",
+    "message": "displayed text differs from executor render",
+    "details": {
+      "expected_sha256": "6c7b43a905cd635d7445adc8a971ed5204cf69fdbf1791325c5711c5e4b0d99e"
+    }
+  }
+}

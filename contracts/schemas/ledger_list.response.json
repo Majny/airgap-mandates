@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/ledger_list.response.json",
+  "title": "ledger_list.response",
+  "type": "object",
+  "properties": {
+    "txs": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/ledger_tx"
+      }
+    }
+  },
+  "required": [
+    "txs"
+  ],
+  "additionalProperties": false
+}

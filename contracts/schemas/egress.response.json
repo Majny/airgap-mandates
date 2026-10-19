@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/egress.response.json",
+  "title": "egress.response",
+  "type": "object",
+  "properties": {
+    "decision": {
+      "const": "allow"
+    },
+    "rule_ids": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 0
+    }
+  },
+  "required": [
+    "decision",
+    "rule_ids",
+    "findings"
+  ],
+  "additionalProperties": false
+}
