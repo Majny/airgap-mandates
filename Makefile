@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui bench verify e2e contracts lint ci lock deploy teardown
+.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -42,6 +42,12 @@ bench:  ## run AgentPayBench
 
 e2e: data  ## demo beat S1 end to end (memory backend; URL=http://127.0.0.1:8000 CLERK_KEY= TREASURY_KEY= to drive a server)
 	$(PY) -m executor.e2e $(if $(URL),--url $(URL) --clerk-key $(CLERK_KEY) --treasury-key $(TREASURY_KEY))
+
+scene-s2:  ## demo beat S2 (lookalike BEC, escalation, exfil) through dispatch, memory backend
+	$(PY) -m executor.scenes s2
+
+scene-s3:  ## demo beat S3 (takeover rejected via tripwire, then legit 2/3 VCs -> 2/2 -> ACTIVE), memory backend
+	$(PY) -m executor.scenes s3
 
 verify:  ## verify an audit export offline
 	$(PY) -m tools.verify_audit
