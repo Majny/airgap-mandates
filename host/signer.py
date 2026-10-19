@@ -540,12 +540,17 @@ def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = Tru
     if agent is not None and (agent.get("error") or not props):
         raise RuntimeError(f"agent beat produced no proposals: {agent.get('error') or agent.get('final')}")
     challenged = [pr for pr in props if pr.get("decision") == "challenge"]
+    if with_agent and not challenged:
+        raise RuntimeError("the agent produced no over-cap challenge: is this checkout's data/emails/manifest.json the "
+                           "deployed one (09_delta_invoice_overcap.eml, scenario overcap_invoice)? make preflight")
     if with_agent and vendor_id is None and len({pr.get("vendor_id") for pr in challenged}) == 1:
         vendor_id = challenged[0]["vendor_id"]  # step up exactly what the agent could not pay
     st, led = call("GET", "/ledger", None, "host")
     paid = [t for t in (led.get("txs", []) if st == 200 else []) if (t.get("authorization") or {}).get("kind") == "mandate"]
     print(f"paid under the mandate (ledger): {len(paid)}")
     steps = pay_up(call, clerk, vendor_id=vendor_id)
+    if with_agent and not steps:
+        raise RuntimeError("nothing was stepped up on the device: the stage S1 beat is incomplete")
     st, mm = call("GET", "/mandates/active", None, "host")
     if st == 200:
         print(f"mandate spent {mm['spent_minor'] / 100:.2f} CZK in {mm['count']} payments (the step-up is outside it)")

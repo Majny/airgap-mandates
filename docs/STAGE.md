@@ -36,6 +36,21 @@ export AWS_PROFILE=hackathon
 6. `make preflight` -> **PREFLIGHT GREEN**. Fix any FAIL row with the recovery table below. Re-run at T-10 min.
 7. Camera rig per `docs/device/demo-rig.md` (phone over the Safe 3, mirrored by cable, exposure locked low).
 
+## Tue 11:00 human session (after the 06:00 freeze): stage bundle + fallback video, one run
+
+One run of the one-beat S1 with the **physical** Safe 3 produces both the pre-sealed stage bundle and the re-shot
+fallback video, so the recorded screens match what the judges see live (the Monday take shows the pre-freeze screen).
+
+1. Laptop on the frozen rev (`git checkout` the deployed main), `make data`, `make preflight` GREEN (hash rows match
+   the deploy; the agent builds its task from this checkout's `data/emails/manifest.json`).
+2. AWS owner: `make demo-reset` (normal, no `--fallback-clerk`) + `python -m infra.load_inbox --url $API` (9 emails).
+3. Camera rig recording (docs/device/demo-rig.md). Device operator ready, Safe 3 unlocked.
+4. `.venv/bin/python -m host.signer s1 --with-agent --url $API`: hold 1 = MANDATE, then the agent pays ACME, Beta and
+   Gamma (no taps, ~40-75 s), hold 2 = the Delta 125000.50 CZK step-up; replay refused. Stop recording.
+5. `make checkpoint-now`, then `make demo-bundle` (seals `docs/audit/demo`, refuses unless green) and
+   `make offline-demo` (ALL PASS). Commit the bundle + video (`docs/device/photos/`).
+6. AWS owner resets again for the stage itself (S1 is single-shot per reset).
+
 ## Beats
 
 Wall times are measured (WS-E dress rehearsal #1 on AWS with software keys; WS-C device runs). Human holds add
