@@ -8,6 +8,8 @@ A bank back-office AI agent proposes payments but holds no write credential. An 
 
 The demo runs on AWS eu-central-1 (executor, store, KMS, Object Lock, Bedrock, witnesses). The local `memory`/`moto` backends exist for development and CI only.
 
+**For a bank's architecture and risk teams:** [`docs/BANK-READINESS.md`](docs/BANK-READINESS.md) covers the deployment, what the bank must integrate (pain.001 handoff, SSO, mail, supplier master, devices, issuers, VoP), the control mapping, the threat model, the operating model, what is simulated, and the gap list to a pilot. It also explains how to run the console behind corporate SSO (`Dockerfile.console`) and the alert watcher (`make alerts`).
+
 ## For contributors
 
 - Design (what and why): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
