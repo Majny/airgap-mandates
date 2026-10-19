@@ -147,11 +147,11 @@ def _reg_hit(ctx: Context, payee: dict | None, mandate: dict | None) -> bool:
     snap = mandates.registry_snapshot(ctx.store)
     if snap["hash"] == mandate["payee_registry_hash"]:
         return True
-    # registry moved since the mandate: the payee's current IBAN must predate the mandate
-    created = mandate["created_at"][:10]
+    # registry moved since the mandate: the payee's current IBAN must have become ACTIVE strictly before the mandate
+    # was created (full timestamps: a change activated later the same day is outside the pinned snapshot)
     for h in payee.get("iban_history", []):
         if h.get("iban") == payee["iban"] and h.get("to") is None:
-            return h.get("change_id") is None or str(h.get("from", "9999")) <= created
+            return h.get("change_id") is None or ("from" in h and str(h["from"]) < mandate["created_at"])
     return False
 
 
