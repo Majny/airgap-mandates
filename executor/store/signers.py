@@ -13,13 +13,13 @@ from typing import Any
 from executor.store import Put, TxConflict, ensure_head, leaf_ops, next_seq, shims
 
 ENROLL_FIELDS = ("address", "role", "label", "device", "device_model", "firmware_version", "cert_chain_sha256",
-                 "fw_hash", "derivation_path", "enroll_sig")
+                 "fw_hash", "derivation_path", "enroll_sig", "active")
 
 
 def enroll(store: Any, row: dict[str, Any], *, settings: Any, actor: str = "executor") -> int:
     """Write the enrolled_signers row and its enroll leaf atomically; returns enroll_seq. `row` needs at least
     address, role, device; missing optional ENROLL_FIELDS are logged as null."""
-    row = {**row, "address": row["address"].lower(), "active": row.get("active", True)}
+    row = {**row, "address": row["address"].lower(), "active": bool(row.get("active", True))}
     data = {k: row.get(k) for k in ENROLL_FIELDS}
     event = shims.make_event("enroll", data, subject_id=row["address"], actor=actor, settings=settings)
     ensure_head(store)
@@ -44,6 +44,16 @@ def enrolled(store: Any, address: str, role: str) -> dict[str, Any] | None:
         return None
     ev = json.loads(leaf["event"])
     d = ev.get("data") or {}
-    if ev.get("type") != "enroll" or d.get("address") != s["address"] or d.get("role") != role:
+    if ev.get("type") != "enroll" or d.get("address") != s["address"] or d.get("role") != role \
+            or d.get("active") is not True:
         return None
     return s
+
+
+def deactivate(store: Any, address: str, *, settings: Any, actor: str = "executor") -> int:
+    """Revoke a signer: a new enroll leaf with active=false and the row repointed at it (one transaction)."""
+    s = store.get("enrolled_signers", {"address": address.lower()})
+    if s is None:
+        raise KeyError(f"{address} is not enrolled")
+    row = {k: v for k, v in s.items() if k != "enroll_seq"}
+    return enroll(store, {**row, "active": False}, settings=settings, actor=actor)
