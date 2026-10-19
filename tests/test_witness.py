@@ -398,3 +398,12 @@ def test_only_real_w1_refusals_are_logged(env, monkeypatch, reply, refusal_leaf)
     events = [json.loads(r["event"]) for r in log.leaves("audit", store=store)]
     assert any(e["type"] == "witness_refusal" for e in events) is refusal_leaf
     assert events[-1]["type"] == "checkpoint" and events[-1]["data"]["cosigners"] == []
+
+
+def test_aws_backend_never_falls_back_to_a_local_key(tmp_path):
+    s = replace(make_settings(tmp_path), backend="aws", kms_key_id="k-log", witness_kms_key_id=None)
+    with pytest.raises(kms.KeyNotConfigured, match="AIRGAP_WITNESS_KMS_KEY_ID"):
+        kms.public_key(settings=s, key="w1")
+    with pytest.raises(kms.KeyNotConfigured, match="AIRGAP_KMS_KEY_ID"):
+        kms.sign_ed25519(b"x", settings=replace(s, kms_key_id=None), key="log")
+    assert not (tmp_path / "keys").exists()

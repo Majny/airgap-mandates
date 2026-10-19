@@ -12,6 +12,11 @@ both green; --allow-red writes the files anyway plus RED-BUNDLE.txt listing what
 SIMULATED: memory backend, throwaway software signers, throwaway Ed25519 log/W1 keys in a temp dir that is deleted
 after the run (no private key ever reaches --out), fictitious vendors. Not the AWS demo path.
 
+`python -m tools.demo_bundle --from-aws URL` seals the bundle from the deployed stack instead (read-only): it assumes
+the airgap-auditor role, SigV4-GETs /audit/export, /health, /checkpoint and the last payment's /receipts/{tx_id}, and
+pins the log/W1 keys from KMS GetPublicKey (an independent channel; /health must agree). It never writes to AWS: if
+leaves are not yet covered by a cosigned checkpoint it refuses, run `make checkpoint-now` and retry.
+
 `python -m tools.demo_bundle --tamper SRC DST` copies a bundle.json flipping ONE digit of amount_minor in the last
 execution leaf and prints `seq N amount_minor OLD -> NEW` (used by tools/offline_demo.sh). Owner: WS-B.
 """
@@ -25,7 +30,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 FAKE_NOW = "2026-10-19T12:00:00Z"
 DEFAULT_OUT = "docs/audit/demo"
@@ -87,17 +92,12 @@ def _leaks(content: str, secrets: list[bytes]) -> list[str]:
     return found
 
 
-def build(*, fake_now: str = FAKE_NOW, key_dir: str | None = None) -> Sealed:
-    """Run the beat and collect the artifacts. key_dir None = fresh temp dir, deleted before returning."""
-    if key_dir is None:
-        with tempfile.TemporaryDirectory(prefix="airgap-demo-keys-") as tmp:
-            return build(fake_now=fake_now, key_dir=tmp)
+def run_inprocess(*, fake_now: str = FAKE_NOW, key_dir: str) -> tuple[Any, Any, dict[str, Any]]:
+    """(handler.Context, Settings, e2e summary) after demo beat S1 + a tick, keys in key_dir (memory backend)."""
     from eth_account import Account
 
     from executor import e2e, handler
-    from executor.audit import checkpoint as cp
-    from executor.audit import kms, log
-    from executor.audit import receipt as rc
+    from executor.audit import log
     from executor.config import Settings
     from executor.store import seed
     from executor.store.memory import MemoryStore
@@ -117,6 +117,20 @@ def build(*, fake_now: str = FAKE_NOW, key_dir: str | None = None) -> Sealed:
     now = datetime.fromisoformat(fake_now.replace("Z", "+00:00"))
     summary = e2e.run(call, clerk, treasury, now=now, log=lambda _: None)
     log.tick("audit", store=ctx.store, settings=s)
+    return ctx, s, summary
+
+
+def build(*, fake_now: str = FAKE_NOW, key_dir: str | None = None) -> Sealed:
+    """Run the beat and collect the artifacts. key_dir None = fresh temp dir, deleted before returning."""
+    if key_dir is None:
+        with tempfile.TemporaryDirectory(prefix="airgap-demo-keys-") as tmp:
+            return build(fake_now=fake_now, key_dir=tmp)
+
+    from executor.audit import checkpoint as cp
+    from executor.audit import kms, log
+    from executor.audit import receipt as rc
+
+    ctx, s, summary = run_inprocess(fake_now=fake_now, key_dir=key_dir)
     bundle = log.export("audit", store=ctx.store, settings=s)
     trust = cp.vkeys(s)
     latest = cp.latest("audit", store=ctx.store)
@@ -126,6 +140,79 @@ def build(*, fake_now: str = FAKE_NOW, key_dir: str | None = None) -> Sealed:
     sealed = Sealed(bundle, trust, receipt, latest["note"] if latest else "", summary, secrets=secrets)
     sealed.problems = check(bundle, trust, receipt)
     return sealed
+
+
+def build_from_api(get: Callable[[str], Any], trust_keys: dict[str, str], *, log_id: str = "audit",
+                   source: str = "api") -> Sealed:
+    """Seal from a running executor's read API. `get(path)` returns parsed JSON (dict) or text; `trust_keys` must come
+    from a channel other than the API (KMS GetPublicKey on AWS)."""
+
+    bundle = get(f"/audit/export?log_id={log_id}&from_seq=0&redact=0")
+    if not isinstance(bundle, dict):
+        raise ValueError(f"{source}: /audit/export did not return a JSON object")
+    problems = []
+    health = get("/health")
+    for role in ("log", "w1"):
+        api_key = health.get(f"{role}_vkey") if isinstance(health, dict) else None
+        if api_key != trust_keys.get(role):
+            problems.append(f"/health {role}_vkey {api_key} differs from the independently pinned key")
+    note = get(f"/checkpoint?log_id={log_id}")
+    tx_ids = [le["event"]["data"]["tx_id"] for le in bundle.get("leaves") or []
+              if (le.get("event") or {}).get("type") == "execution"]
+    if not tx_ids:
+        raise ValueError(f"{source}: the log has no execution yet (run the S1 beat first)")
+    receipt = get(f"/receipts/{tx_ids[-1]}")
+    if not isinstance(receipt, dict):
+        raise ValueError(f"{source}: /receipts/{tx_ids[-1]} did not return a JSON object")
+    problems += check(bundle, trust_keys, receipt)
+    if any("not covered by a witnessed checkpoint" in p for p in problems):
+        problems.append("hint: leaves are not yet covered: run `make checkpoint-now` (or wait for the tick) and retry")
+    if isinstance(note, bytes):
+        note = note.decode("utf-8")
+    return Sealed(bundle, dict(trust_keys), receipt, note if isinstance(note, str) else "",
+                  {"tx_ids": tx_ids, "source": source}, problems=problems)
+
+
+def _aws_reader(base: str, *, role: str, region: str, origin: str, alias_prefix: str = "alias/airgap-"
+                ) -> tuple[Callable[[str], Any], dict[str, str]]:
+    """(SigV4 GET as `role`, {log, w1} vkeys from KMS GetPublicKey). Read-only; credentials from AWS_PROFILE."""
+    import urllib.error
+    import urllib.request
+
+    import boto3
+    from botocore.auth import SigV4Auth
+    from botocore.awsrequest import AWSRequest
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_der_public_key
+
+    from executor.audit import checkpoint as cp
+
+    account = boto3.client("sts", region_name=region).get_caller_identity()["Account"]
+    c = boto3.client("sts", region_name=region).assume_role(
+        RoleArn=f"arn:aws:iam::{account}:role/{role}", RoleSessionName="ws-b-demo-bundle")["Credentials"]
+    sess = boto3.Session(aws_access_key_id=c["AccessKeyId"], aws_secret_access_key=c["SecretAccessKey"],
+                         aws_session_token=c["SessionToken"], region_name=region)
+    kms = sess.client("kms")
+
+    def raw(alias: str) -> bytes:
+        der = kms.get_public_key(KeyId=alias_prefix + alias)["PublicKey"]
+        return load_der_public_key(der).public_bytes(Encoding.Raw, PublicFormat.Raw)
+
+    trust = {"log": cp.verifier_key(f"{origin}/audit", raw("log")),
+             "w1": cp.verifier_key(f"{origin}/w1", raw("w1"), cp.SIG_COSIGNATURE)}
+
+    def get(path: str) -> Any:
+        url = base.rstrip("/") + path
+        req = AWSRequest(method="GET", url=url)
+        SigV4Auth(sess.get_credentials(), "execute-api", region).add_auth(req)
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=dict(req.headers)), timeout=30) as resp:  # noqa: S310
+                body = resp.read()
+                ctype = resp.headers.get("Content-Type", "")
+        except urllib.error.HTTPError as exc:
+            raise ValueError(f"GET {path}: HTTP {exc.code} {exc.read()[:300]!r}") from None
+        return json.loads(body) if "json" in ctype else body.decode("utf-8")
+
+    return get, trust
 
 
 def write(sealed: Sealed, out: str | Path, *, allow_red: bool = False) -> int:
@@ -176,6 +263,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="write the files even if they do not verify, plus RED-BUNDLE.txt listing the problems")
     ap.add_argument("--tamper", nargs=2, metavar=("SRC", "DST"),
                     help="copy SRC to DST flipping one digit of amount_minor in the last execution leaf")
+    ap.add_argument("--from-aws", metavar="URL", help="seal from the deployed stack's API (read-only, SigV4)")
+    ap.add_argument("--role", default="airgap-auditor", help="role to assume for --from-aws (default airgap-auditor)")
+    ap.add_argument("--region", default="eu-central-1")
+    ap.add_argument("--origin", default="airgap.example/demo", help="AIRGAP_LOG_ORIGIN of the deployment")
     a = ap.parse_args(argv)
     if a.tamper:
         src, dst = a.tamper
@@ -183,8 +274,17 @@ def main(argv: list[str] | None = None) -> int:
         Path(dst).write_text(new, encoding="utf-8")
         print(f"seq {seq} amount_minor {old_amt} -> {new_amt}")
         return 0
-    print("LOCAL memory backend, throwaway keys (simulated; the demo runs on AWS)", file=sys.stderr)
-    sealed = build()
+    if a.from_aws:
+        print(f"AWS {a.region}: {a.from_aws} as {a.role} (read-only); keys pinned from KMS", file=sys.stderr)
+        try:
+            get, trust = _aws_reader(a.from_aws, role=a.role, region=a.region, origin=a.origin)
+            sealed = build_from_api(get, trust, source=a.from_aws)
+        except ValueError as exc:
+            print(f"CANNOT SEAL FROM AWS: {exc}")
+            return 1
+    else:
+        print("LOCAL memory backend, throwaway keys (simulated; the demo runs on AWS)", file=sys.stderr)
+        sealed = build()
     rc = write(sealed, a.out, allow_red=a.allow_red)
     n = len(sealed.bundle["leaves"])
     if sealed.ok:

@@ -15,10 +15,20 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat,
 KEYS = ("log", "w1")
 
 
+ENV = {"log": "AIRGAP_KMS_KEY_ID", "w1": "AIRGAP_WITNESS_KMS_KEY_ID"}
+
+
+class KeyNotConfigured(RuntimeError):
+    """backend=aws without the KMS key id: never fall back to a local key on AWS."""
+
+
 def _kms_key_id(settings: Any, key: str) -> str | None:
     if key not in KEYS:
         raise ValueError(f"unknown signing key {key!r}")
-    return settings.kms_key_id if key == "log" else settings.witness_kms_key_id
+    key_id = settings.kms_key_id if key == "log" else settings.witness_kms_key_id
+    if not key_id and getattr(settings, "backend", None) == "aws":
+        raise KeyNotConfigured(f"backend=aws but {ENV[key]} is not set: refusing to use a local '{key}' key")
+    return key_id
 
 
 @functools.lru_cache(maxsize=8)
