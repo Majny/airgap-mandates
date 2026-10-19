@@ -55,8 +55,26 @@ front of it and expose only `/add-checkpoint`.
 
 Fetches `GET /checkpoint?log_id=audit` and `GET /audit/export?log_id=audit`, checks that the exported leaves reproduce
 the checkpoint root, forwards the note with only the log signature, computes the consistency proof from the last size
-W2 accepted (on 409 it reads `text/x.tlog.size` and retries once) and prints W2's cosignature line(s).
+W2 accepted (on 409 it reads `text/x.tlog.size` and retries once), keeps only W2 lines that verify against
+`AIRGAP_W2_VKEY`, and uploads them with `POST /checkpoint/cosignature` (row 22b; the executor re-verifies them against
+its own `AIRGAP_W2_VKEY` and appends them to the stored note). The relay remembers W2's size only in-process.
 
-**Gap:** the executor has no endpoint to store W2's cosignature in its checkpoint note, so the cosignature is printed,
-not uploaded; W2 therefore does not yet appear in `GET /checkpoint` or in receipts. The relay remembers W2's size only
-in-process.
+## On AWS
+
+W2 runs on the `airgap-w2` t4g.nano (`infra/w2_userdata.sh`, `infra/w2_ctl.sh`; owner WS-E), listening on
+127.0.0.1:7380 only, no inbound port. From a laptop with `AWS_PROFILE=hackathon`:
+
+```sh
+AIRGAP_W2_VKEY='airgap.example/demo/w2+d10d72b1+BMkDZNJkVEhYYAhvvLF7aV31FiFFRPg2PUPSI9/6v44B' \
+.venv/bin/python -m witness.relay_w2 --executor-url https://ehhxkpbfcc.execute-api.eu-central-1.amazonaws.com/prod \
+  --aws-role airgap-relay --read-role airgap-auditor --w2-ssm i-0bc5865c1ddae7b1d
+```
+
+- `--aws-role airgap-relay` signs the upload (SigV4); `--read-role airgap-auditor` signs the reads (the executor lets
+  only auditor/host read `/audit/export`).
+- `--w2-ssm` delivers the add-checkpoint request with SSM RunCommand (`curl` to 127.0.0.1:7380 on the instance), so
+  no session-manager plugin and no open port are needed. It uses the operator's own credentials, not the relay role.
+  With the plugin, `infra/w2_ctl.sh forward` + `--w2-url http://127.0.0.1:7380` works too.
+- A demo reset (`infra/reset_state.py` empties W1's `witness_state`) must also reset W2's database, or W2 answers
+  409 with the old, larger size and the relay reports `rollback_suspected` (exit 3). That is the correct behaviour
+  of a real witness: an independent supervisor would never accept a reset log.

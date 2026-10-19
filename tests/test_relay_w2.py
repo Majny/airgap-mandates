@@ -320,3 +320,47 @@ def test_real_litewitness(tmp_path):
             p.terminate()
             p.wait(5)
         shutil.rmtree(work, ignore_errors=True)
+
+
+def test_relay_uses_injected_transports(world):
+    """AWS path: reads, upload and W2 delivery go through the given callables (sigv4() / ssm_post())."""
+    ex_settings, ex_store, w2_settings, w2_store = world
+    _grow(ex_store, ex_settings, 3)
+    calls: list[tuple[str, str]] = []
+
+    def get(url, timeout):
+        calls.append(("get", url))
+        return relay_w2._get(url, timeout)
+
+    def post(url, data, timeout):
+        calls.append(("post", url))
+        return relay_w2._post(url, data, timeout)
+
+    with _serve(_executor_handler(ex_store, ex_settings)) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_real:
+        def w2_post(url, data, timeout):  # "http://w2" is never dialled: only the path is used, as over SSM
+            calls.append(("w2", url))
+            return relay_w2._post(w2_real + "/add-checkpoint", data, timeout)
+
+        r = relay_w2.relay(executor_url=ex_url, w2_url="http://w2", w2_vkey=_w2_vkey(w2_settings),
+                           get=get, post=post, w2_post=w2_post)
+    assert r.status == 200 and r.cosignatures
+    assert [k for k, _ in calls] == ["get", "get", "w2", "post"]
+    assert calls[2][1] == "http://w2/add-checkpoint" and "/checkpoint/cosignature?" in calls[3][1]
+
+
+@pytest.mark.parametrize("raw, want", [
+    (b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n\xe2\x80\x94 w2 AAAA\n",
+     (200, "text/plain; charset=utf-8", b"\xe2\x80\x94 w2 AAAA\n")),
+    (b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 409 Conflict\r\nContent-Type: text/x.tlog.size\r\n\r\n12\n",
+     (409, "text/x.tlog.size", b"12\n")),
+    (b"HTTP/1.1 422 Unprocessable Entity\nContent-Length: 0\n\n", (422, "", b"")),
+])
+def test_parse_http_response(raw, want):
+    assert relay_w2.parse_http_response(raw) == want
+
+
+@pytest.mark.parametrize("raw", [b"", b"curl: (7) Failed to connect", b"HTTP/1.1 200 OK\r\nContent-Type: x"])
+def test_parse_http_response_rejects_garbage(raw):
+    with pytest.raises(ValueError):
+        relay_w2.parse_http_response(raw)
