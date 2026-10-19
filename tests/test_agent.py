@@ -224,3 +224,21 @@ def test_a1_screens_error_results_in_naive_mode(monkeypatch):
     transcript = "".join(planner.seen)
     assert INJECTION not in transcript and "withheld by A1 Guardrails" in transcript
     assert "T-DOC-MISMATCH" in transcript and "caller_not_allowed" in transcript
+
+
+def test_stage_cli_one_line_per_proposal_and_json_records():
+    from agent.__main__ import proposals, scenario_emails, summary
+
+    out = {"mode": "quarantined", "model": "m", "latency_ms": 1, "tokens": 2, "final": "done", "tool_calls": [
+        {"tool": "payment.propose", "args": {"vendor_id": "ven_12345678", "invoice_no": "FV-2026-0412",
+                                             "amount_minor": 4840000, "currency": "CZK"},
+         "result": {"proposal_id": "prp_1", "decision": "allow", "rule_ids": [], "tx_id": "tx_1"}},
+        {"tool": "payment.propose", "args": {"vendor_id": "ven_00000009", "invoice_no": "DL-1",
+                                             "amount_minor": 12500050, "currency": "CZK"},
+         "result": {"proposal_id": "prp_2", "decision": "challenge", "rule_ids": ["I-PER"], "tx_id": None}}]}
+    text = summary(out)
+    assert "ACME s.r.o." in text and "48400.00 CZK -> ALLOW (paid under the mandate) tx_1" in text
+    assert "125000.50 CZK -> CHALLENGE (needs the device) prp_2" in text
+    recs = proposals(out)
+    assert [(r["proposal_id"], r["decision"]) for r in recs] == [("prp_1", "allow"), ("prp_2", "challenge")]
+    assert len(scenario_emails("s1")) >= 3 and len(scenario_emails("s2")) == 1

@@ -1,0 +1,52 @@
+mandate mnd_1: sig_required=2
+AG1/DEMO MANDATE
+NO 1 CZK
+PER PAY 80000
+TOTAL 250000
+MAX 20 PAYMENTS
+EXISTING PAYEES
+TO 10-20 18:39
+ROLE CLERK 1/2
+FROM 10-19 18:39
+REQ VOP MTCH
+PAYEES 3 REG V1
+N 7731C478
+P 3909f806c26877
+H deeaf83eabba3c
+
+clerk signed -> PENDING_SIG_TREASURY
+treasury signed -> ACTIVE (mnd_1)
+
+invoice 1: 14500.00 CZK -> allow under mnd_1, tx_aaa77024e314701a rail ACTC
+invoice 2: 20000.00 CZK -> allow under mnd_1, tx_ac20dd23052bed32 rail ACTC
+invoice 3: 30000.00 CZK -> allow under mnd_1, tx_682ed5d048518652 rail ACTC
+
+invoice 4: 125000.50 CZK -> challenge ['F-MANDATE', 'F-SPLIT', 'I-PER', 'I-SPLIT', 'I-WARN']; device shows:
+AG1/DEMO PAY 4
+125000.50 CZK
+CZ62 0300 0000
+0001 2345 6789
+BETA SERVIS A.S.
+VS 1639229
+EXP 10-19 18:44
+0 BLOCK 2 WARN
+OVER MANDATE CAP
+SPLIT 24H
++11 MORE 0 BLOCK
+ROLE CLERK 1/1
+N B2DB6C67
+H a18a16f8fc3acd
+
+clerk held to confirm -> payment_executed tx_f92bf6d78c1565eb
+replay of the same signature -> 403 nonce_reused
+mandate spent 64500.00 CZK in 3 payments (the step-up is outside it)
+{
+ "mandate_id": "mnd_1",
+ "tx_ids": [
+  "tx_aaa77024e314701a",
+  "tx_ac20dd23052bed32",
+  "tx_682ed5d048518652",
+  "tx_f92bf6d78c1565eb"
+ ],
+ "challenge_nonce": "B2DB6C67"
+}
