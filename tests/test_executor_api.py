@@ -206,3 +206,25 @@ def test_cosignature_route_is_relay_only():
     from executor import handler
 
     assert handler.principal_from_arn("arn:aws:sts::1:assumed-role/airgap-w2-relay/x") == "relay"
+
+
+def test_accepted_signature_leaves_carry_recoverable_sig():
+    """S2 offline: every accepted signature leaf carries the sig, and recovery over the re-rendered challenge text
+    (from the challenge leaf alone) yields the logged signer, who has an earlier enroll leaf."""
+    from executor import render as R
+    from executor.store import shims
+
+    h = Harness()
+    h.mandate()
+    _, r = h.propose(12_500_050, vendor="ven_87654321")
+    h.submit(r["decision"]["challenge"], h.clerk)
+    leaves = h.leaves()
+    challenges = {e["data"]["nonce"]: e["data"] for e in leaves if e["type"] == "challenge"}
+    enrolled = {e["data"]["address"]: e["seq"] for e in leaves if e["type"] == "enroll"}
+    accepted = [e for e in leaves if e["type"] == "signature" and e["data"]["accepted"]]
+    assert len(accepted) == 3  # mandate clerk, mandate treasury, PAY clerk
+    for e in accepted:
+        c = challenges[e["data"]["nonce"]]
+        text = R.render(c["template"], c["params"], profile=c["profile"])
+        assert shims.verify_eip191(text, e["data"]["sig"]) == e["data"]["signer_address"]
+        assert enrolled[e["data"]["signer_address"]] < e["seq"]

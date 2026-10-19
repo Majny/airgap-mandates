@@ -468,7 +468,7 @@ def post_signatures(ctx: Context, p: dict, q: dict, body: Any, principal: str | 
         raise reject(ErrorCode.NONCE_REUSED, f"challenge {row['nonce']} already used", signer)
     # 9-10. purpose guards + effect
     try:
-        out = _apply_signature(ctx, row, signer, now)
+        out = _apply_signature(ctx, row, signer, sig, now)
     except ApiError as e:
         _sig_leaf(ctx, row, sig=sig, signer=signer, accepted=False, error=e.code)
         st.update_if("nonces", {"nonce": row["nonce"]}, {"result": e.code}, {"used": True})
@@ -478,9 +478,9 @@ def post_signatures(ctx: Context, p: dict, q: dict, body: Any, principal: str | 
                  "signer_address": signer, **out}
 
 
-def _apply_signature(ctx: Context, row: dict, signer: str, now: datetime) -> dict[str, Any]:
+def _apply_signature(ctx: Context, row: dict, signer: str, sig: str, now: datetime) -> dict[str, Any]:
     st, settings, purpose = ctx.store, ctx.settings, row["purpose"]
-    sig_leaf = lambda: _sig_leaf(ctx, row, sig="", signer=signer, accepted=True, error=None)  # noqa: E731
+    sig_leaf = lambda: _sig_leaf(ctx, row, sig=sig, signer=signer, accepted=True, error=None)  # noqa: E731
     if purpose == "MANDATE":
         m, nxt = mandates.on_mandate_signature(row["subject_id"], row["role"], signer, row["nonce"], store=st,
                                                settings=settings)
@@ -621,11 +621,12 @@ def post_cosignature(ctx: Context, p: dict, q: dict, body: Any, principal: str |
     except ValueError:
         raise ApiError(ErrorCode.INVALID_REQUEST, "size must be an integer") from None
     raw = body if isinstance(body, (bytes, str)) else b""
-    text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
     fn = getattr(checkpoint, "add_cosignature", None)
     if fn is None:
         raise NotImplementedError("checkpoint.add_cosignature (WS-B)")
-    return 200, Body(fn(q.get("log_id", "audit"), size, text, store=ctx.store, settings=ctx.settings))
+    status, ctype, out = fn(q.get("log_id", "audit"), size, raw.encode() if isinstance(raw, str) else raw,
+                            store=ctx.store, settings=ctx.settings)
+    return status, Body(out, ctype)
 
 
 def post_witness(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):

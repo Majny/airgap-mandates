@@ -241,15 +241,12 @@ def _enroll_leaves(h):
                                   subject_id=None, actor="tools"), store=h.store, settings=h.settings)
 
 
-@pytest.mark.xfail(strict=True, reason="WS-A: executor/handler.py logs accepted signature leaves with sig='' "
-                   "(S2 offline EIP-191 check impossible); remove this marker when fixed")
 def test_real_executor_run_verifies():
     """A real executor run (2/2 mandate, allow, duplicate deny, challenge + PAY step-up, tick, export) verifies with
     replay and the review's semantic checks (step-up signature, mandate signers, uncovered tail)."""
     from tests.wsa_helpers import Harness
 
-    h = Harness()
-    _enroll_leaves(h)
+    h = Harness()  # seed.enroll_signer writes the enroll leaves
     h.mandate()
     assert h.propose(1_000_000)[0] in (200, 201)
     h.propose(1_000_000)  # duplicate -> deny
