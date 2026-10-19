@@ -10,7 +10,7 @@
     "origin": "airgap.example/demo/audit",
     "size": 40,
     "root_hash": "446377f84a72d34f0c9f58cb73668e91510e9c1dd107b030640367ac955b6b98",
-    "note_sha256": "07c3045cb4c5ba08b1cdb7f1899b9d0a3bca2c0832c0afe3a48fa4c63aa3067e",
+    "note_sha256": "7fe66ce2820d78e7d19afbfdbd95a562001433d455acefe127c0355ccf58b144",
     "cosigners": [
       "airgap.example/demo/w1"
     ]

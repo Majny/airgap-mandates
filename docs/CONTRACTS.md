@@ -128,7 +128,7 @@ order (§5.4). Values not listed are INFO.
 | `F-FIRSTSEEN` | `registry` history | IBAN first seen < 72 h → WARN | `IBAN NEW 2H`, `IBAN SEEN 400D` |
 | `F-DUP` (WS-A) | ledger | duplicate → BLOCK (deny) | `DUPLICATE INV` |
 | `F-AMOUNT-DOC` (WS-D computes; WS-E `executor/docs` `check_against_document`) | provenance-hashed source document (`invoice_ref`) | `match`, or `partial` (lower with `reason_code` `PARTIAL`) → INFO; `mismatch` (higher, lower without PARTIAL, or currency/VS/due date/invoice_no/supplier ICO differ) → BLOCK; `unavailable` (document missing or not extractable) → **BLOCK** (fail closed). evidence `{invoice_amount_minor, doc_amount_minor, doc_sha256, invoice_ref, mismatched (comma-joined field names), reason_code}`, `prov` = `doc_sha256` | `AMOUNT OK DOC` (match), `AMOUNT PART DOC` (partial), `AMOUNT != DOC` (mismatch), `AMOUNT DOC N/A` (unavailable) |
-| `F-SPLIT` (WS-A) | ledger | 24 h split → WARN (step-up) | `SPLIT 24H` |
+| `F-SPLIT` (WS-A) | ledger | ≥ 1 earlier payment to the vendor in 24 h and sum + amount > per-payment cap → WARN (step-up) | `SPLIT 24H` |
 | `F-Z` (WS-A) | ledger | robust z > 3.5 → WARN (step-up) | `AMOUNT OUTLIER` |
 | `F-ANOM` (WS-E feeds, WS-D computes) | executor tool-call log (`tool_call` leaves) | score 0..100; ≥ 40 → WARN (step-up); **never allows** | `ANOM 10/100`, `ANOM 55/100` |
 | `F-NAME-TRANSLIT` | translit table (§5.1) | name was transliterated → INFO | `NAME TRANSLIT` |
@@ -795,7 +795,7 @@ allowed if the cedarpy diagnostics prove awkward (decision Mon 16:00). There is 
 | I-REGISTRY | mandate_allow | payee in the registry snapshot pinned by the mandate | challenge |
 | I-VOP | mandate_allow | F-VOP code ∈ `require_vop` | challenge |
 | I-ANOM | mandate_allow | F-ANOM score < `max_anom` (default 40) | challenge |
-| I-SPLIT | mandate_allow | vendor sum in the last 24 h + amount ≤ `max_per_payment_minor` | challenge |
+| I-SPLIT | mandate_allow | the vendor already has ≥ 1 executed payment in the last 24 h **and** that 24 h sum + amount > `max_per_payment_minor` (a single over-cap payment is `I-PER` only, never a split) | challenge |
 | I-Z | mandate_allow | robust z-score (median/MAD) of amount vs vendor history ≤ 3.5 (`z_threshold_milli: 3500`) | challenge |
 | I-WARN | mandate_allow | no F fact WARN | challenge |
 | I-ATTEST | change | in-network, not break-glass ⇒ ≥ 2 VCs from distinct pinned classes | no CHG challenge (R0) |

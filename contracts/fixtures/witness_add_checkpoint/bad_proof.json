@@ -1,6 +1,6 @@
 {
   "endpoint": "POST /witness/add-checkpoint",
   "status": 422,
-  "request": "old 36\nLwXUtonScMr7AihfNfRIZvfcii02ij+dESQ3PuqzH7E=\n\nairgap.example/demo/audit\n40\nRGN3+Epy008Mn1jLc2aOkVEOnB3RB7AwZANnrJVba5g=\npolicy sha256:1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812\ncode sha256:84af06a5cb31af731aedeb617dc13f9dcacd628f57a3ea8b3036ffd284005bba pcr0 -\n\n— airgap.example/demo/audit LVuvFHTnLvUmfBVRqPWss6BE+Oqvx5N/hU8eoWN/ASpOThtAwZvUnxr2Q0FvX0lOQock8OEq5tfetuKtZDIFRUg6TgY=\n",
+  "request": "old 36\nLwXUtonScMr7AihfNfRIZvfcii02ij+dESQ3PuqzH7E=\n\nairgap.example/demo/audit\n40\nRGN3+Epy008Mn1jLc2aOkVEOnB3RB7AwZANnrJVba5g=\npolicy sha256:d33008c432bad2a31eff226b8c1b4e292dee360197149f93646b7d95aeddf921\ncode sha256:84af06a5cb31af731aedeb617dc13f9dcacd628f57a3ea8b3036ffd284005bba pcr0 -\n\n— airgap.example/demo/audit LVuvFOLWPvx+Yz/Nf22DcMV9L1kgObOGnuRSmBYAYpc4BwleHbEEv3/wq857u5/rNI+t4NvYPj1F6wjLlL+OrckuNgg=\n",
   "response": "consistency proof does not verify\n"
 }

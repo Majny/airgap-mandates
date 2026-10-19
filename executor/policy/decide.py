@@ -43,6 +43,13 @@ def policy_hash_of(policy: dict[str, Any]) -> str:
     return sha256_hex(canonical_json(policy))
 
 
+def _for_schema(context: dict[str, Any], schema: dict[str, Any], action: str) -> dict[str, Any]:
+    """Only the context attributes the (possibly older, replayed) policy schema declares: a leaf logged under an
+    earlier policy_hash replays under that policy's own schema (S12) even after new attributes were added."""
+    attrs = schema[""]["actions"][action]["appliesTo"]["context"]["attributes"]
+    return {k: v for k, v in context.items() if k in attrs}
+
+
 def _authorize(text: str, request: dict[str, Any], entities: list[dict[str, Any]],
                schema: dict[str, Any]) -> tuple[bool, list[str]]:
     """(allowed, sorted determining forbid @ids). P-* permits are never returned."""
@@ -142,7 +149,8 @@ def decide(subject: dict[str, Any], facts: FactSet, state: dict[str, Any], polic
              "attrs": {"known": p is not None, "active": p is not None and p["active_iban"] and p["status"] == "ACTIVE",
                        "in_network": bool(p and p["in_network"])}, "parents": []}
     request = {"principal": f'Mandate::"{mandate["uid"]["id"]}"', "action": 'Action::"pay"',
-               "resource": f'Payee::"{vendor}"', "context": inv.cedar_context(subject, facts, state)}
+               "resource": f'Payee::"{vendor}"', "context": _for_schema(inv.cedar_context(subject, facts, state),
+                                                                     schema, "pay")}
     entities = [mandate, payee]
     flagged = _fact_ids(facts, ("BLOCK", "WARN"))
 
