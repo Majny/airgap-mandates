@@ -367,7 +367,8 @@ def _signed_text(d: dict[str, Any], challenge: dict[str, Any] | None) -> str | N
 
 
 def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
-    enrolled: dict[str, tuple[str, int]] = {}
+    enrolled: dict[str, tuple[str, int]] = {}  # address -> latest (role, seq) so far: a re-enrolment supersedes
+    enroll_leaves: set[tuple[str, Any, int]] = set()  # every (address, role, seq): an address may be enrolled twice
     challenges: dict[str, tuple[int, dict[str, Any]]] = {}
     used: dict[str, int] = {}
     chg_signers: dict[str, dict[str, int]] = {}
@@ -376,6 +377,7 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
         t, d = ev.get("type"), ev.get("data") or {}
         if t == "enroll":
             enrolled[str(d.get("address", "")).lower()] = (d.get("role"), seq)
+            enroll_leaves.add((str(d.get("address", "")).lower(), d.get("role"), seq))
         elif t == "challenge":
             challenges[d.get("nonce")] = (seq, d)
         elif t == "signature" and d.get("accepted"):
@@ -435,8 +437,7 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
                  "bundle does not carry the signed text or challenge params")
 
     for a in bundle.get("approvers") or []:
-        e = enrolled.get(str(a.get("address", "")).lower())
-        if e is None or e[0] != a.get("role") or e[1] != a.get("enroll_seq"):
+        if (str(a.get("address", "")).lower(), a.get("role"), a.get("enroll_seq")) not in enroll_leaves:
             ctx.bad(f"approver {a.get('address')}: does not match an enroll leaf (role/enroll_seq)")
         else:
             ctx.count("approvers")

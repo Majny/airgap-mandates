@@ -165,6 +165,26 @@ def test_approver_mismatch(b):
     _fails(b, f"approver {CLERK}: does not match an enroll leaf")
 
 
+def test_reenrolled_signer_verifies(tmp_path):
+    """Fallback clerk on AWS: enrolled inactive, then re-enrolled active. Export lists both; each must match its leaf."""
+    evs = demo_events()
+    again = copy.deepcopy(evs[0])
+    evs.insert(2, again)
+    b = _export(tmp_path, evs)
+    assert [a["enroll_seq"] for a in b["approvers"] if a["address"] == CLERK] == [0, 2]
+    rep = va.verify(b, replay=False)
+    assert rep.ok, rep.problems
+    assert rep.checked["approvers"] == 3
+
+
+def test_reenrolled_approver_with_wrong_seq_fails(tmp_path):
+    evs = demo_events()
+    evs.insert(2, copy.deepcopy(evs[0]))
+    b = _export(tmp_path, evs)
+    b["approvers"][0]["enroll_seq"] = 1  # seq 1 is the treasury's enroll leaf, not the clerk's
+    _fails(b, f"approver {CLERK}: does not match an enroll leaf")
+
+
 def test_mandate_2of2_same_signer(tmp_path):
     evs = demo_events()
     for ev in evs:
