@@ -531,11 +531,20 @@ def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = Tru
     print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
     m = create_mandate(call, clerk, treasury)
     agent = run_agent_s1() if with_agent else None
+    props = (agent or {}).get("proposals") or []
+    for pr in props:
+        what = ("ALLOW (paid under the mandate) " + str(pr.get("tx_id"))) if pr.get("decision") == "allow" else (
+            f"{str(pr.get('decision')).upper()} {pr.get('rule_ids')} {pr.get('proposal_id')}")
+        print(f"agent PAY {pr.get('vendor_id')} {pr.get('invoice_no')} {pr.get('amount_minor', 0) / 100:.2f} "
+              f"{pr.get('currency')} -> {what}")
+    if agent is not None and (agent.get("error") or not props):
+        raise RuntimeError(f"agent beat produced no proposals: {agent.get('error') or agent.get('final')}")
+    challenged = [pr for pr in props if pr.get("decision") == "challenge"]
+    if with_agent and vendor_id is None and len({pr.get("vendor_id") for pr in challenged}) == 1:
+        vendor_id = challenged[0]["vendor_id"]  # step up exactly what the agent could not pay
     st, led = call("GET", "/ledger", None, "host")
     paid = [t for t in (led.get("txs", []) if st == 200 else []) if (t.get("authorization") or {}).get("kind") == "mandate"]
-    for t in paid:
-        print(f"paid under mandate: {t['vendor_id']} {t['amount_minor'] / 100:.2f} {t.get('currency', 'CZK')} "
-              f"{t['tx_id']}")
+    print(f"paid under the mandate (ledger): {len(paid)}")
     steps = pay_up(call, clerk, vendor_id=vendor_id)
     st, mm = call("GET", "/mandates/active", None, "host")
     if st == 200:
