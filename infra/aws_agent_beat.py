@@ -1,6 +1,8 @@
 """Agent-on-AWS beat (S1 + S2) with the real agent λ (VPC, no NAT) and Sonnet in quarantined mode. Owner: WS-E.
 
 Precondition: fresh state (python -m infra.reset_state --yes). Steps:
+  0. the episode emails are (re-)ingested through POST /ingest as the airgap-ingest role (idempotent: email_id =
+     sha256 of the bytes), so every proposal can cite its source email (FACTS-1: no source document, no autopay)
   1. host creates a mandate; the two e2e software keys sign it 2/2 (ACTIVE)
   2. agent episode over the 3 legitimate invoice emails -> expect 3 proposals allowed under the mandate
   3. agent episode over the lookalike-domain BEC email -> expect no allowed payment and no challenge (device dark)
@@ -30,6 +32,18 @@ def sig(acct, text: str) -> str:
     return s if s.startswith("0x") else "0x" + s
 
 
+def ensure_inbox(call, rows: list[dict]) -> None:
+    """POST /ingest each manifest email as the ingest principal (received_at is ignored on AWS) and check that the
+    executor names it with the manifest's email_id."""
+    import base64
+
+    for row in rows:
+        raw = Path("data/emails", row["file"]).read_bytes()
+        st, r = call("POST", "/ingest", {"raw_b64": base64.b64encode(raw).decode("ascii"),
+                                         "received_at": row["received_at"]}, "ingest")
+        assert st in (200, 201) and r.get("email_id") == row["email_id"], (row["file"], st, r)
+
+
 def run_agent(task: str) -> dict:
     lam = boto3.client("lambda", region_name=REGION, config=__import__("botocore.config").config.Config(
         read_timeout=330))
@@ -39,6 +53,7 @@ def run_agent(task: str) -> dict:
 
 def main() -> None:
     call = signed_call(URL)
+    ensure_inbox(call, [r for r in MANIFEST if r["email_id"] in LEGIT + BEC])
     keys = json.loads(KEYS.read_text())
     clerk, treasury = Account.from_key(keys["clerk"]), Account.from_key(keys["treasury"])
     until = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -63,13 +63,6 @@ def test_chg3_iban_activated_after_mandate_same_day_is_outside_its_registry_snap
 
 # --------------------------------------------------------------------------- FACTS-1 proposal without a source email
 
-_FACTS1 = pytest.mark.xfail(strict=True, reason=(
-    "FACTS-1 not landed: the compute() fix (always F-AMOUNT-DOC, F-DKIM BLOCK without a source email) denies every "
-    "email-less proposal, and the demo beats (executor/e2e.py, executor/scenes.py, infra/aws_agent_beat.py) and the "
-    "WS-A/WS-E tests (test_executor_api, test_replay_swap, test_bench, ...) post proposals without invoice.email_id; they must cite the source email first"))
-
-
-@_FACTS1
 def test_facts1_proposal_without_email_id_is_denied():
     w = World()
     w.mandate()
@@ -83,18 +76,39 @@ def test_facts1_proposal_without_email_id_is_denied():
     assert p["tx"] is None and w.call("GET", "/ledger")[1]["txs"] == []
 
 
-@_FACTS1
 def test_facts1_compute_proposal_without_email_state_blocks():
     from executor.facts import compute
 
     payee = {"vendor_id": ACME, "name": "ACME s.r.o.", "ico": "12345678", "iban": "CZ6508000000192000145399",
              "domain": "acme.cz", "country": "CZ", "iban_history": []}
-    inv = {"vendor_id": ACME, "invoice_no": "X-1", "amount_minor": 100, "currency": "CZK",
+    inv = {"vendor_id": ACME, "invoice_no": "X-1", "issue_date": "2026-10-15", "amount_minor": 100, "currency": "CZK",
            "invoice_ref": "doc_0000000000000000", "reason_code": "DUE"}
     fs = compute.compute({"kind": "proposal", "subject_id": "prp_x", "invoice": inv},
                          {"payee": payee, "data_dir": "data", "mandate": None, "proposals": [], "history": []}, NOW)
     f = _facts(fs["facts"])
     assert f["F-AMOUNT-DOC"] == ("BLOCK", "AMOUNT DOC N/A") and f["F-DKIM"] == ("BLOCK", "DKIM FAIL"), f
+
+
+def test_facts1_invoice_ref_of_another_emails_document_is_denied():
+    """A real, DKIM-valid source email does not vouch for a document it does not carry: email_id of 01 (ACME's
+    FV-2026-0412) with invoice_ref = the ISDOC attachment of 02 (Beta's email) is denied."""
+    import base64
+
+    from executor.docs import extract
+
+    w = World()
+    w.mandate()
+    raw02 = base64.b64decode(w.store.get("inbox", {"email_id": w.emails["02"]})["raw_b64"])
+    other_doc = next(x for x in extract.documents(raw02) if x["kind"] == "attachment")["doc_id"]
+    st_, ok = w.propose("acme_fv-2026-0412", with_email=True)  # control: its own document is allowed
+    assert st_ == 201 and ok["decision"]["decision"] == "allow", ok["decision"]
+    st_, p = w.propose("acme_fv-2026-0412", with_email=True, invoice_no="FV-2026-0412-B", invoice_ref=other_doc)
+    assert st_ == 201, p
+    f = _facts(p["proposal"]["facts"])
+    assert f["F-DKIM"] == ("INFO", "DKIM PASS"), f  # the cited email itself is genuine
+    assert f["F-AMOUNT-DOC"] == ("BLOCK", "AMOUNT DOC N/A"), f
+    assert p["decision"]["decision"] == "deny" and "F-AMOUNT-DOC" in p["decision"]["rule_ids"], p["decision"]
+    assert p["tx"] is None and len(w.call("GET", "/ledger")[1]["txs"]) == 1
 
 
 # --------------------------------------------------------------------------- FACTS-2 F-ANOM over the tool-call log

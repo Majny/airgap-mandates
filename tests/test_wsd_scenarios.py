@@ -140,7 +140,10 @@ class World:
         assert st_ == 200 and r["mandate"]["status"] == "ACTIVE", r
         return r["mandate"]
 
-    def propose(self, inv_name: str, *, with_email: bool, **over: Any) -> tuple[int, Any]:
+    def propose(self, inv_name: str, *, with_email: bool, fresh_email: bool = False, **over: Any) -> tuple[int, Any]:
+        """POST /proposals for data/invoices/<inv_name> (+ overrides). with_email: cite the fixture email of that
+        invoice; fresh_email: ingest a new DKIM-signed invoice email carrying exactly the (overridden) invoice
+        (tools.invoice_mail) and cite it; neither: no source email (FACTS-1 denies)."""
         d = json.loads((INVOICES / f"{inv_name}.json").read_text())
         inv = {k: d[k] for k in ("vendor_id", "invoice_no", "amount_minor", "currency", "vs", "issue_date",
                                  "due_date")}
@@ -150,6 +153,13 @@ class World:
             raw = base64.b64decode(self.store.get("inbox", {"email_id": d["email_id"]})["raw_b64"])
             inv["invoice_ref"] = next(x for x in extract.documents(raw) if x["kind"] == "attachment")["doc_id"]
         inv.update(over)
+        if fresh_email:
+            from tools import invoice_mail
+
+            raw = invoice_mail.invoice_email(inv, data_dir=self.settings.data_dir)
+            st_, r = self.call("POST", "/ingest", invoice_mail.ingest_body(raw, iso(self.now)), "ingest")
+            assert st_ == 201, r
+            inv = invoice_mail.cite(inv, raw, r["email_id"])
         return self.call("POST", "/proposals", {"invoice": inv, "hints": []}, "tools")
 
     # -- inspection ------------------------------------------------------------------------------------------
@@ -329,10 +339,14 @@ def _scenario4(w: World) -> dict[str, Any]:
     reg = w.store.get("registry", {"vendor_id": ACME})
     assert reg["iban"] == NEW_IBAN and reg["iban_history"][-1]["change_id"] == cid
     assert w.store.get("registry", {"vendor_id": "registry#meta"})["registry_version"] == meta0 + 1
-    # a new proposal for ACME pays the NEW IBAN
+    # a new proposal for ACME, citing its own DKIM-signed invoice email, pays the NEW IBAN (the registry's, never the
+    # document's: tools.invoice_mail renders data/vendors.json, i.e. the old account, into the ISDOC; F-AMOUNT-DOC
+    # compares amount / vs / due / invoice_no / ICO, and the paid IBAN always comes from the registry, P3)
     m = w.mandate()
-    st_, p = w.propose("acme_fv-2026-0412", with_email=False, invoice_no="FV-2026-0501", amount_minor=1_000_000)
+    st_, p = w.propose("acme_fv-2026-0412", with_email=False, fresh_email=True, invoice_no="FV-2026-0501",
+                       amount_minor=1_000_000)
     assert st_ == 201, p
+    assert _facts(p["proposal"]["facts"])["F-AMOUNT-DOC"] == ("INFO", "AMOUNT OK DOC"), p["proposal"]["facts"]
     # the fresh IBAN is WARN F-FIRSTSEEN -> exact-sign (I-WARN); the PAY challenge shows the NEW IBAN
     assert p["decision"]["decision"] == "challenge" and p["decision"]["rule_ids"] == ["F-FIRSTSEEN", "I-WARN"], p
     assert "CZ20 0300" in p["decision"]["challenge"]["text"]

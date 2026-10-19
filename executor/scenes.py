@@ -33,6 +33,7 @@ from executor.e2e import _sig
 
 T0 = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
 LOOKALIKE_EMAIL = "eml_1db5179453419d34"  # 04_bec_lookalike_acme-cz.eml
+LOOKALIKE_DOC = "doc_cdd8cf50ad9d064f"  # its only document: the text/plain body (no invoice attachment)
 TAKEOVER_EMAIL = "eml_f99592394de353a6"  # 05_takeover_acme_real_domain.eml
 LEGIT_CHANGE_EMAIL = "eml_77151c4c0e6a1141"  # 08_acme_change_legit.eml
 FRAUD_IBAN = "LT483999000000001234"  # fictitious LT EMI (CONTRACTS §1)
@@ -176,6 +177,17 @@ def _blockers(change: dict) -> list[str]:
     return [f"{f['id']} {f['display_line']}" for f in change["facts"] if f["kind"] == "F" and f["severity"] == "BLOCK"]
 
 
+def cited(env: DemoEnv, invoice: dict) -> dict:
+    """`invoice` citing a real source document ("no source document, no autopay", F-AMOUNT-DOC / F-DKIM): ingest
+    a DKIM-signed invoice email from the vendor's registered domain (tools/invoice_mail.py) as principal "ingest"
+    (on AWS the airgap-ingest role) and cite it (email_id + invoice_ref = the ISDOC attachment)."""
+    from tools import invoice_mail
+
+    raw = invoice_mail.invoice_email(invoice, data_dir=getattr(env.settings, "data_dir", None) or "data")
+    st, r = env.call("POST", "/ingest", invoice_mail.ingest_body(raw), "ingest")
+    return invoice_mail.cite(invoice, raw, _ok(st, r, 201)["email_id"])
+
+
 def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> dict:
     """Lookalike BEC + escalation + exfil. Raises AssertionError on any deviation."""
     env = env or DemoEnv()
@@ -192,14 +204,16 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
     out["change"] = {"id": ch["change_id"], "state": ch["state"], "rule_ids": r["decision"]["rule_ids"]}
     log(f"[S2] change {ch['change_id']} acme-cz.com -> {FRAUD_IBAN}: REJECTED at creation, no challenge "
         f"(device stays dark)\n     BLOCK: {', '.join(_blockers(ch))}")
-    # 2. a payment proposal citing the lookalike email is denied (P3: there is no IBAN to inject anyway)
+    # 2. a payment proposal citing the lookalike email (and its only document) is denied by F-DOMAIN (P3: there is
+    #    no IBAN to inject anyway)
     st, r = env.call("POST", "/proposals", {"invoice": {
-        "vendor_id": ACME, "invoice_no": "FV-2026-0999", "invoice_ref": "doc_0000000000000bec",
+        "vendor_id": ACME, "invoice_no": "FV-2026-0999", "invoice_ref": LOOKALIKE_DOC,
         "issue_date": env.now.strftime("%Y-%m-%d"), "amount_minor": 4_890_000, "currency": "CZK",
         "reason_code": "DUE", "email_id": LOOKALIKE_EMAIL}, "hints": [{"source": "agent", "text": "pay today"}]},
         "tools")
     r = _ok(st, r, 201)
     assert r["decision"]["decision"] == "deny" and "challenge" not in r["decision"], r["decision"]
+    assert "F-DOMAIN" in r["decision"]["rule_ids"], r["decision"]["rule_ids"]
     out["proposal"] = {"id": r["proposal"]["proposal_id"], "rule_ids": r["decision"]["rule_ids"]}
     log(f"[S2] proposal {r['proposal']['proposal_id']} from the lookalike email -> deny {r['decision']['rule_ids']}")
     # 3. escalation attempts
@@ -215,10 +229,10 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
         st, r = env.call("POST", "/signatures", {"nonce": "00000000", "role": "clerk", "sig": "0x" + "00" * 65},
                          "agent")
         esc["agent->/signatures"] = _bad(st, r, "caller_not_allowed")["error"]
-    st, r = env.call("POST", "/proposals", {"invoice": {
-        "vendor_id": "ven_99887762", "invoice_no": "GT-26-0201", "invoice_ref": "doc_00000000000000c2",
+    st, r = env.call("POST", "/proposals", {"invoice": cited(env, {
+        "vendor_id": "ven_99887762", "invoice_no": "GT-26-0201",
         "issue_date": env.now.strftime("%Y-%m-%d"), "amount_minor": 9_120_000, "currency": "CZK",
-        "reason_code": "DUE"}, "hints": []}, "tools")  # over the cap; Gamma is not paid in S1 (no I-DUP / I-SPLIT)
+        "reason_code": "DUE"}), "hints": []}, "tools")  # over the cap; Gamma is not paid in S1 (no I-DUP / I-SPLIT)
     dec = _ok(st, r, 201)["decision"]
     assert dec["decision"] == "challenge", f"expected an exact-sign challenge, got {dec['decision']} {dec['rule_ids']}"
     pay = dec["challenge"]

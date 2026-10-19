@@ -134,9 +134,12 @@ class ExecutorGate:
         seed.enroll_signer(self.store, self.clerk.address, "clerk", device="GENUINE")
         seed.enroll_signer(self.store, self.treasury.address, "treasury", device="EMULATOR")
         self._mandate()
+        # Prior payments are paid history: each cites its own real source email (tools.invoice_mail, DKIM-signed from
+        # the vendor's registered domain), so it is allowed under the mandate and F-DUP sees it later.
         for p in [t for t in self.w.ledger if t.get("prior")]:
             self._post_proposal({"vendor_id": p["vendor_id"], "invoice_no": p["invoice_no"],
-                                 "amount_minor": p["amount_minor"], "vs": p.get("vs", "")}, record=False)
+                                 "amount_minor": p["amount_minor"], "vs": p.get("vs", "")}, record=False,
+                                cite_source=True)
 
     # ------------------------------------------------------------------ plumbing
     def call(self, method: str, path: str, body: Any = None, principal: str = "host") -> tuple[int, Any]:
@@ -166,7 +169,18 @@ class ExecutorGate:
         raise AssertionError("mandate not ACTIVE")
 
     # ------------------------------------------------------------------ proposals
-    def _post_proposal(self, args: dict[str, Any], *, record: bool = True) -> dict[str, Any]:
+    def _cite_source(self, inv: dict[str, Any]) -> dict[str, Any]:
+        """Ingest a DKIM-signed invoice email carrying exactly `inv` (tools.invoice_mail) and cite it. Only for the
+        world's paid history: an agent proposal cites only what the agent read (_source), never a made-up email."""
+        from tools import invoice_mail
+
+        raw = invoice_mail.invoice_email(inv, data_dir=self.settings.data_dir)
+        st, r = self.call("POST", "/ingest", invoice_mail.ingest_body(raw, _iso(NOW - timedelta(days=4))),
+                          principal="ingest")
+        assert st == 201, r
+        return invoice_mail.cite(inv, raw, r["email_id"])
+
+    def _post_proposal(self, args: dict[str, Any], *, record: bool = True, cite_source: bool = False) -> dict[str, Any]:
         email_id, doc_ref = self._source(args)
         inv = {"vendor_id": str(args.get("vendor_id", "")), "invoice_no": str(args.get("invoice_no") or "N/A"),
                "invoice_ref": doc_ref or "doc_" + "0" * 16, "issue_date": "2026-10-15",
@@ -177,6 +191,8 @@ class ExecutorGate:
             inv["vs"] = vs
         if email_id:
             inv["email_id"] = email_id
+        elif cite_source:
+            inv = self._cite_source(inv)
         hints = [{"source": "agent", "text": str(h.get("text", ""))[:200]} for h in args.get("hints") or []
                  if isinstance(h, dict)]
         st, r = self.call("POST", "/proposals", {"invoice": inv, "hints": hints}, principal="tools")

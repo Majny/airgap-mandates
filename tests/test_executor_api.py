@@ -237,3 +237,19 @@ def test_query_string_in_path():
     st, r = h.call("GET", "/ledger?vendor_id=ven_87654321")
     assert st == 200 and r["txs"] == []
     assert len(h.call("GET", "/ledger?vendor_id=ven_12345678")[1]["txs"]) == 1
+
+
+def test_proposal_without_source_email_is_denied_without_challenge():
+    """FACTS-1 (no source document, no autopay): the same legit invoice is allowed when it cites its DKIM-signed
+    source email and denied (no device challenge) when it cites none, even under an active mandate."""
+    h = Harness()
+    h.mandate()
+    st, r = h.propose(1_000_000, no="FV-NODOC", cite=False)
+    assert st == 201 and r["decision"]["decision"] == "deny" and "challenge" not in r["decision"]
+    assert {"F-AMOUNT-DOC", "F-DKIM"} <= set(r["decision"]["rule_ids"]) and r["tx"] is None
+    lines = {f["id"]: f["display_line"] for f in r["decision"]["facts"] if f["severity"] == "BLOCK"}
+    assert lines == {"F-DKIM": "DKIM FAIL", "F-AMOUNT-DOC": "AMOUNT DOC N/A"}
+    st, r = h.propose(1_000_000, no="FV-DOC", issue="2026-10-16")
+    assert st == 201 and r["decision"]["decision"] == "allow", r["decision"]
+    doc = next(f for f in r["decision"]["facts"] if f["id"] == "F-AMOUNT-DOC")
+    assert (doc["severity"], doc["display_line"]) == ("INFO", "AMOUNT OK DOC")
