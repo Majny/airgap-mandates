@@ -71,7 +71,7 @@ def aws_settings() -> Any:
                               "AIRGAP_CHECKPOINT_MAX_SECONDS": "1000000000"})
 
 
-def seed(*, fallback_clerk: bool = False) -> tuple[Any, Any]:
+def seed(*, fallback_clerk: bool = False, stage: bool = False) -> tuple[Any, Any]:
     """Registry (vendors.json + issuer pins), enrolled signers and inbox via WS-D's tools.seed_data, then the two
     e2e software signer keys (enroll leaf labelled 'software key, aws e2e')."""
     from executor.store import get_store
@@ -105,7 +105,8 @@ def seed(*, fallback_clerk: bool = False) -> tuple[Any, Any]:
         if fallback_clerk:
             seed_data.seed_signers = orig
     clerk, treasury = Account.from_key(keys["clerk"]), Account.from_key(keys["treasury"])
-    enroll_software_keys(st, s, clerk, treasury)
+    if not stage:  # stage: only the enrollment.json devices may appear as approvers in the sealed bundle
+        enroll_software_keys(st, s, clerk, treasury)
     return clerk, treasury
 
 
