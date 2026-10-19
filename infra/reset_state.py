@@ -58,21 +58,6 @@ def reset_w2() -> None:
         raise SystemExit(f"W2 reset failed: {r.get('StandardErrorContent', '')[:300]}")
 
 
-def activate_fallback_clerk(st, settings) -> None:
-    """Re-enrol the inactive EMULATOR clerk(s) of data/enrollment.json as active: a new, logged enroll leaf."""
-    import json
-    from pathlib import Path
-
-    from executor.store import signers
-
-    rows = json.loads(Path("data/enrollment.json").read_text()).get("signers", [])
-    for row in rows:
-        if row.get("role") == "clerk" and row.get("device") == "EMULATOR" and not row.get("active", True):
-            signers.enroll(st, {**{k: v for k, v in row.items() if k not in ("ceremony", "leaf")}, "active": True},
-                           settings=settings)
-            print("fallback clerk activated:", row["address"])
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--yes", action="store_true")
@@ -103,11 +88,9 @@ def main() -> None:
         from executor.store import get_store
         from infra.aws_e2e import aws_settings, seed
 
-        clerk, treasury = seed()
+        clerk, treasury = seed(fallback_clerk=a.fallback_clerk)
         print("re-seeded registry; signers", clerk.address, treasury.address)
         st = get_store(aws_settings())
-        if a.fallback_clerk:
-            activate_fallback_clerk(st, aws_settings())
         reset_w2()
         size = int((st.get("audit", {"log_id": "head#audit", "seq": 0}) or {}).get("next_seq", 0))
         stale = [c for c in st.query("checkpoints", ("log_id", "audit")) if int(c.get("size", 0)) > size]
