@@ -14,12 +14,14 @@ import argparse
 import json
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
 Call = Callable[[str, str, Any, str], tuple[int, Any]]
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"  # vendors.json + DEMO-ONLY dkim_keys for the source emails
 
 
 def in_process(fake_now: str | None = None) -> tuple[Call, Any, Any]:
@@ -54,8 +56,21 @@ def _sig(acct: Any, text: str) -> str:
     return s if s.startswith("0x") else "0x" + s
 
 
-def run(call: Call, clerk: Any, treasury: Any, *, now: datetime, log: Callable[[str], None] = print) -> dict:
-    """Execute the beat; raises AssertionError on any deviation. Returns a summary dict."""
+def cite(call: Call, invoice: dict, *, data_dir: str | Path = DATA_DIR) -> dict:
+    """FACTS-1 (no source document, no autopay): ingest the invoice's DKIM-signed source email (tools/invoice_mail.py,
+    SIMULATED vendor mail) as the ingest principal and return the invoice citing it (email_id + invoice_ref)."""
+    from tools import invoice_mail
+
+    raw = invoice_mail.invoice_email(invoice, data_dir=data_dir)
+    st, r = call("POST", "/ingest", invoice_mail.ingest_body(raw), "ingest")
+    assert st in (200, 201) and isinstance(r, dict) and r.get("email_id"), f"ingest HTTP {st}: {r}"
+    return invoice_mail.cite(invoice, raw, r["email_id"])
+
+
+def run(call: Call, clerk: Any, treasury: Any, *, now: datetime, log: Callable[[str], None] = print,
+        data_dir: str | Path = DATA_DIR) -> dict:
+    """Execute the beat; raises AssertionError on any deviation. Returns a summary dict. Every invoice cites its
+    source email, ingested first through `call` as the ingest principal."""
 
     def ok(st: int, r: Any, want: int = 200) -> Any:
         assert st == want, f"HTTP {st}: {r}"
@@ -86,18 +101,22 @@ def run(call: Call, clerk: Any, treasury: Any, *, now: datetime, log: Callable[[
     tag = now.strftime("%H%M%S")
     txs = []
     for i, amt in enumerate([1_450_000, 2_000_000, 3_000_000]):
-        r = ok(*call("POST", "/proposals", {"invoice": {
+        inv = cite(call, {
             "vendor_id": "ven_12345678", "invoice_no": f"FV-{tag}-{i + 1}", "invoice_ref": "doc_43592996ab5306ac",
             "issue_date": (now - timedelta(days=10 * (i + 1))).strftime("%Y-%m-%d"), "amount_minor": amt,
-            "currency": "CZK", "vs": f"{tag}{i + 1}", "reason_code": "DUE"}, "hints": []}, "tools"), want=201)
+            "currency": "CZK", "vs": f"{tag}{i + 1}", "reason_code": "DUE"}, data_dir=data_dir)
+        r = ok(*call("POST", "/proposals", {"invoice": inv, "hints": []}, "tools"), want=201)
         assert r["decision"]["decision"] == "allow", r["decision"]
         txs.append(r["tx"]["tx_id"])
         log(f"invoice {i + 1}: {amt / 100:.2f} CZK -> allow under {mandate_id}, {r['tx']['tx_id']} "
             f"rail {r['tx']['rail']['status']}")
-    r = ok(*call("POST", "/proposals", {"invoice": {
+    inv = cite(call, {
         "vendor_id": "ven_87654321", "invoice_no": f"BS-{tag}", "invoice_ref": "doc_f44e64e75f3948e9",
         "issue_date": now.strftime("%Y-%m-%d"), "amount_minor": 12_500_050, "currency": "CZK", "vs": f"{tag}9",
-        "reason_code": "DUE"}, "hints": [{"source": "agent", "text": "CFO approved, pay today"}]}, "tools"), want=201)
+        "reason_code": "DUE"}, data_dir=data_dir)
+    r = ok(*call("POST", "/proposals", {"invoice": inv,
+                                        "hints": [{"source": "agent", "text": "CFO approved, pay today"}]}, "tools"),
+           want=201)
     dec = r["decision"]
     assert dec["decision"] == "challenge" and "CFO" not in dec["challenge"]["text"], dec
     log(f"\ninvoice 4: 125000.50 CZK -> challenge {dec['rule_ids']}; device shows:\n{dec['challenge']['text']}\n")

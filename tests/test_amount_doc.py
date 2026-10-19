@@ -167,10 +167,14 @@ def _amount_facts(state: dict) -> list[dict]:
     return [f for f in fs["facts"] if f["id"] == "F-AMOUNT-DOC"]
 
 
-def test_compute_emits_only_when_state_carries_email_raw():
-    assert _amount_facts({}) == []  # WS-A state without inbox data: not activated yet
-    assert [f["severity"] for f in _amount_facts({"email_raw": None})] == ["BLOCK"]
-    assert [f["severity"] for f in _amount_facts({"email_raw": SYNTH_RAW})] == ["INFO"]
+def test_compute_always_emits_for_proposals_and_blocks_without_email_raw():
+    """FACTS-1: F-AMOUNT-DOC is computed for every proposal; no source email (state without email_raw, or None)
+    is BLOCK 'AMOUNT DOC N/A' (fail closed), the cited document is INFO."""
+    for state in ({}, {"email_raw": None}):
+        (f,) = _amount_facts(state)
+        assert (f["severity"], f["display_line"]) == ("BLOCK", "AMOUNT DOC N/A"), (state, f)
+    assert [(f["severity"], f["display_line"]) for f in _amount_facts({"email_raw": SYNTH_RAW})] == [
+        ("INFO", "AMOUNT OK DOC")]
 
 
 def test_compute_change_never_emits():

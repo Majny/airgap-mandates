@@ -54,10 +54,28 @@ class Harness:
         return r["mandate"]
 
     def propose(self, amount: int, *, vendor: str = "ven_12345678", no: str = "FV-1", issue: str = "2026-10-15",
-                hints: list | None = None) -> tuple[int, Any]:
+                hints: list | None = None, cite: bool = True) -> tuple[int, Any]:
+        """POST /proposals as tools. By default the invoice cites a DKIM-signed source email from the vendor's
+        registered domain carrying exactly this invoice (FACTS-1: no source document, no autopay); cite=False, or
+        a vendor that is not registered, posts it without one."""
         inv = {"vendor_id": vendor, "invoice_no": no, "invoice_ref": "doc_43592996ab5306ac", "issue_date": issue,
                "amount_minor": amount, "currency": "CZK", "vs": "20261019", "reason_code": "DUE"}
+        if cite:
+            inv = self.cited(inv)
         return self.call("POST", "/proposals", {"invoice": inv, "hints": hints or []}, "tools")
+
+    def cited(self, invoice: dict) -> dict:
+        """`invoice` + email_id/invoice_ref of its ingested source email (tools/invoice_mail.py); unchanged for a
+        vendor that has no registered domain/DKIM key (e.g. an unknown vendor_id, which 404s anyway)."""
+        from tools import invoice_mail
+
+        try:
+            raw = invoice_mail.invoice_email(invoice, data_dir=self.settings.data_dir)
+        except KeyError:
+            return invoice
+        st, r = self.call("POST", "/ingest", invoice_mail.ingest_body(raw), "ingest")
+        assert st == 201, r
+        return invoice_mail.cite(invoice, raw, r["email_id"])
 
     def leaves(self) -> list[dict]:
         import json
