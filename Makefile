@@ -62,10 +62,10 @@ teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
 	infra/teardown.sh
 
 agent-s1:  ## agent beat S1 on AWS (agent λ in the no-NAT VPC, quarantined, Sonnet): 3 legit invoices
-	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s1
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s1 --url $(DEMO_URL)
 
 agent-s2:  ## agent beat S2 on AWS: lookalike BEC email (expect no payment)
-	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s2
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s2 --url $(DEMO_URL)
 
 checkpoint-now:  ## invoke airgap-checkpointer once (signed checkpoint + W1 cosign now, for the demo beat)
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} aws lambda invoke --region eu-central-1 --function-name airgap-checkpointer \

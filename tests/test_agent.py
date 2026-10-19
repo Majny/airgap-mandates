@@ -242,3 +242,17 @@ def test_stage_cli_one_line_per_proposal_and_json_records():
     recs = proposals(out)
     assert [(r["proposal_id"], r["decision"]) for r in recs] == [("prp_1", "allow"), ("prp_2", "challenge")]
     assert len(scenario_emails("s1")) >= 3 and len(scenario_emails("s2")) == 1
+
+
+def test_stage_preflight_flags_a_stale_manifest(monkeypatch, tmp_path):
+    import json as _json
+
+    import agent.__main__ as cli
+
+    stale = [r for r in _json.loads(cli.MANIFEST.read_text()) if r["scenario"] != "overcap_invoice"]
+    p = tmp_path / "manifest.json"
+    p.write_text(_json.dumps(stale))
+    monkeypatch.setattr(cli, "MANIFEST", p)
+    assert any("overcap_invoice" in x for x in cli.preflight("s1", None))
+    monkeypatch.undo()
+    assert cli.preflight("s1", None) == []
