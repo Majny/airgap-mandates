@@ -21,6 +21,7 @@ from executor.change import ports
 from executor.config import iso
 from executor.errors import HTTP_STATUS, ApiError, ErrorCode
 from executor.facts import compute as _compute
+from executor.facts import inbox as _inbox
 from executor.models import (TERMINAL_STATES, AuditEventType, Change, ChangeEvent, ChangeEventKind, ChangeState,
                              Decision, DeviceAuthenticity, Fact, FactSet)
 from executor.store import Op, TxConflict, UpdateIf
@@ -197,25 +198,17 @@ def _attest_results(change_id: str, store: Any, revoked: set[str] | None = None)
             for r in store.query("attestations", ("change_id", change_id))]
 
 
-def _domain_first_seen(domain: str, store: Any) -> str | None:
-    """First time this sender domain reached OUR inbox (not WHOIS)."""
-    seen = [r["received_at"] for r in store.scan("inbox") if (r.get("from_domain") or "").lower() == domain]
-    return min(seen) if seen else None
-
-
 def compute_change_facts(req: dict[str, Any], vendor: dict[str, Any], *, store: Any, settings: Any, now: datetime,
                          change: dict[str, Any] | None = None) -> FactSet:
     """Build the compute() state for a payee change (CONTRACTS §2.1) and return its FactSet. Before the change
     exists (change=None) F-ATTEST / F-CALLBACK come out BLOCK (ATT 0/3, CALLBACK MISSING)."""
-    email = store.get("inbox", {"email_id": req["email_id"]}) if req.get("email_id") else None
-    domain = (email or {}).get("from_domain", "").lower()
     in_network = bool(vendor.get("in_network"))
     provisional = {"in_network": in_network, "break_glass": False,
                    "callback": {"status": "none" if in_network else "pending", "code_exp": None, "attempts": 0}}
     subject = {"kind": "change", "subject_id": (change or {}).get("change_id", ""), "new_iban": req["new_iban"],
                "email_id": req.get("email_id"), "hints": req.get("hints") or []}
     state = {
-        "payee": vendor, "email": email, "domain_first_seen": _domain_first_seen(domain, store) if domain else None,
+        "payee": vendor, **_inbox.email_state(req.get("email_id"), store=store),
         "change": change or provisional,
         "attest_results": _attest_results(change["change_id"], store, _revoked(settings)) if change else [],
         "tool_log": [], "data_dir": settings.data_dir,
@@ -245,11 +238,17 @@ def _old_since(vendor: dict[str, Any]) -> str:
 def create(req: dict[str, Any], facts: FactSet, vendor: dict[str, Any], *, store: Any, settings: Any,
            now: datetime) -> Change:
     """POST /changes: initial state REJECTED (any F BLOCK) | PENDING_ATTEST (in_network) | CALLBACK_PENDING;
-    tripwire to the registered contact on every create; change_event + state_transition leaves."""
+    tripwire to the registered contact on every create; change_event + state_transition leaves.
+
+    The caller's `facts` are recomputed here with the full store-backed state (inbox email, first-seen), so a
+    caller that passed a thinner state can never skip F-DOMAIN / F-DKIM (fail closed). H facts are kept."""
     if req.get("vendor_id", vendor["vendor_id"]) != vendor["vendor_id"]:
         raise ApiError(ErrorCode.INVALID_REQUEST, "vendor_id does not match the registry row")
     if req["new_iban"] == vendor["iban"]:
         raise ApiError(ErrorCode.INVALID_REQUEST, "new_iban is already the active IBAN")
+    full = compute_change_facts(req, vendor, store=store, settings=settings, now=now)
+    facts = {**full, "facts": [f for f in full["facts"] if f["kind"] == "F"]
+             + [f for f in facts["facts"] if f["kind"] == "H"]}
     n = store.increment("counters", {"name": "change_no"}, "value")
     change_id = f"chg_{n}"
     in_network = bool(vendor.get("in_network"))

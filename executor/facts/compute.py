@@ -135,7 +135,10 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     add(warnlist.warnlist_fact(name, [payee.get("domain", "")], mr_path=mr_path), "mostlyright")
     add(sanction.sanction_fact(name, ico, mr_path=mr_path), "mostlyright")
     add(vop.vop_fact(iban, name, vop_path=_util.snapshot_path(state, "vop")), "vop")
-    add(psp.psp_fact(iban, mr_path=mr_path, bank_codes_path=_util.snapshot_path(state, "bank_codes")), "mostlyright")
+    if kind == "change":
+        # Account binding: a proposal pays the registry's ACTIVE IBAN, which already passed the change flow (2/2).
+        add(psp.psp_fact(iban, mr_path=mr_path, bank_codes_path=_util.snapshot_path(state, "bank_codes")),
+            "mostlyright")
     add(vat.vat_fact(ico, iban, adis_path=_util.snapshot_path(state, "adis")), "adis")
     add(iban_bank.bank_fact(iban, payee.get("country", "CZ"),
                             bank_codes_path=_util.snapshot_path(state, "bank_codes")), "bank_codes")
@@ -143,6 +146,10 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     add(anom.anom_fact(subject, state.get("tool_log") or [], payee=payee, mandate=state.get("mandate"), now=now),
         "toollog")
     add(_translit_fact(name))
+    if kind == "proposal":
+        from executor.policy.facts_wsa import wsa_facts  # F-MANDATE, F-DUP, F-SPLIT, F-Z (WS-A)
+
+        facts.extend(wsa_facts(subject, state, now))
     facts.extend(state.get("extra_facts") or [])
 
     ordered = order_facts(facts + hint_facts(subject.get("hints") or []))

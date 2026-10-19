@@ -273,7 +273,7 @@ def test_real_demo_vendors_clear(name: str, ico: str, domain: str) -> None:
 @pytest.mark.parametrize("iban,line", [
     ("CZ7501000000001155443322", "PSP INST VOP OK"),  # 0100: SCT Inst + VoP ready
     ("CZ6508000000192000145399", "PSP NO VOP"),  # 0800: SCT Inst (ready date after the snapshot), not in VoP
-    ("CZ6203000000000123456789", "PSP UNKNOWN"),  # 0300: BIC absent from the EPC register in this snapshot
+    ("CZ6203000000000123456789", "PSP NO VOP"),  # 0300: not in the EPC register; licensed via national_id
     ("LT483999000000001234", "PSP UNKNOWN"),  # 39990: no BIC, absent
 ])
 def test_real_psp(iban: str, line: str) -> None:
