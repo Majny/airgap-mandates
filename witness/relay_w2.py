@@ -20,6 +20,7 @@ import urllib.request
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from executor.audit import checkpoint as cp
 from executor.audit import merkle
@@ -204,6 +205,86 @@ def relay(*, executor_url: str, w2_url: str, log_id: str = "audit", old_size: in
         result.upload_status = post(f"{base}/checkpoint/cosignature?{q22}",
                                      "".join(c + "\n" for c in cosigs).encode(), timeout)[0]
     return result
+
+
+def _w2_lines(note: str, w2_vkey: str) -> list[str]:
+    """Lines of `note` that verify as W2 cosignatures over its body."""
+    name = cp.parse_vkey(w2_vkey)["name"]
+    body = note.split("\n\n", 1)[0] + "\n"
+    out = []
+    for line in (x for x in note.splitlines() if x.startswith(f"{DASH} {name} ")):
+        try:
+            if name in cp.verify_note(body + "\n" + line + "\n", [w2_vkey])["verified"]:
+                out.append(line)
+        except cp.NoteError:
+            pass
+    return out
+
+
+def relay_store(log_id: str = "audit", *, store: Any, settings: Any, w2_post: Post, w2_vkey: str,
+                w2_url: str = "http://w2", timeout: float = 30.0, limit: int = 5) -> dict[str, Any]:
+    """Catch-up relay next to the log (checkpointer λ, after each tick): send every stored checkpoint W2 has not
+    cosigned yet to W2, oldest first (W2 only moves forward, so a skipped size can never be cosigned later), and append
+    W2's verified lines to the stored note (checkpoint.add_cosignature, the same check as row 22b). At most `limit`
+    checkpoints per call. Returns {"cosigned": [sizes], "skipped": [sizes], "w2_size": n, "error": str | None}."""
+    from executor.audit import log as auditlog
+
+    rows = sorted(store.query("checkpoints", auditlog.checkpoint_pk(log_id)), key=lambda r: int(r["size"]))
+    done = [int(r["size"]) for r in rows if _w2_lines(r["note"], w2_vkey)]
+    old = max(done, default=0)
+    todo = [r for r in rows if int(r["size"]) > old and int(r["size"]) not in done][:limit]
+    out: dict[str, Any] = {"cosigned": [], "skipped": [], "w2_size": old, "error": None}
+    if not todo:
+        return out
+    hashes = auditlog.leaf_hashes(log_id, store=store)
+    for row in todo:
+        size = int(row["size"])
+        _, _, root, note = _log_signed(row["note"])
+        if size > len(hashes) or merkle.root(hashes[:size]) != root:
+            out["error"] = f"stored leaves do not reproduce the checkpoint root at size {size}"
+            break
+        for _ in range(2):
+            proof = merkle.consistency_proof(old, hashes[:size]) if 0 < old <= size else []
+            status, ctype, resp = w2_post(w2_url.rstrip("/") + "/add-checkpoint", _request(old, proof, note), timeout)
+            text = resp.decode("utf-8", "replace")
+            if status == 409 and ctype.startswith(SIZE_CT) and text.strip().isdigit() and int(text) != old:
+                old = int(text)
+                if old > size:
+                    break
+                continue  # old == size is fine: W2 re-cosigns the same tree (empty proof)
+            break
+        out["w2_size"] = max(old, out["w2_size"])
+        if status == 409 and old > size:  # W2 is already past this size: it can never cosign it
+            out["skipped"].append(size)
+            continue
+        if status != 200:
+            out["error"] = f"W2 {status} at size {size}: {text.strip()[:200]}"
+            break
+        lines = _w2_lines(note + text, w2_vkey)
+        st, _, msg = cp.add_cosignature(log_id, size, "".join(x + "\n" for x in lines).encode(), store=store,
+                                        settings=settings, env={"AIRGAP_W2_VKEY": w2_vkey})
+        if st != 200:
+            out["error"] = f"W2 line(s) at size {size} rejected: {st} {msg.decode('utf-8', 'replace').strip()}"
+            break
+        out["cosigned"].append(size)
+        old = out["w2_size"] = size
+    return out
+
+
+def after_tick(log_id: str = "audit", *, store: Any, settings: Any, env: dict[str, str] | None = None
+               ) -> dict[str, Any] | None:
+    """Hook for the checkpointer λ right after log.tick: relay pending checkpoints to W2 over SSM. Off (None) unless
+    AIRGAP_W2_INSTANCE_ID and AIRGAP_W2_VKEY are set. Never raises: a W2 outage must not stop checkpointing (the
+    checkpoints stay log + W1 and are caught up on the next tick)."""
+    env = os.environ if env is None else env
+    instance, w2_vkey = env.get("AIRGAP_W2_INSTANCE_ID", "").strip(), env.get("AIRGAP_W2_VKEY", "").strip()
+    if not instance or not w2_vkey:
+        return None
+    try:
+        return relay_store(log_id, store=store, settings=settings, w2_vkey=w2_vkey,
+                           w2_post=ssm_post(instance, getattr(settings, "aws_region", None) or "eu-central-1"))
+    except Exception as exc:  # noqa: BLE001 - reported, never fatal for the tick
+        return {"cosigned": [], "skipped": [], "w2_size": None, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def relay_once(*, executor_url: str, w2_url: str) -> int:

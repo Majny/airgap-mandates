@@ -75,6 +75,11 @@ AIRGAP_W2_VKEY='airgap.example/demo/w2+d10d72b1+BMkDZNJkVEhYYAhvvLF7aV31FiFFRPg2
 - `--w2-ssm` delivers the add-checkpoint request with SSM RunCommand (`curl` to 127.0.0.1:7380 on the instance), so
   no session-manager plugin and no open port are needed. It uses the operator's own credentials, not the relay role.
   With the plugin, `infra/w2_ctl.sh forward` + `--w2-url http://127.0.0.1:7380` works too.
+- **Every checkpoint (checkpointer hook).** `witness.relay_w2.after_tick(log_id, store=, settings=)` runs in the
+  checkpointer λ right after `log.tick`: it sends every stored checkpoint W2 has not cosigned yet, oldest first, over
+  SSM, and appends W2's verified lines to the stored note (`checkpoint.add_cosignature`, the row 22b check). Off unless
+  `AIRGAP_W2_INSTANCE_ID` and `AIRGAP_W2_VKEY` are set; never raises (a W2 outage leaves checkpoints log + W1, caught
+  up on the next tick). A size W2 has already passed can never be cosigned and is reported as `skipped`.
 - A demo reset (`infra/reset_state.py` empties W1's `witness_state`) must also reset W2's database, or W2 answers
   409 with the old, larger size and the relay reports `rollback_suspected` (exit 3). That is the correct behaviour
   of a real witness: an independent supervisor would never accept a reset log.
