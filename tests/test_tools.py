@@ -2,7 +2,7 @@
 import base64
 import hashlib
 
-from executor.tools import extract
+from executor.docs import extract
 from executor.tools.manifest import manifest_sha256
 from tests.test_contracts import validate
 from tests.wsa_helpers import Harness
