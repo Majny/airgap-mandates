@@ -1,0 +1,48 @@
+
+==================================================
+ 1/4 checkpoint note - stock Go sumdb/note
+==================================================
+noteverify binary not found at /Users/majny/Desktop/MyProjects/am-agent/.local/bin/noteverify
+build it BEFORE going offline: make offline-demo (or go build in tools/noteverify)
+
+  !!!!!!!!  FAIL  !!!!!!!!  1 checkpoint (noteverify missing)
+
+==================================================
+ 2/4 audit bundle - pinned keys, replay on
+==================================================
+keys pinned from trust-keys.json (shipped with the bundle;
+in real use the auditor gets them out of band, e.g. /health)
+RESULT: OK
+
+  ########  PASS  ########  2 bundle verifies
+
+==================================================
+ 3/4 payment receipt - pinned keys, matches bundle
+==================================================
+receipt: receipt.json  tx tx_44a3839c6bb2d7ca  seq 70  tree size 110: ok
+RESULT: OK
+
+  ########  PASS  ########  3 receipt verifies
+
+==================================================
+ 4/4 tamper one byte - must go RED
+==================================================
+edited: seq 70 amount_minor 3146000 -> 3146001
+bytes changed: 1
+RESULT: FAIL - 59 problem(s)
+  - seq 70: leaf hash mismatch (event bytes differ from the recorded 
+leaf_hash)
+  - seq 70: not covered by a witnessed checkpoint
+
+  ########  PASS  ########  4 tamper caught at seq 70
+
+==================================================
+ SUMMARY (s5)
+==================================================
+  FAIL  1 checkpoint (noteverify missing)
+  PASS  2 bundle verifies
+  PASS  3 receipt verifies
+  PASS  4 tamper caught at seq 70
+
+  !!!!  1 STEP(S) FAILED  !!!!
+

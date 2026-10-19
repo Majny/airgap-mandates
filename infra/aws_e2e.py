@@ -25,6 +25,16 @@ KEYS = Path(".local/aws_e2e_keys.json")
 _creds: dict[str, Credentials] = {}
 
 
+EXPECTED_ACCOUNT = "503002144042"  # the hackathon team account; destructive helpers refuse any other
+
+
+def require_team_account() -> None:
+    os.environ.setdefault("AWS_PROFILE", "hackathon")
+    acct = boto3.client("sts").get_caller_identity()["Account"]
+    if acct != EXPECTED_ACCOUNT:
+        raise SystemExit(f"refusing: credentials are for account {acct}, expected {EXPECTED_ACCOUNT}")
+
+
 def role_creds(who: str) -> Credentials:
     if who not in _creds:
         acct = boto3.client("sts").get_caller_identity()["Account"]
@@ -65,7 +75,6 @@ def seed() -> tuple[Any, Any]:
     """Registry (vendors.json + issuer pins), enrolled signers and inbox via WS-D's tools.seed_data, then the two
     e2e software signer keys (enroll leaf labelled 'software key, aws e2e')."""
     from executor.store import get_store
-    from executor.store import seed as seedmod
     from tools import seed_data
 
     keys = json.loads(KEYS.read_text()) if KEYS.exists() else {
@@ -76,9 +85,20 @@ def seed() -> tuple[Any, Any]:
     st = get_store(s)
     print("seed_data:", seed_data.seed(settings=s, store=st))
     clerk, treasury = Account.from_key(keys["clerk"]), Account.from_key(keys["treasury"])
-    seedmod.enroll_signer(st, clerk.address, "clerk", device="GENUINE", label="clerk (software key, aws e2e)", settings=s)
-    seedmod.enroll_signer(st, treasury.address, "treasury", label="treasury (software key, aws e2e)", settings=s)
+    enroll_software_keys(st, s, clerk, treasury)
     return clerk, treasury
+
+
+def enroll_software_keys(st: Any, s: Any, clerk: Any, treasury: Any) -> None:
+    """Honest enrol leaf for plain software keys: device EMULATOR (accepted by the demo profile only), no device
+    model / firmware / attestation, labelled as software keys in the signed log."""
+    from executor.store import signers
+
+    for acct, role in ((clerk, "clerk"), (treasury, "treasury")):
+        signers.enroll(st, {"address": acct.address, "role": role, "device": "EMULATOR",
+                            "label": f"{role} (SOFTWARE key, aws e2e; no device)", "device_model": None,
+                            "firmware_version": None, "derivation_path": None, "enroll_sig": "",
+                            "enrolled_at": "2026-10-19T12:00:00Z"}, settings=s)
 
 
 def main() -> None:
@@ -86,6 +106,7 @@ def main() -> None:
     ap.add_argument("--url", required=True)
     ap.add_argument("--seed", action="store_true")
     a = ap.parse_args()
+    require_team_account()
     from executor import e2e
 
     clerk, treasury = seed() if a.seed else (lambda k: (Account.from_key(k["clerk"]), Account.from_key(k["treasury"])))(

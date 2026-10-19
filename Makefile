@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight
+.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -60,6 +60,12 @@ deploy:  ## deploy to AWS eu-central-1 (the demo runs here; WS-E): build zip, cd
 
 teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
 	infra/teardown.sh
+
+agent-s1:  ## agent beat S1 on AWS (agent λ in the no-NAT VPC, quarantined, Sonnet): 3 legit invoices
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s1
+
+agent-s2:  ## agent beat S2 on AWS: lookalike BEC email (expect no payment)
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s2
 
 checkpoint-now:  ## invoke airgap-checkpointer once (signed checkpoint + W1 cosign now, for the demo beat)
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} aws lambda invoke --region eu-central-1 --function-name airgap-checkpointer \

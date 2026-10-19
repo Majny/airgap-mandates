@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/majny/Desktop/MyProjects/am-agent/demo/scene_s2.py", line 27, in <module>
+    print(json.dumps(run(), indent=1))
+                     ^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/demo/scene_s2.py", line 23, in run
+    return beat(AwsEnv(url or settings.executor_url), log, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/demo/scene_s2.py", line 14, in beat
+    return scenes.scene_s2(env, log, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/executor/scenes.py", line 222, in scene_s2
+    pay = _ok(st, r, 201)["decision"]["challenge"]
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+KeyError: 'challenge'
+[S2] change chg_1 acme-cz.com -> LT483999000000001234: REJECTED at creation, no challenge (device stays dark)
+     BLOCK: F-ATTEST ATT 0/3, F-DOMAIN DOMAIN LOOKALIKE, F-VOP VOP NMTC
+[S2] proposal prp_8 from the lookalike email -> deny ['F-AMOUNT-DOC', 'F-DOMAIN', 'F-DOMAIN-AGE', 'F-SPLIT', 'I-AMOUNT', 'I-BLOCK']
+make: *** [demo-s2] Error 1

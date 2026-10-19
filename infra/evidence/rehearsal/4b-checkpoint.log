@@ -1,0 +1,4 @@
+{"checkpoint": "airgap.example/demo/audit\n110\nAInMNNPmCHop9/kiTb3g0WcWyL8F/QM4Fwcf5F49Ce4=\npolicy sha256:3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd\ncode sha256:48ff916629c54e88ac3329f0c9d06df3d87a68e4bfaa7fe3f6465c2af297a4a8 pcr0 -\n\n— airgap.example/demo/audit BeOAlCVcN+5rjsrual6kJ3eWi0yyRrJhQJ0s/IsvSf1iFuEd3AjgXDdtFDasUqwzpZpLYwtqxlLt9HFMPfB5OeIUOwo=\n— airgap.example/demo/w1 ouRrogAAAABq1ifDznX4Is44POTEUSFJr/oY55sLpSuDpt0xLjajMmOgg2XxyNOHKj1y92nHdWpDDCUdkjsYdwcQKUoNyTeTEuTWCA==\n"}{
+    "StatusCode": 200,
+    "ExecutedVersion": "$LATEST"
+}

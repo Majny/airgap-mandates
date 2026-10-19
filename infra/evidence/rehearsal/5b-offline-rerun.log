@@ -1,0 +1,8 @@
+==================================================
+  PASS  1 checkpoint signed by the log
+  PASS  2 bundle verifies
+  PASS  3 receipt verifies
+  PASS  4 tamper caught at seq 70
+
+  ####  ALL PASS - verified offline  ####
+

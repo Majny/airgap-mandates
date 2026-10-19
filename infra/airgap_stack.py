@@ -28,6 +28,7 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
+from aws_cdk import aws_route53resolver as r53r
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
@@ -91,7 +92,6 @@ class AirgapStack(Stack):
         # ------------------------------------------------------------ roles
         lam = iam.ServicePrincipal("lambda.amazonaws.com")
         basic = iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
-        vpc_access = iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaVPCAccessExecutionRole")
 
         def role(name: str, by: iam.IPrincipal = lam, managed: list[iam.IManagedPolicy] | None = None) -> iam.Role:
             return iam.Role(self, f"R-{name}", role_name=PREFIX + name, assumed_by=by,
@@ -103,7 +103,7 @@ class AirgapStack(Stack):
         r_tools = role("tools", iam.CompositePrincipal(lam, human), [basic])
         r_ckpt = role("checkpointer")
         r_w1 = role("witness")
-        r_agent = role("agent", managed=[basic, vpc_access])
+        r_agent = role("agent", managed=[])  # scoped inline log + ENI statements below (no logs:* on *)
         r_host = role("host", human, [])
         r_auditor = role("auditor", human, [])
         r_ingest = role("ingest", human, [])
@@ -115,9 +115,9 @@ class AirgapStack(Stack):
         def ed_key(alias: str, signer: iam.Role, readers: list[iam.Role]) -> kms.Key:
             admin = iam.PolicyStatement(
                 sid="AccountAdministersOnly", principals=[iam.AccountRootPrincipal()], resources=["*"],
-                actions=["kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*", "kms:Put*", "kms:Update*",
-                         "kms:Revoke*", "kms:Disable*", "kms:Get*", "kms:Delete*", "kms:TagResource",
-                         "kms:UntagResource", "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion"])
+                actions=["kms:CreateAlias", "kms:Describe*", "kms:Enable*", "kms:List*", "kms:Put*", "kms:Update*",
+                         "kms:RevokeGrant", "kms:Disable*", "kms:Get*", "kms:DeleteAlias", "kms:TagResource",
+                         "kms:UntagResource", "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion"])  # no CreateGrant
             sign = iam.PolicyStatement(sid="SignerRoleOnly", principals=[iam.ArnPrincipal(signer.role_arn)],
                                        actions=["kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"], resources=["*"])
             read = iam.PolicyStatement(sid="Verifiers", principals=[iam.ArnPrincipal(r.role_arn) for r in readers],
@@ -162,11 +162,17 @@ class AirgapStack(Stack):
                                     environment={**base_env, **(env or {})},
                                     log_retention=logs.RetentionDays.ONE_WEEK, **extra)
 
-        f_exec = fn("executor", "executor.handler.lambda_handler", r_exec,
+        f_exec = fn("executor", "airgap_entry.handler", r_exec,
                     env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id,  # egress E-GUARDRAILS 2nd opinion
                          "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})  # GetPublicKey only (vkeys in /health, export)
-        f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1,
-                  env={"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""})
+        # AIRGAP_W1_LOG_VKEY: pinned log vkey, derived from KMS by infra/post_deploy.py and stored in cdk.context.json
+        # so a later deploy keeps it (an env var set out of band would be erased by every deploy)
+        w1_env = {"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""}
+        if ctx("w1_log_vkey"):
+            w1_env["AIRGAP_W1_LOG_VKEY"] = ctx("w1_log_vkey")
+        # unauthenticated route (C2SP: the request carries its own log signature) is throttled at the API stage
+        # (method_options below); no reserved concurrency: this account's pool is too small to carve a share out
+        f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1, env=w1_env)
         f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60,
                     env={"AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "10", "AIRGAP_CHECKPOINT_MAX_SECONDS": "30",
                          "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})
@@ -174,8 +180,10 @@ class AirgapStack(Stack):
         # ------------------------------------------------------------ regional API (IAM)
         api = apigw.RestApi(self, "Api", rest_api_name=f"{PREFIX}api",
                             endpoint_configuration=apigw.EndpointConfiguration(types=[apigw.EndpointType.REGIONAL]),
-                            deploy_options=apigw.StageOptions(stage_name="prod", throttling_rate_limit=50,
-                                                              throttling_burst_limit=100),
+                            deploy_options=apigw.StageOptions(
+                                stage_name="prod", throttling_rate_limit=50, throttling_burst_limit=100,
+                                method_options={"/witness/add-checkpoint/POST": apigw.MethodDeploymentOptions(
+                                    throttling_rate_limit=5, throttling_burst_limit=10)}),
                             default_method_options=apigw.MethodOptions(
                                 authorization_type=apigw.AuthorizationType.IAM))
         exec_int = apigw.LambdaIntegration(f_exec)
@@ -213,9 +221,37 @@ class AirgapStack(Stack):
                                                   subnets=isolated, security_groups=[sg_vpce], private_dns_enabled=True)
         vpce_api = vpc.add_interface_endpoint("ExecuteApi", service=ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
                                               subnets=isolated, security_groups=[sg_vpce], private_dns_enabled=True)
+        # Endpoint policies: without them the endpoints carry ANY principal to ANY API/model, e.g. a private API in an
+        # attacker's account (execute-api) or Bedrock with the attacker's own keys (bedrock-runtime) = exfiltration.
+        acct_only = {"StringEquals": {"aws:PrincipalAccount": self.account}}
+        vpce_api.add_to_policy(iam.PolicyStatement(
+            principals=[iam.AnyPrincipal()], actions=["execute-api:Invoke"], conditions=acct_only,
+            resources=[f"arn:aws:execute-api:{self.region}:{self.account}:*/prod/POST/tools/*"]))
+        vpce_bedrock.add_to_policy(iam.PolicyStatement(
+            principals=[iam.AnyPrincipal()], conditions=acct_only, resources=["*"],
+            actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:Converse",
+                     "bedrock:ConverseStream", "bedrock:ApplyGuardrail"]))
+        # DNS: the VPC resolver answers public names even without IGW/NAT, and security groups / Flow Logs do not see
+        # it (DNS tunnelling). DNS Firewall: only the two endpoint names resolve, everything else gets NXDOMAIN.
+        allow_dns = r53r.CfnFirewallDomainList(self, "DnsAllow", name=f"{PREFIX}agent-allow", domains=[
+            f"bedrock-runtime.{self.region}.amazonaws.com.", f"*.execute-api.{self.region}.amazonaws.com."])
+        block_dns = r53r.CfnFirewallDomainList(self, "DnsBlockAll", name=f"{PREFIX}agent-block-all", domains=["*"])
+        fw = r53r.CfnFirewallRuleGroup(self, "DnsFirewall", name=f"{PREFIX}agent-dns", firewall_rules=[
+            r53r.CfnFirewallRuleGroup.FirewallRuleProperty(
+                priority=100, action="ALLOW", firewall_domain_list_id=allow_dns.attr_id),
+            r53r.CfnFirewallRuleGroup.FirewallRuleProperty(
+                priority=200, action="BLOCK", block_response="NXDOMAIN", firewall_domain_list_id=block_dns.attr_id)])
+        r53r.CfnFirewallRuleGroupAssociation(self, "DnsFirewallAssoc", firewall_rule_group_id=fw.attr_id,
+                                             vpc_id=vpc.vpc_id, priority=101, name=f"{PREFIX}agent-dns")
+        dns_logs = logs.LogGroup(self, "DnsQueryLogs", log_group_name=f"/{PREFIX}agent/dns-queries",
+                                 retention=logs.RetentionDays.ONE_WEEK, removal_policy=RemovalPolicy.DESTROY)
+        qlog = r53r.CfnResolverQueryLoggingConfig(self, "DnsQueryLogging", name=f"{PREFIX}agent-dns",
+                                                  destination_arn=dns_logs.log_group_arn)
+        r53r.CfnResolverQueryLoggingConfigAssociation(self, "DnsQueryLoggingAssoc",
+                                                      resolver_query_log_config_id=qlog.attr_id, resource_id=vpc.vpc_id)
 
         # ------------------------------------------------------------ private API: /tools/{name} for the agent
-        f_tools = fn("tools", "executor.handler.lambda_handler", r_tools,
+        f_tools = fn("tools", "airgap_entry.handler", r_tools,
                      env={"AIRGAP_EXECUTOR_URL": api_url, "AIRGAP_GATEWAY": "local"})
         papi = apigw.RestApi(
             self, "AgentApi", rest_api_name=f"{PREFIX}agent-api",
@@ -243,8 +279,20 @@ class AirgapStack(Stack):
             t[name].grant_read_write_data(r_exec)
         inbox.grant_read(r_exec)
         # tools λ: writes its tool_call leaves + toollog rows itself; reads the registry for Cedar context
+        def main_rw(r: iam.Role, prefixes: list[str]) -> None:
+            """RW on `main` limited to items whose pk starts with one of `prefixes` (dynamodb:LeadingKeys)."""
+            r.add_to_policy(iam.PolicyStatement(
+                actions=["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query",
+                         "dynamodb:ConditionCheckItem", "dynamodb:DescribeTable"],
+                resources=[t["main"].table_arn, t["main"].table_arn + "/index/*"],
+                conditions={"ForAllValues:StringLike": {"dynamodb:LeadingKeys": [p + "#*" for p in prefixes]}}))
+
         t["audit"].grant_read_write_data(r_tools)
-        t["main"].grant_read_write_data(r_tools)
+        main_rw(r_tools, ["toolsession", "counter"])  # toollog rows + tool rate counters only
+        # every leaf append asks checkpoint.latest() whether a checkpoint is due: read-only on checkpoint rows
+        r_tools.add_to_policy(iam.PolicyStatement(
+            actions=["dynamodb:GetItem", "dynamodb:Query"], resources=[t["main"].table_arn],
+            conditions={"ForAllValues:StringLike": {"dynamodb:LeadingKeys": ["checkpoint#*"]}}))
         t["registry"].grant_read_data(r_tools)
         r_tools.add_to_policy(iam.PolicyStatement(actions=["execute-api:Invoke"], resources=[
             invoke("POST", "/proposals"), invoke("POST", "/changes"), invoke("POST", "/egress"),
@@ -252,7 +300,7 @@ class AirgapStack(Stack):
             invoke("GET", "/mandates/active")]))
         # checkpointer: log key (key policy), audit/main read+write (checkpoints), anchor bucket put
         t["audit"].grant_read_write_data(r_ckpt)
-        t["main"].grant_read_write_data(r_ckpt)
+        main_rw(r_ckpt, ["checkpoint"])
         anchor.grant_put(r_ckpt)
         anchor.grant_read(r_auditor)
         t["witness_state"].grant_read_write_data(r_w1)
@@ -277,6 +325,12 @@ class AirgapStack(Stack):
         r_relay.add_to_policy(iam.PolicyStatement(actions=["execute-api:Invoke"], resources=[
             invoke("GET", "/checkpoint"), invoke("GET", "/audit/export"), invoke("POST", "/checkpoint/cosignature")]))
 
+        # agent: own log group only, ENI management for the VPC attachment
+        r_agent.add_to_policy(iam.PolicyStatement(actions=["logs:CreateLogStream", "logs:PutLogEvents"], resources=[
+            f"arn:aws:logs:{self.region}:{self.account}:log-group:/aws/lambda/{PREFIX}agent:*"]))
+        r_agent.add_to_policy(iam.PolicyStatement(resources=["*"], actions=[
+            "ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface",
+            "ec2:AssignPrivateIpAddresses", "ec2:UnassignPrivateIpAddresses"]))
         # agent: model invocation + private /tools/* only; explicit Denies (S7)
         r_agent.add_to_policy(iam.PolicyStatement(actions=["bedrock:InvokeModel", "bedrock:Converse"], resources=[
             *[f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/{m}" for m in SONNET],
@@ -295,6 +349,10 @@ class AirgapStack(Stack):
         # vars (aws/lambda key) with the execution role
         r_agent.add_to_policy(iam.PolicyStatement(sid="DenyOurKeys", effect=deny, actions=["kms:*"],
                                                   resources=[k_log.key_arn, k_w1.key_arn]))
+        # stolen agent credentials are useless outside the agent VPC (aws:SourceVpc is set only via its endpoints)
+        r_agent.add_to_policy(iam.PolicyStatement(sid="DenyOutsideAgentVpc", effect=deny, resources=["*"],
+                                                  actions=["bedrock:*", "execute-api:Invoke"],
+                                                  conditions={"StringNotEquals": {"aws:SourceVpc": vpc.vpc_id}}))
         r_agent.add_to_policy(iam.PolicyStatement(sid="DenyMoneyRoutes", effect=deny, actions=["execute-api:Invoke"],
                                                   resources=[invoke("*", "/signatures"), invoke("*", "/mandates*"),
                                                              invoke("*", "/changes/*/approve"), invoke("*", "/proposals"),

@@ -1,0 +1,11 @@
+airgap-ledger: deleted 5 items
+airgap-mandates: deleted 2 items
+airgap-audit: deleted 115 items
+airgap-registry: deleted 4 items
+airgap-witness_state: deleted 1 items
+airgap-main: deleted 61 items
+airgap-portal: deleted 3 items
+seed_data: {'vendors': 3, 'pins': 6, 'signers': 3, 'emails': 8}
+re-seeded registry; signers 0xd27e1D0cbfb015686365b9d02cEbf86E55770534 0xAc34739E1e424A377B23e0fFEdb1F70F26E64F11
+log size 13, no stale checkpoints
+checkpointer re-enabled, tick ENABLED
