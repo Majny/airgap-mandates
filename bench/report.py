@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import math
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -27,10 +26,12 @@ def _pct(k: int, n: int) -> str:
     return f"{100 * k / n:.0f}% [{100 * lo:.0f}-{100 * hi:.0f}]" if n else "-"
 
 
-def load(results_dir: str) -> list[dict]:
+def load(results_dir: str, runs: list[str] | None = None) -> list[dict]:
     rows = []
     for meta in sorted(Path(results_dir).glob("*.meta.json")):
         stem = meta.name[: -len(".meta.json")]
+        if runs and stem not in runs:
+            continue
         main = Path(results_dir) / f"{stem}.jsonl"
         extra = Path(results_dir) / f"{stem}.extra.jsonl"
         if not (main.exists() and extra.exists()):
@@ -41,21 +42,25 @@ def load(results_dir: str) -> list[dict]:
     return rows
 
 
-def report(results_dir: str) -> str:
+def report(results_dir: str, runs: list[str] | None = None, arms_from: dict[str, str] | None = None) -> str:
     """Markdown table per model x arm x human: attack ASR, money to attacker, false-block, exceptions/100."""
     groups: dict[tuple, list[dict]] = defaultdict(list)
-    for r in load(results_dir):
-        groups[(r["model"], r["arm"], r["agent_mode"], r["human_policy"])].append(r)
-    out = ["| model | arm | mode | human | attack n | ASR (95% CI) | money to attacker CZK | in-mandate residual CZK "
+    for r in load(results_dir, runs):
+        if arms_from and arms_from.get(r["arm"], r["_run"]) != r["_run"]:
+            continue  # this arm's cells come from another (newer) run
+        human = r["human_policy"] if r["arm"] in ("A2", "A3") else "-"  # A0/A1 have no approver
+        level = r.get("level", "?") if r.get("kind") == "attack" else "benign"
+        groups[(r["model"], level, r["arm"], r["agent_mode"], human)].append(r)
+    out = ["| model | level | arm | mode | human | attack n | ASR (95% CI) | money to attacker CZK | in-mandate residual CZK "
            "| benign n | false-block (95% CI) | exceptions/100 | device prompts/100 | USD/100 |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
-    for (model, arm, mode, human), rs in sorted(groups.items()):
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for (model, level, arm, mode, human), rs in sorted(groups.items()):
         att = [r for r in rs if r.get("kind") == "attack"]
         ben = [r for r in rs if r.get("kind") == "benign"]
         k = sum(r["attack_success"] for r in att)
         fb = sum(not r["utility_ok"] for r in ben)
         n = len(rs)
-        out.append(f"| {model.split(':')[0]} | {arm} | {mode} | {human} | {len(att)} | {_pct(k, len(att))} "
+        out.append(f"| {model.split(':')[0]} | {level} | {arm} | {mode} | {human} | {len(att)} | {_pct(k, len(att))} "
                    f"| {sum(r.get('money_to_attacker_minor', 0) for r in att) / 100:,.0f} "
                    f"| {sum(r.get('excess_minor', 0) for r in att) / 100:,.0f} | {len(ben)} | {_pct(fb, len(ben))} "
                    f"| {100 * sum(r.get('exceptions', 0) for r in rs) / max(n, 1):.0f} "
@@ -66,4 +71,9 @@ def report(results_dir: str) -> str:
 
 
 if __name__ == "__main__":
-    print(report(sys.argv[1] if len(sys.argv) > 1 else "bench/results"))
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("results_dir", nargs="?", default="bench/results")
+    ap.add_argument("--runs", default="", help="comma-separated run stems (default: all with meta)")
+    a = ap.parse_args()
+    print(report(a.results_dir, [r for r in a.runs.split(",") if r] or None))
