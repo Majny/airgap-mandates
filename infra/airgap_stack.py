@@ -280,6 +280,7 @@ class AirgapStack(Stack):
         for name in ("ledger", "mandates", "audit", "registry", "main"):
             t[name].grant_read_write_data(r_exec)
         inbox.grant_read(r_exec)
+        inbox.grant_put(r_exec, "inbox-raw/*")  # POST /ingest (called by the ingest role) runs here and stores the .eml
         # tools λ: writes its tool_call leaves + toollog rows itself; reads the registry for Cedar context
         def main_rw(r: iam.Role, prefixes: list[str]) -> None:
             """RW on `main` limited to items whose pk starts with one of `prefixes` (dynamodb:LeadingKeys)."""
