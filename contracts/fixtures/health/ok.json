@@ -11,6 +11,9 @@
     "render_profile": "safe5-mono-18x7",
     "code_sha256": "84af06a5cb31af731aedeb617dc13f9dcacd628f57a3ea8b3036ffd284005bba",
     "log_origin": "airgap.example/demo/audit",
-    "log_pubkey_id": "2d5baf14"
+    "log_pubkey_id": "2d5baf14",
+    "log_vkey": "airgap.example/demo/audit+2d5baf14+AQQzKJb+VXe/PPMhqBpOn8y0GLsgCjWJx6okyDc+RM94",
+    "w1_vkey": "airgap.example/demo/w1+7027bc92+BK9SczXGetw4uo3y3vLMdyi878u1dn8lofnocYvdxJ04",
+    "w2_vkey": null
   }
 }

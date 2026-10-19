@@ -47,6 +47,22 @@
     },
     "log_pubkey_id": {
       "type": "string"
+    },
+    "log_vkey": {
+      "type": "string"
+    },
+    "w1_vkey": {
+      "type": "string"
+    },
+    "w2_vkey": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -58,7 +74,10 @@
     "render_profile",
     "code_sha256",
     "log_origin",
-    "log_pubkey_id"
+    "log_pubkey_id",
+    "log_vkey",
+    "w1_vkey",
+    "w2_vkey"
   ],
   "additionalProperties": false
 }
