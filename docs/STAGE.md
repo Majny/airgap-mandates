@@ -66,6 +66,12 @@ export AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324     # the one switch; unset to go 
   It becomes active only through a reset with `--fallback-clerk` (AWS owner; a new, logged `enroll` leaf), so the
   decision to fall back on AWS is made **before** the demo reset, never live. Without it, the AWS fallback is the
   recorded video. `host.signer ... --url` refuses to run if a device address is not active (says which reset).
+- **Rehearsed on AWS** (Mon, WS-C, after `reset_state --fallback-clerk`, emulator clerk + treasury, auto-confirm):
+  `scene s2 --url $API` GREEN in 29 s, `scene s3 --url $API` GREEN in 67 s; CHG shows the pinned `ATT 2/3 ERP BANK`
+  (logs: `docs/device/rehearsal/aws_fallback_s*.log`). **Open (WS-B):** the audit bundle of a `--fallback-clerk`
+  deployment is RED ("approver 0x73d0...: does not match an enroll leaf"): the re-enrolment writes a second enroll
+  leaf and the export/verifier assume one per address. The S5 beat after a fallback run must use the pre-sealed
+  `docs/audit/demo` until that is fixed.
 - Last resort for any beat: the pre-recorded video (WS-F). First real-device take: `docs/device/photos/`.
 
 ## Recovery
