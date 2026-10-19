@@ -16,13 +16,14 @@ NOW = "2026-10-19T12:00:00Z"
 
 class Harness:
     def __init__(self, **settings: Any) -> None:
+        settings.setdefault("data_dir", seed.dev_data_dir())
         self.settings = Settings(backend="memory", fake_now=settings.pop("fake_now", NOW), **settings)
         self.store = MemoryStore(self.settings)
         self.ctx = handler.Context(self.settings, self.store)
         seed.seed_registry(self.store)
         self.clerk, self.treasury, self.stranger = Account.create(), Account.create(), Account.create()
-        seed.enroll_signer(self.store, self.clerk.address, "clerk", device="GENUINE")
-        seed.enroll_signer(self.store, self.treasury.address, "treasury", device="EMULATOR")
+        seed.enroll_signer(self.store, self.clerk.address, "clerk", device="GENUINE", settings=self.settings)
+        seed.enroll_signer(self.store, self.treasury.address, "treasury", device="EMULATOR", settings=self.settings)
 
     def call(self, method: str, path: str, body: Any = None, principal: str | None = None,
              query: dict | None = None) -> tuple[int, Any]:

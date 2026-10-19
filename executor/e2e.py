@@ -28,12 +28,12 @@ def in_process(fake_now: str | None = None) -> tuple[Call, Any, Any]:
     from executor.store import seed
     from executor.store.memory import MemoryStore
 
-    s = Settings(backend="memory", fake_now=fake_now)
+    s = Settings(backend="memory", fake_now=fake_now, data_dir=seed.dev_data_dir())
     ctx = handler.Context(s, MemoryStore(s))
     seed.seed_registry(ctx.store)
     clerk, treasury = Account.create(), Account.create()
-    seed.enroll_signer(ctx.store, clerk.address, "clerk", device="GENUINE", label="clerk (software key, e2e)")
-    seed.enroll_signer(ctx.store, treasury.address, "treasury", label="treasury (software key, e2e)")
+    seed.enroll_signer(ctx.store, clerk.address, "clerk", device="GENUINE", label="clerk (software key, e2e)", settings=s)
+    seed.enroll_signer(ctx.store, treasury.address, "treasury", label="treasury (software key, e2e)", settings=s)
     return (lambda m, p, b, who: handler.dispatch(m, p, None, b, principal=who, ctx=ctx)), clerk, treasury
 
 
