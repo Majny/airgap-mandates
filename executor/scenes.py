@@ -216,10 +216,12 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
                          "agent")
         esc["agent->/signatures"] = _bad(st, r, "caller_not_allowed")["error"]
     st, r = env.call("POST", "/proposals", {"invoice": {
-        "vendor_id": "ven_87654321", "invoice_no": "BS-2026-1187", "invoice_ref": "doc_00000000000000b1",
-        "issue_date": env.now.strftime("%Y-%m-%d"), "amount_minor": 12_500_050, "currency": "CZK",
-        "reason_code": "DUE"}, "hints": []}, "tools")
-    pay = _ok(st, r, 201)["decision"]["challenge"]
+        "vendor_id": "ven_87654321", "invoice_no": "BS-2026-1201", "invoice_ref": "doc_00000000000000b2",
+        "issue_date": env.now.strftime("%Y-%m-%d"), "amount_minor": 9_120_000, "currency": "CZK",
+        "reason_code": "DUE"}, "hints": []}, "tools")  # over the cap, and distinct from S1's Beta invoice (I-DUP)
+    dec = _ok(st, r, 201)["decision"]
+    assert dec["decision"] == "challenge", f"expected an exact-sign challenge, got {dec['decision']} {dec['rule_ids']}"
+    pay = dec["challenge"]
     esc["self-approval"] = _bad(*env.sign(pay, env.stranger), "unknown_signer")["error"]
     _ok(*env.sign(pay, env.clerk))
     esc["replay"] = _bad(*env.sign(pay, env.clerk), "nonce_reused")["error"]
