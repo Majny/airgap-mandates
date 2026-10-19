@@ -136,6 +136,17 @@ class TxConflict(Exception):
     """A TransactWriteItems condition failed; nothing was written."""
 
 
+class IdempotencyMismatch(TxConflict):
+    """The ClientRequestToken was already used (within ~10 min) for a transaction with different parameters."""
+
+
+def request_token(tx_id: str, leaf_hash: str) -> str:
+    """ClientRequestToken for an execution (<= 36 chars): tx_id salted with the execution leaf hash. A retry of the
+    identical transaction reuses it (idempotent); after a table reset, where tx_ids repeat (mnd_1|prp_1), the leaf
+    (seq, ts) differs and so does the token, so DynamoDB never reports IdempotentParameterMismatch."""
+    return f"{tx_id}-{leaf_hash[:16]}"
+
+
 def head_key(log_id: str = "audit") -> dict[str, Any]:
     return {"log_id": f"head#{log_id}", "seq": 0}
 
@@ -173,7 +184,7 @@ def tx_execute(store: Store, *, leaf_event: dict[str, Any], expected_seq: int, l
     """CONTRACTS §3.2 execution transaction: audit leaf Put (attribute_not_exists(seq)) + audit head Update
     (next_seq = expected_seq) + mandate debit (mandate path; {mandate_id, amount_minor, max_total_minor,
     max_count}) + ledger Put (attribute_not_exists(tx_id)) + proposal Update to EXECUTED, with
-    ClientRequestToken = ledger_row['tx_id']. Returns the leaf seq; raises TxConflict.
+    ClientRequestToken = request_token(tx_id, leaf_hash). Returns the leaf seq; raises TxConflict.
 
     proposal_set (WS-A addition, optional): extra proposal attributes written in the same Update (the allow path
     creates the proposal row inside the transaction; condition status = PENDING_SIG or item new)."""
@@ -191,7 +202,8 @@ def tx_execute(store: Store, *, leaf_event: dict[str, Any], expected_seq: int, l
     ops.append(UpdateIf("proposals", {"proposal_id": proposal_id},
                         {**(proposal_set or {}), "status": "EXECUTED", "tx_id": tx_id},
                         {"status": AnyOf(MISSING, "PENDING_SIG")}))
-    if not store.transact(ops, client_request_token=tx_id):
+    token = request_token(tx_id, ops[0].item["leaf_hash"])  # ops[0] is the audit leaf Put
+    if not store.transact(ops, client_request_token=token):
         raise TxConflict(f"execution transaction for {tx_id} cancelled")
     return expected_seq
 
