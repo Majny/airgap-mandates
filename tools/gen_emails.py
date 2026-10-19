@@ -57,7 +57,7 @@ INVOICES: dict[str, dict[str, Any]] = {
                          "item": "Printing of product leaflets"},
     # S1 step-up: over the 80000 CZK per-payment cap, from a vendor with no other payment that day (no F-SPLIT carry)
     "delta_ds-2026-0777": {"vendor": "delta", "invoice_no": "DS-2026-0777", "amount_minor": 12500050,
-                           "vs": "20260777", "issue_date": "2026-10-19", "due_date": "2026-10-21",
+                           "vs": "20260777", "issue_date": "2026-10-12", "due_date": "2026-10-19",
                            "item": "Construction works, phase 2 (fictitious)"},
     "beta_bs-2026-1203": {"vendor": "beta", "invoice_no": "BS-2026/1203", "amount_minor": 895400,
                           "vs": "20261203", "issue_date": "2026-10-09", "due_date": "2026-10-23",
@@ -198,7 +198,7 @@ def fixtures() -> list[Fixture]:
                 expected_facts={"F-DKIM": "DKIM PASS", "F-DOMAIN": "DOMAIN MATCH"},
                 extra={"claimed_iban": ACME_NEW_IBAN, "bank_letter_ref": "BCL-2026-0918"}),
         Fixture("09_delta_invoice_overcap.eml", "overcap_invoice", "delta", "Tomas Kral <fakturace@deltastavby.cz>",
-                "Invoice DS-2026-0777", "2026-10-19T07:40:00Z",
+                "Invoice DS-2026-0777", "2026-10-12T07:40:00Z",
                 _invoice_text("delta_ds-2026-0777", "Tomas Kral"), "deltastavby.cz",
                 attachment=("DS-2026-0777.isdoc", "application/xml", _isdoc("delta_ds-2026-0777")),
                 invoice="delta_ds-2026-0777",
