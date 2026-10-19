@@ -364,3 +364,12 @@ def test_parse_http_response(raw, want):
 def test_parse_http_response_rejects_garbage(raw):
     with pytest.raises(ValueError):
         relay_w2.parse_http_response(raw)
+
+
+def test_export_publishes_w2_vkey_from_env(world, monkeypatch):
+    ex_settings, ex_store, w2_settings, _ = world
+    _grow(ex_store, ex_settings, 1)
+    monkeypatch.delenv("AIRGAP_W2_VKEY", raising=False)
+    assert log.export("audit", store=ex_store, settings=ex_settings)["pubkeys"]["w2"] is None
+    monkeypatch.setenv("AIRGAP_W2_VKEY", _w2_vkey(w2_settings))
+    assert log.export("audit", store=ex_store, settings=ex_settings)["pubkeys"]["w2"] == _w2_vkey(w2_settings)
