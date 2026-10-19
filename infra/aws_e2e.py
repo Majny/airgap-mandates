@@ -71,7 +71,7 @@ def aws_settings() -> Any:
                               "AIRGAP_CHECKPOINT_MAX_SECONDS": "1000000000"})
 
 
-def seed() -> tuple[Any, Any]:
+def seed(*, fallback_clerk: bool = False) -> tuple[Any, Any]:
     """Registry (vendors.json + issuer pins), enrolled signers and inbox via WS-D's tools.seed_data, then the two
     e2e software signer keys (enroll leaf labelled 'software key, aws e2e')."""
     from executor.store import get_store
@@ -83,7 +83,27 @@ def seed() -> tuple[Any, Any]:
     KEYS.write_text(json.dumps(keys))
     s = aws_settings()
     st = get_store(s)
-    print("seed_data:", seed_data.seed(settings=s, store=st))
+    if fallback_clerk:
+        # activate the inactive EMULATOR clerk of data/enrollment.json AT seeding time: one enroll leaf per address
+        # (re-enrolling afterwards would log a second leaf, which the offline verifier rejects)
+        orig = seed_data.seed_signers
+
+        def seed_signers(path: Any, *, store: Any, **kw: Any) -> int:
+            doc = json.loads(Path(path).read_text())
+            for row in doc.get("signers") or []:
+                if row.get("role") == "clerk" and row.get("device") == "EMULATOR" and not row.get("active", True):
+                    row["active"] = True
+                    print("fallback clerk active:", row["address"])
+            tmp = KEYS.parent / "enrollment.fallback.json"
+            tmp.write_text(json.dumps(doc))
+            return orig(tmp, store=store, **kw)
+
+        seed_data.seed_signers = seed_signers
+    try:
+        print("seed_data:", seed_data.seed(settings=s, store=st))
+    finally:
+        if fallback_clerk:
+            seed_data.seed_signers = orig
     clerk, treasury = Account.from_key(keys["clerk"]), Account.from_key(keys["treasury"])
     enroll_software_keys(st, s, clerk, treasury)
     return clerk, treasury
