@@ -1,0 +1,12 @@
+{
+  "vendor_id": "ven_12345678",
+  "invoice_no": "FV-2026-0412",
+  "amount_minor": 4840000,
+  "currency": "CZK",
+  "vs": "20260412",
+  "issue_date": "2026-10-01",
+  "due_date": "2026-10-15",
+  "iban_on_invoice": "CZ6508000000192000145399",
+  "fictitious": true,
+  "email_id": "eml_45ad0b71d001bb48"
+}

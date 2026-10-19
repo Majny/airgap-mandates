@@ -1,0 +1,11 @@
+{
+  "crv": "P-256",
+  "d": "_aPDS3zxou4Cm8I_6sd5zOnJpQujwR-uxzsnSCxz5Vc",
+  "demo_only": true,
+  "iss": "https://issuer.acme.example/erp",
+  "issuer_class": "supplier-erp",
+  "kid": "xh7yAArC74Tlj_C2YPbUtlj_F5qJDGdKO1jfWORs-RU",
+  "kty": "EC",
+  "x": "FKokVhB13pkQQHqicS4Oi53ESlOjBGgUs-B8vdpwEGw",
+  "y": "K5eJ2lBnReHjoV3BDQk2KXCe3SnZfOqroyVJu7QmETU"
+}

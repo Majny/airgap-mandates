@@ -1,0 +1,53 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=acme.cz;
+ i=@acme.cz; q=dns/txt; s=demo2026; t=1790842320; h=from : to : subject
+ : date : message-id : mime-version : content-type;
+ bh=DhLLaf+VN3u5/eKHQeSpCoYgczHWTSBF/kbnCieUnXc=;
+ b=PFt0QLVfotzEkcgN1boH3q0O/qHvkMFEr7TbOIG/4vNiTJHHpuyiOis3H1Xu1bUdg3fWS
+ 0j8OSJ96zctiJ+PVFLPTgfzLaIDyn9t2uVa595iGF7Xd/QAYJuFkunOerdbZNeJnLSSD/0J
+ Frp9mrGnjoT2WQj0n5ipwjJjGjH+Zld6565I5L5/n54/H6+QqQxjzoLLateBhU6CXpdROE7
+ b4QIjzKLNfxxP1h5TiYf2vZBYTK0hI4OGzV5DaTbAVZNhZOeiLVyNs789FT4bhWGlRtgPNT
+ FwSefHbY1OvtFsiBdFgyd1hhxjMVMlC05F2LUBkzaHHaJ17CbfXQljMRycPA==
+From: Jana Novakova <jana.novakova@acme.cz>
+To: Accounts Payable <ap@buyer-demo.example>
+Subject: Invoice FV-2026-0412
+Date: Thu, 01 Oct 2026 08:12:00 +0000
+Message-ID: <01_acme_invoice_legit.20261001@acme.cz>
+MIME-Version: 1.0
+X-AirGap-Fixture: synthetic; scenario=legit_invoice
+Content-Type: multipart/mixed; boundary="=_airgap_01_boundary"
+
+--=_airgap_01_boundary
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Dear colleagues,
+
+please find attached invoice FV-2026-0412 for maintenance services 09/2026.
+
+Amount: CZK 48 400.00
+Due date: 2026-10-15
+Variable symbol: 20260412
+Account: CZ6508000000192000145399 (as registered)
+
+Kind regards,
+Jana Novakova
+ACME s.r.o.
+
+--=_airgap_01_boundary
+Content-Type: application/xml; name="FV-2026-0412.isdoc"
+Content-Disposition: attachment; filename="FV-2026-0412.isdoc"
+Content-Transfer-Encoding: 7bit
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="http://isdoc.cz/namespace/2013" version="6.0.2">
+  <!-- ISDOC-like FICTITIOUS demo invoice (AirGap Mandates fixture) -->
+  <ID>FV-2026-0412</ID>
+  <IssueDate>2026-10-01</IssueDate>
+  <DueDate>2026-10-15</DueDate>
+  <Supplier><Name>ACME s.r.o.</Name><ICO>12345678</ICO></Supplier>
+  <Line><Description>Maintenance services 09/2026</Description></Line>
+  <PayableAmount currency="CZK">48400.00</PayableAmount>
+  <Payment><IBAN>CZ6508000000192000145399</IBAN><VariableSymbol>20260412</VariableSymbol></Payment>
+</Invoice>
+
+--=_airgap_01_boundary--

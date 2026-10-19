@@ -1,4 +1,30 @@
 {
-  "CZ": {"0800": "Ceska sporitelna", "0300": "CSOB", "0100": "Komercni banka"},
-  "LT": {"39990": "EMI Lithuania (fict.)"}
+  "_note": "Bank-code snapshot (demo subset). national_id = licence-register id used to match the MostlyRight CNB licence rows. Names are for the UI only and never reach the device.",
+  "CZ": {
+    "0100": {
+      "name": "Bank 0100 (CZ)",
+      "bic": "KOMBCZPP",
+      "kind": "bank",
+      "national_id": "45317054"
+    },
+    "0300": {
+      "name": "Bank 0300 (CZ)",
+      "bic": "CEKOCZPP",
+      "kind": "bank",
+      "national_id": "00001350"
+    },
+    "0800": {
+      "name": "Bank 0800 (CZ)",
+      "bic": "GIBACZPX",
+      "kind": "bank",
+      "national_id": "45244782"
+    }
+  },
+  "LT": {
+    "39990": {
+      "name": "EMI Lithuania (fict.)",
+      "bic": null,
+      "kind": "emi"
+    }
+  }
 }

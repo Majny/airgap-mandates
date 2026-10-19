@@ -1,0 +1,15 @@
+{
+  "_note": "SIMULATED Verification of Payee responder (fictitious accounts and holders, demo only).",
+  "participants": {
+    "CZ": ["0100", "0300", "0800"],
+    "LT": ["39990"]
+  },
+  "accounts": {
+    "CZ6508000000192000145399": {"holder": "ACME s.r.o.", "ico": "12345678"},
+    "CZ2003000000002001234567": {"holder": "ACME s.r.o.", "ico": "12345678"},
+    "CZ6203000000000123456789": {"holder": "Beta Servis a.s.", "ico": "87654321"},
+    "CZ7501000000001155443322": {"holder": "Gamma Tisk s.r.o.", "ico": "99887762"},
+    "LT483999000000001234": {"holder": "UAB Greitas Pervedimas"},
+    "LT493999000000005678": {"holder": "ACME SRO Trading"}
+  }
+}

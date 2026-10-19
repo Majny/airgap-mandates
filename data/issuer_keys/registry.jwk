@@ -1,0 +1,11 @@
+{
+  "crv": "P-256",
+  "d": "KSRpSHtRp_puJaR23kjHPi7O8aZa4eFeQAW-dFu7epQ",
+  "demo_only": true,
+  "iss": "https://registry.airgap.example",
+  "issuer_class": "registry",
+  "kid": "LwxDrNbfYeOqUcA72rDGbnlf_Oy5fIzl9b24s0IzW4k",
+  "kty": "EC",
+  "x": "lkj-10zqcC2pJgYUpnP-u896ULDILyfA1Ou-adLmAf8",
+  "y": "Li03daQI90_RbAFsvZCTtmhEOymNMmmQRBny7kEK3Yc"
+}

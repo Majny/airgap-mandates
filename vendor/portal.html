@@ -1,10 +1,127 @@
 <!doctype html>
-<html lang="cs">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Vendor Portal</title></head>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vendor Portal</title>
+<!-- Owner: WS-D. CONTRACTS.md v2 section 4.1 #9 (reject, tripwire "not us"), #12 (POST /callbacks/{change_id}),
+     #14 (POST /changes/{change_id}/break-glass). Served by vendor.portal.create_app(); the portal backend relays
+     every action to the executor with X-Client: vendor_portal. SIMULATED supplier side. -->
+<style>
+  :root { --bg: #f6f6f3; --fg: #1d1d1b; --muted: #6b6b66; --card: #ffffff; --line: #d9d9d3; --warn: #b42318;
+          --ok: #1d7a3a; --banner: #fff3c4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --fg: #ececea; --muted: #a3a39d; --card: #222220; --line: #3a3a37; --warn: #ff8a7a;
+            --ok: #6fd28f; --banner: #4a3f12; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+  .banner { background: var(--banner); padding: 8px 16px; font-weight: 600; text-align: center; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 16px 0; }
+  h1 { font-size: 20px; margin: 8px 0; } h2 { font-size: 16px; margin: 0 0 8px; }
+  label { display: block; color: var(--muted); font-size: 13px; margin-top: 8px; }
+  input { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+          color: var(--fg); font: inherit; }
+  button { margin-top: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+           background: var(--bg); color: var(--fg); font: inherit; }
+  button.danger { border-color: var(--warn); color: var(--warn); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between;
+         border-top: 1px solid var(--line); padding: 8px 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; margin: 8px 0 0; }
+</style>
+</head>
 <body>
-<!-- Owner: WS-F. CONTRACTS.md §4.1 #12-#15: callback code (POST /callbacks/{change_id}),
-     notifications (GET /portal/notifications?ico=), attestation signing (POST /attestations). TODO WS-F -->
-<h1>AirGap vendor portal</h1>
-<p>TODO WS-F</p>
+<div class="banner">SIMULATED VENDOR PORTAL - demo data only, codes arrive by SIMULATED SMS</div>
+<main>
+  <h1>AirGap vendor portal</h1>
+  <p class="muted">For the supplier's registered contact. Inbound phone calls are never accepted as confirmation.</p>
+
+  <section>
+    <h2>Notifications</h2>
+    <label for="ico">Company ICO</label>
+    <input id="ico" inputmode="numeric" maxlength="8" value="12345678">
+    <button id="load">Load notifications</button>
+    <div id="inbox"></div>
+  </section>
+
+  <section>
+    <h2>Callback code</h2>
+    <p class="muted">Enter the 6-digit code sent to your registered phone. 3 attempts.</p>
+    <label for="cb-change">Change id</label><input id="cb-change" placeholder="chg_1">
+    <label for="cb-code">Code</label><input id="cb-code" inputmode="numeric" maxlength="6">
+    <button id="cb-confirm">Confirm change</button>
+    <button id="cb-deny" class="danger">Deny change</button>
+  </section>
+
+  <section>
+    <h2>Break-glass (lost attestation keys)</h2>
+    <p class="muted">Moves the request to the callback path with a longer cooling-off period.</p>
+    <label for="bg-change">Change id</label><input id="bg-change" placeholder="chg_1">
+    <label for="bg-by">Declared by (registered contact)</label><input id="bg-by" placeholder="finance@acme.example">
+    <label for="bg-reason">Reason</label><input id="bg-reason" maxlength="200">
+    <button id="bg-send" class="danger">Declare key loss</button>
+  </section>
+
+  <section>
+    <h2>SIMULATED phone (SMS outbox)</h2>
+    <button id="sms-load">Refresh</button>
+    <div id="sms"></div>
+  </section>
+
+  <section><h2>Result</h2><pre id="out">-</pre></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const out = (x) => { $("out").textContent = typeof x === "string" ? x : JSON.stringify(x, null, 2); };
+const text = (s) => document.createTextNode(String(s ?? ""));
+
+async function post(path, body) {
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  let data; try { data = await r.json(); } catch (e) { data = {error: "bad_response"}; }
+  out({status: r.status, body: data});
+  return data;
+}
+
+async function loadInbox() {
+  const ico = $("ico").value.trim();
+  const r = await fetch("/api/notifications?ico=" + encodeURIComponent(ico));
+  const data = await r.json();
+  const box = $("inbox"); box.replaceChildren();
+  for (const n of data.notifications || []) {
+    const row = document.createElement("div"); row.className = "row";
+    const info = document.createElement("div");
+    info.append(text(n.kind.toUpperCase() + "  " + n.change_id + "  " + (n.new_iban_last4 ? "new account .." + n.new_iban_last4 : "")));
+    const ts = document.createElement("div"); ts.className = "muted"; ts.append(text(n.created_at)); info.append(ts);
+    row.append(info);
+    if (n.kind === "tripwire") {
+      const b = document.createElement("button"); b.className = "danger"; b.textContent = "NOT US - reject";
+      b.onclick = () => post("/api/changes/" + encodeURIComponent(n.change_id) + "/not-us", {reason: "not us (tripwire)"});
+      row.append(b);
+    }
+    box.append(row);
+  }
+  if (!box.childElementCount) box.append(text("No notifications."));
+}
+
+async function loadSms() {
+  const r = await fetch("/api/sms"); const data = await r.json();
+  const box = $("sms"); box.replaceChildren();
+  for (const m of data.messages || []) {
+    const p = document.createElement("pre"); p.append(text(m.label + " " + m.to + " @ " + m.at + "\n" + m.text)); box.append(p);
+  }
+  if (!box.childElementCount) box.append(text("No messages."));
+}
+
+$("load").onclick = loadInbox;
+$("sms-load").onclick = loadSms;
+$("cb-confirm").onclick = () => post("/api/callbacks/" + encodeURIComponent($("cb-change").value.trim()),
+                                     {code: $("cb-code").value.trim(), outcome: "confirm"});
+$("cb-deny").onclick = () => post("/api/callbacks/" + encodeURIComponent($("cb-change").value.trim()),
+                                  {code: $("cb-code").value.trim() || "000000", outcome: "deny"});
+$("bg-send").onclick = () => post("/api/changes/" + encodeURIComponent($("bg-change").value.trim()) + "/break-glass",
+                                  {declared_by: $("bg-by").value.trim(), reason: $("bg-reason").value.trim()});
+</script>
 </body>
 </html>

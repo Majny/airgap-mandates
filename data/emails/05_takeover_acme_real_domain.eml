@@ -1,0 +1,29 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=acme.cz;
+ i=@acme.cz; q=dns/txt; s=demo2026; t=1791392280; h=from : to : subject
+ : date : message-id : mime-version : content-type;
+ bh=2PV5AcyGhllPUoRK6tCPwmg8UgNDCBiaHikGPtWz+cQ=;
+ b=Ycows21mpGsuGGSo/I8S98idSZQqb5EWB0rnPu+EUX2NdUgzNLTa24P5QBmm2+ch9D39y
+ CMV7SbDlsUflXCtElI59Q/i2i2beTeVhRdwZBD3vdFdOidGL3CJ8KcuIUNq9QhT3lmCMtrR
+ htGgsvbB3UW5qxTZPoX6WScn5kXrGrd7UiU1dC799SIsO8WvDqG2Hp8on+JSb6j63QNrVFh
+ 39nEBHwW2/sMPDaeen/sJOimHLgY1i9vOuDGr4IPNl/FTXI9TY6jxRiM3Szj0pUKFmrXwmp
+ WtvLAFq2WN4iINP/bQwGwslsQD7EB/JWvALHijYTiN+cflyEFuaV1ydMluJw==
+From: Jana Novakova <jana.novakova@acme.cz>
+To: Accounts Payable <ap@buyer-demo.example>
+Subject: URGENT: new bank account before today's payment run
+Date: Wed, 07 Oct 2026 16:58:00 +0000
+Message-ID: <05_takeover_acme_real_domain.20261007@acme.cz>
+MIME-Version: 1.0
+X-AirGap-Fixture: synthetic-attack; scenario=mailbox_takeover
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Hello,
+
+our CFO asked me to tell you that ACME s.r.o. moved its account. Payments to the old account will bounce. Please switch us to
+
+  LT493999000000005678
+
+before today's payment run and pay FV-2026-0412 there. This is urgent and approved by our CFO, he is travelling and cannot take calls today.
+
+Jana Novakova
+ACME s.r.o.

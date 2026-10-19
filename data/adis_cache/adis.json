@@ -1,0 +1,9 @@
+{
+  "_note": "SIMULATED ADIS cache (fictitious payers and accounts; shape follows getStatusNespolehlivyPlatceRozsireny).",
+  "as_of": "2026-10-19T06:00:00Z",
+  "payers": {
+    "CZ12345678": {"unreliable": false, "accounts": ["CZ6508000000192000145399", "CZ2003000000002001234567"]},
+    "CZ87654321": {"unreliable": false, "accounts": ["CZ6203000000000123456789"]},
+    "CZ99887762": {"unreliable": false, "accounts": ["CZ7501000000001155443322"]}
+  }
+}
