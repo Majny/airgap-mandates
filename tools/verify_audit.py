@@ -741,7 +741,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             with open(args.receipt, encoding="utf-8") as f:
                 text = f.read()
-            if text.strip().startswith(rc.SHORT_PREFIX):  # short QR pointer: verifies only against the bundle
+            if text.strip().startswith((rc.SHORT_PREFIX, rc.SHORT_URL)):  # short QR pointer: needs the bundle
                 r = None
                 try:
                     short = rc.parse_short_qr(text)

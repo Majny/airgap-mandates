@@ -229,3 +229,24 @@ def test_cli_short_qr_needs_the_bundle(demo, tmp_path):
     seq = demo[1]["seq"]
     f.write_text(receipt.short_qr_payload(demo[1]).replace(f":{seq}:", f":{seq - 1}:", 1))
     assert va.main([str(DEMO / "bundle.json"), "--trust-keys", keys, "--receipt", str(f)]) == 1
+
+
+def test_short_qr_decodes_with_zxing_as_a_url(demo):
+    """Independent decoder (zxing-cpp) reads the exact URL form back from the rendered symbol; v <= 8."""
+    segno = pytest.importorskip("segno")
+    np = pytest.importorskip("numpy")
+    zxingcpp = pytest.importorskip("zxingcpp")
+    url = receipt.short_qr_url(demo[1])
+    assert url.startswith("https://airgap.example/r#AGR2:")
+    q = segno.make(url, error="M", mode="byte", micro=False, boost_error=True)
+    assert q.version <= 8
+    m = np.array([[0 if px else 255 for px in row] for row in q.matrix_iter(scale=8, border=4)], dtype=np.uint8)
+    found = zxingcpp.read_barcodes(m)
+    assert [b.text for b in found] == [url]
+    assert receipt.parse_short_qr(found[0].text) == receipt.parse_short_qr(receipt.short_qr_payload(demo[1]))
+
+
+def test_cli_accepts_url_form(demo, tmp_path):
+    f = tmp_path / "scan.txt"
+    f.write_text(receipt.short_qr_url(demo[1]))
+    assert va.main([str(DEMO / "bundle.json"), "--trust-keys", str(DEMO / "trust-keys.json"), "--receipt", str(f)]) == 0

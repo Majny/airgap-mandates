@@ -282,6 +282,7 @@ def receipt_qr_svg(r: dict[str, Any], *, scale: int = 4, border: int = 4) -> str
 
 # --- short QR (AGR2): what a phone can actually scan --------------------------------------------------------------
 SHORT_PREFIX = "AGR2:"
+SHORT_URL = "https://airgap.example/r#"  # RFC 2606 reserved domain; the fragment never leaves the phone
 _SHORT_RE = re.compile(r"AGR2:(tx_[0-9a-f]{16}):(0|[1-9][0-9]*):([0-9a-f]{64}):([1-9][0-9]*):([0-9a-f]{16})")
 
 
@@ -299,9 +300,20 @@ def short_qr_payload(r: dict[str, Any]) -> str:
     return out
 
 
+def short_qr_url(r: dict[str, Any]) -> str:
+    """What the QR encodes: SHORT_URL + AGR2 payload. A stock iPhone camera shows "No usable data found" for a
+    plain-text QR but offers a banner for a URL; airgap.example never resolves to us and the #fragment is not sent."""
+    return SHORT_URL + short_qr_payload(r)
+
+
 def parse_short_qr(text: str) -> dict[str, Any]:
-    """Strict parse of an AGR2 payload -> {tx_id, seq, leaf_hash, tree_size, root16}; ValueError otherwise."""
-    m = _SHORT_RE.fullmatch(text.strip()) if isinstance(text, str) else None
+    """Strict parse of an AGR2 payload, bare or in its URL form (SHORT_URL + payload) ->
+    {tx_id, seq, leaf_hash, tree_size, root16}; ValueError otherwise."""
+    if isinstance(text, str):
+        text = text.strip()
+        if text.startswith(SHORT_URL):
+            text = text[len(SHORT_URL):]
+    m = _SHORT_RE.fullmatch(text) if isinstance(text, str) else None
     if m is None:
         raise ValueError("not an AGR2 short receipt (AGR2:<tx_id>:<seq>:<leaf_hash>:<tree_size>:<root16>)")
     tx_id, seq, leaf_hash, size, root16 = m.groups()
@@ -346,12 +358,12 @@ def short_qr_problems(short: dict[str, Any], bundle: dict[str, Any]) -> list[str
 
 
 def short_qr_png(r: dict[str, Any], *, scale: int = 16, border: int = 4) -> bytes:
-    """PNG of the AGR2 short QR (large modules: default 16 px/module, quiet zone 4). Needs segno."""
+    """PNG of the AGR2 short QR, URL form (large modules: default 16 px/module, quiet zone 4). Needs segno."""
     try:
         import segno
     except ImportError:
         raise RuntimeError("receipt QR codes need segno: pip install segno") from None
     buf = io.BytesIO()
-    segno.make(short_qr_payload(r), error="M", mode="byte", micro=False, boost_error=True).save(
+    segno.make(short_qr_url(r), error="M", mode="byte", micro=False, boost_error=True).save(
         buf, kind="png", scale=scale, border=border, dark="black", light="white")
     return buf.getvalue()
