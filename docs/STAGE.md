@@ -75,6 +75,10 @@ export AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324     # the one switch; unset to go 
   `scene s2 --url $API` GREEN in 29 s, `scene s3 --url $API` GREEN in 67 s; CHG shows the pinned `ATT 2/3 ERP BANK`
   (logs: `docs/device/rehearsal/aws_fallback_s*.log`). `--fallback-clerk` now activates the clerk before seeding,
   so each address has exactly one `enroll` leaf (WS-E); the verifier also accepts re-enrolments (WS-B `f5cbe7b`).
+- **Fallback S5 seal confirmed on AWS** (deploy `03d1b55`, `reset_state --fallback-clerk`, S2 29 s + S3 67 s, then
+  `make checkpoint-now`): `tools.demo_bundle --from-aws` SEALED green (60 leaves, 6 checkpoints, cosigned by log +
+  W1 + W2; one `enroll` leaf per address with `active`), and `tools/offline_demo.sh` ALL PASS offline. Logs:
+  `docs/device/rehearsal/aws_fallback2_s*.log`. The fallback path can therefore seal its own S5 bundle on stage.
 - Last resort for any beat: the pre-recorded video (WS-F). First real-device take: `docs/device/photos/`.
 
 ## Recovery
