@@ -295,6 +295,7 @@ in the `memory`/`moto` backends it is the trusted `principal` argument of `dispa
 | 20 | `GET /receipts/{tx_id}` | any | — | 200 `receipt` | 404 |
 | 21 | `GET /checkpoint?log_id=audit` | any | — | 200 `text/plain` `checkpoint_note` (latest, with cosignatures) | 404 |
 | 22 | `POST /witness/add-checkpoint` | checkpointer → W1 λ | `text/plain` `add_checkpoint.request` (C2SP tlog-witness) | 200 `text/plain` cosignature line(s) | 400 old size > size, 403 bad signature, 404 unknown origin, 409 `text/x.tlog.size` (stale), 422 bad proof |
+| 22b | `POST /checkpoint/cosignature?log_id=audit&size=N` | relay (W2 relay role only) | `text/plain` cosignature line(s) from W2 | 200 `text/plain` updated `checkpoint_note` | 403 bad/unknown cosignature, 404 unknown size |
 | 23 | `GET /export/pain001/{tx_id}` | auditor / host | — | 200 `pain001.response` | 404 |
 | 24 | `GET /vendors` / `GET /vendors/{vendor_id}` | any (the tools λ masks IBANs to `..5399` for the agent) | — | 200 `vendor_list.response` / `vendor` | 404 |
 | 25 | `GET /ledger?vendor_id=` | any | — | 200 `ledger_list.response` | |
@@ -364,7 +365,7 @@ sensitive-info, second opinion), `E-SIZE`, `E-RATE`. Blocked → 403 `egress_blo
 `seq` (the `tool_call` leaf). Tool names and arg schemas: `executor/tools/manifest.py` (§4.5).
 
 `health.response`: `{status, backend, deployment, demo_profile, policy_hash, render_profile: "safe5-mono-18x7",
-code_sha256, log_origin, log_pubkey_id}`. `pain001.response`: `{tx_id, msg_id, xml, xml_c14n_sha256}`.
+code_sha256, log_origin, log_pubkey_id, log_vkey, w1_vkey, w2_vkey}` (vkeys let verifiers pin keys out of band; also printed on the slide/QR). `pain001.response`: `{tx_id, msg_id, xml, xml_c14n_sha256}`.
 
 ### 4.3 `POST /signatures` verification order (S2, S5)
 1. Load challenge by nonce → 404 `not_found`.
@@ -646,7 +647,7 @@ restrictions the output is byte-identical to RFC 8785 JCS (`tests/test_canonical
 |---|---|
 | `enroll` | `address, role, label, device (GENUINE\|EMULATOR), device_model, firmware_version, cert_chain_sha256, fw_hash, derivation_path, enroll_sig` |
 | `ingest` | `email_id, sha256, from_domain, received_at, dkim` |
-| `challenge` | `nonce, nonce_secret_sha256, purpose, role, subject_id, deployment, profile, text_sha256, subject_hash, exp` |
+| `challenge` | `nonce, nonce_secret_sha256, purpose, role, subject_id, deployment, profile, text_sha256, subject_hash, exp, template, params` (`template` + exact render `params` so the offline verifier re-renders the signed text and checks `text_sha256` and the EIP-191 signature, S2) |
 | `mandate_signed` | `mandate_id, mandate_no, signer_address, role, nonce, sig_index, sig_total, status, fields{...}` |
 | `proposal` | `proposal_id, invoice{...}, hints[...]` (agent input verbatim) |
 | `facts` | `subject_id, facts[Fact], snapshots{}` |
@@ -697,7 +698,7 @@ restrictions the output is byte-identical to RFC 8785 JCS (`tests/test_canonical
   checkpoint size, 409 stale (`text/x.tlog.size` body), 403 bad signature, 404 unknown origin, 422 bad proof.
   Size check and persistence are **one** conditional write on `witness_state`. W1 never writes the audit log (S7: the witness is a separate trust domain): it returns the refusal, and the **checkpointer/relay** appends `witness_refusal`. W1 trusts the log key via a pinned vkey (`AIRGAP_W1_LOG_VKEY`), not via KMS access to the log key.
   W1 = witness λ (own role, own KMS key, own table); W2 = unmodified litewitness on its own EC2 instance and key
-  (`AIRGAP_W2_URL`), "independent supervisor witness (simulated operator)". Quorum: `log AND (W1 OR W2)`.
+  (`AIRGAP_W2_URL`), "independent supervisor witness (simulated operator)". The W2 relay posts W2's cosignature back via row 22b (it has no audit access; W2 refusals go to relay stdout/exit code only). Quorum: `log AND (W1 OR W2)`. Scheduler (WS-E): EventBridge every 30 s → `log.tick()`, every 300 s → `log.anchor()`.
 - **Storage**: leaves in DynamoDB `audit`; every checkpoint and leaf batch also to S3 `AIRGAP_ANCHOR_BUCKET` with
   **Object Lock GOVERNANCE, 1-day retention** (never COMPLIANCE; teardown needs `s3:BypassGovernanceRetention`).
   RFC 3161 is optional and off by default (`AIRGAP_TSA_URL=off`).
@@ -801,7 +802,8 @@ demo scene unless `backend == "aws"` and `aws_region == "eu-central-1"`; the UI 
 | `AIRGAP_KMS_KEY_ID` | — | log checkpoint key, **KMS Ed25519** (`ECC_NIST_EDWARDS25519`) |
 | `AIRGAP_WITNESS_KMS_KEY_ID` | — | W1 key, Ed25519 (W1 role only) |
 | `AIRGAP_WITNESS_URL` | `inproc` | W1 endpoint; `inproc` = call `witness.witness` in-process (dev/CI) |
-| `AIRGAP_W2_URL` | `off` | W2 litewitness relay endpoint |
+| `AIRGAP_W2_URL` | `off` | W2 litewitness base URL (litewitness serves `POST /add-checkpoint` at its root) |
+| `AIRGAP_W2_VKEY` | — | pinned vkey printed by litewitness at startup; the executor verifies W2 cosignatures against it before appending (row 22b) |
 | `AIRGAP_LOG_ORIGIN` | `airgap.example/demo` | checkpoint origin prefix (`<origin>/<log_id>`) |
 | `AIRGAP_LOCAL_KEY_DIR` | `.local/keys` | memory/moto: generated Ed25519 keys (git-ignored) |
 | `AIRGAP_TSA_URL` | `off` | RFC 3161 TSA (optional) |
