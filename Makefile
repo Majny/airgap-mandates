@@ -88,7 +88,7 @@ DEMO_ENV = AIRGAP_BACKEND=aws AWS_REGION=eu-central-1 AIRGAP_EXECUTOR_URL=$(DEMO
 demo-reset:  ## AWS OWNER ONLY (docs/STAGE.md T-60): = infra.reset_state --yes (wipes the airgap-* tables, re-seeds)
 	$(DEMO_ENV) $(PY) -m infra.reset_state --yes
 
-demo-s1:  ## live S1 on AWS (WS-A e2e beat via SigV4 per principal)
+demo-s1:  ## S1 rehearsal on AWS with software keys (stage: host.signer s1 --url, Safe 3; docs/STAGE.md)
 	$(DEMO_ENV) $(PY) -m demo.scene_s1
 
 demo-s2:  ## live S2 on AWS (lookalike BEC, escalation, exfil)
