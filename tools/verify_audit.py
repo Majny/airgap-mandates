@@ -1,4 +1,5 @@
-"""Offline audit verifier (`python -m tools.verify_audit bundle.json [--no-replay] [--receipt r.json]`).
+"""Offline audit verifier (`python -m tools.verify_audit bundle.json [--no-replay] [--receipt r.json]
+[--trust-keys keys.json] [--quorum log,w1|w2] [--allow-uncovered-tail]`).
 
 Needs no network and no AWS: everything is recomputed from the exported bundle (CONTRACTS.md v2 §7.4) with the
 bundle's own verifier keys. Problems name the leaf (`seq N`) or checkpoint (`checkpoint size N`) they concern.
@@ -37,6 +38,8 @@ class Report:
     problems: list[str] = field(default_factory=list)
     checked: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)  # SKIPPED / informational lines (never make the bundle fail)
+    keys: dict[str, str] = field(default_factory=dict)  # role -> "name+keyid" actually used for note verification
+    pinned: bool = False  # True when keys came from trusted_vkeys, False when taken from the bundle itself
 
 
 class _Ctx:
@@ -45,6 +48,7 @@ class _Ctx:
         self.checked: dict[str, int] = {}
         self.notes: list[str] = []
         self.bad_leaf_seqs: set[int] = set()
+        self.keys: dict[str, str] = {}
 
     def bad(self, msg: str, seq: int | None = None) -> None:
         self.problems.append(msg)
@@ -69,6 +73,13 @@ def parse_quorum(text: str) -> tuple[tuple[str, ...], ...]:
 
 def format_quorum(quorum: tuple[tuple[str, ...], ...]) -> str:
     return " AND ".join(g[0] if len(g) == 1 else "(" + " OR ".join(g) + ")" for g in quorum)
+
+
+def _int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _ts(value: Any) -> datetime | None:
@@ -137,23 +148,49 @@ def _check_leaves(bundle: dict[str, Any], ctx: _Ctx) -> tuple[list[tuple[int, di
 
 
 # 2. checkpoints: note signatures + quorum, roots, consistency, checkpoint leaves
-def _vkeys(bundle: dict[str, Any], ctx: _Ctx) -> dict[str, tuple[str, dict[str, Any]]]:
+def key_label(vkey: str) -> str:
+    """'name+keyid' of a note verifier key (for reports); the raw string if it does not parse."""
+    try:
+        p = cp.parse_vkey(vkey)
+        return f"{p['name']}+{p['key_id'].hex()}"
+    except (cp.NoteError, AttributeError, TypeError, ValueError):
+        return str(vkey)[:80]
+
+
+def _vkeys(bundle: dict[str, Any], ctx: _Ctx,
+           trusted: dict[str, str] | None = None) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Verifier keys per role. With `trusted` (pinned, out of band), only the pinned keys are used and every bundle
+    key for a pinned role must equal its pin; without it the bundle's own keys are used (self-asserted)."""
     pub = bundle.get("pubkeys") or {}
+    if not isinstance(pub, dict):
+        ctx.bad("pubkeys is not an object")
+        pub = {}
+    src = pub
+    if trusted is not None:
+        for role, pinned in trusted.items():
+            if role not in ROLES:
+                ctx.bad(f"trusted key for unknown role {role!r} (use {', '.join(ROLES)})")
+            elif pub.get(role) and pub[role] != pinned:
+                ctx.bad(f"pubkeys.{role}: bundle key {key_label(pub[role])} is not the pinned key "
+                        f"{key_label(pinned)}")
+        src = trusted
     out = {}
     for role in ROLES:
-        v = pub.get(role)
+        v = src.get(role)
         if not v:
             continue
         try:
             out[role] = (v, cp.parse_vkey(v))
-        except cp.NoteError as exc:
-            ctx.bad(f"pubkeys.{role}: {exc}")
+            ctx.keys[role] = key_label(v)
+        except (cp.NoteError, AttributeError, TypeError, ValueError) as exc:
+            ctx.bad(f"{'trusted' if trusted is not None else 'pubkeys'}.{role}: {exc}")
     return out
 
 
 def _check_checkpoints(bundle: dict[str, Any], events: list[tuple[int, dict[str, Any]]], hashes: list[bytes],
-                       quorum: tuple[tuple[str, ...], ...], ctx: _Ctx) -> None:
-    vkeys = _vkeys(bundle, ctx)
+                       quorum: tuple[tuple[str, ...], ...], ctx: _Ctx, *, trusted: dict[str, str] | None = None,
+                       allow_uncovered_tail: bool = False) -> None:
+    vkeys = _vkeys(bundle, ctx, trusted)
     if "log" not in vkeys:
         ctx.bad("pubkeys.log missing: cannot verify any checkpoint")
         return
@@ -223,7 +260,7 @@ def _check_checkpoints(bundle: dict[str, Any], events: list[tuple[int, dict[str,
             ctx.bad(f"checkpoint size {a['size']} -> {b['size']}: not consistent (append-only violated)")
     ctx.count("checkpoints", len(notes))
     ctx.checked["covered_leaves"] = covered
-    ctx.checked["uncovered_leaves"] = max(len(hashes) - covered, 0)
+    _check_uncovered_tail(notes, events, covered, ctx, allow=allow_uncovered_tail)
 
     # every checkpoint leaf points at a note in the bundle (a deleted/replaced checkpoint is detected)
     for seq, ev in events:
@@ -234,11 +271,51 @@ def _check_checkpoints(bundle: dict[str, Any], events: list[tuple[int, dict[str,
         if not cands:
             ctx.bad(f"seq {seq}: checkpoint leaf for size {d.get('size')} has no matching checkpoint in the bundle",
                     seq)
-        elif d.get("note_sha256") not in {hashlib.sha256(n.encode()).hexdigest() for n in cands}:
+        elif d.get("note_sha256") not in {_logged_note_sha256(n, d) for n in cands}:
             ctx.bad(f"seq {seq}: checkpoint leaf note_sha256 does not match the exported checkpoint of size "
                     f"{d.get('size')}", seq)
         else:
             ctx.count("checkpoint_leaves")
+
+
+def _logged_note_sha256(note: str, leaf_data: dict[str, Any]) -> str:
+    """sha256 of the note as stored at checkpoint time: the exported note minus signature lines added later (row 22b,
+    e.g. a W2 relay cosignature), i.e. keep only lines named by the log origin or listed in data.cosigners. The dropped
+    lines were already verified (and count toward quorum) in the note signature check."""
+    keep = {leaf_data.get("origin")} | {c for c in (leaf_data.get("cosigners") or []) if isinstance(c, str)}
+    if "\n\n" not in note:
+        return hashlib.sha256(note.encode()).hexdigest()
+    split = note.rindex("\n\n") + 2
+    lines = note[split:].splitlines(keepends=True)
+    kept = [ln for ln in lines if len(ln.split(" ")) >= 3 and ln.split(" ")[1] in keep]
+    return hashlib.sha256((note[:split] + "".join(kept)).encode()).hexdigest()
+
+
+def _check_uncovered_tail(notes: list[Any], events: list[tuple[int, dict[str, Any]]], covered: int, ctx: _Ctx, *,
+                          allow: bool) -> None:
+    """Every leaf must sit under a quorum-valid checkpoint. The one exception is the trailing `checkpoint` leaf that
+    records the last exported note (it can only be covered by the next checkpoint)."""
+    exempt = None
+    if notes and isinstance(notes[-1], str) and events:
+        seq, ev = events[-1]
+        d = ev.get("data") if isinstance(ev.get("data"), dict) else {}
+        try:
+            last_size = cp.parse_note(notes[-1])["size"]
+        except (cp.NoteError, TypeError, AttributeError):
+            last_size = None
+        if (ev.get("type") == "checkpoint" and last_size is not None and d.get("size") == last_size
+                and d.get("note_sha256") == _logged_note_sha256(notes[-1], d)):
+            exempt = len(events) - 1
+    uncovered = [seq for pos, (seq, _) in enumerate(events) if pos >= covered and pos != exempt]
+    ctx.checked["uncovered_leaves"] = len(uncovered)
+    if not uncovered:
+        return
+    if allow:
+        ctx.note(f"WARNING: {len(uncovered)} leaves NOT covered by a witnessed checkpoint "
+                 f"({', '.join(_ranges(uncovered))}); accepted only because of --allow-uncovered-tail")
+    else:
+        for seq in uncovered:
+            ctx.bad(f"seq {seq}: not covered by a witnessed checkpoint")
 
 
 # 3. digests and policies
@@ -294,6 +371,7 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
     challenges: dict[str, tuple[int, dict[str, Any]]] = {}
     used: dict[str, int] = {}
     chg_signers: dict[str, dict[str, int]] = {}
+    accepted: dict[Any, tuple[int, dict[str, Any], Any]] = {}  # nonce -> (seq, data, subject_id)
     for seq, ev in events:
         t, d = ev.get("type"), ev.get("data") or {}
         if t == "enroll":
@@ -302,6 +380,7 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
             challenges[d.get("nonce")] = (seq, d)
         elif t == "signature" and d.get("accepted"):
             nonce, purpose = d.get("nonce"), d.get("purpose")
+            accepted.setdefault(nonce, (seq, d, ev.get("subject_id")))
             if purpose == "ENROLL":
                 continue
             addr = str(d.get("signer_address") or "").lower()
@@ -330,11 +409,14 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
             else:
                 if hashlib.sha256(text.encode()).hexdigest() != d.get("text_sha256"):
                     ctx.bad(f"seq {seq}: re-rendered text does not match text_sha256", seq)
-                try:
-                    rec = _recover(text, str(d.get("sig", "")))
-                except ValueError as exc:
-                    ctx.bad(f"seq {seq}: signature does not recover ({exc})", seq)
-                    rec = ""
+                rec: str | None = ""
+                if not d.get("sig"):
+                    ctx.bad(f"seq {seq}: accepted signature leaf carries no sig, EIP-191 cannot be checked", seq)
+                else:
+                    try:
+                        rec = _recover(text, str(d["sig"]))
+                    except ValueError as exc:
+                        ctx.bad(f"seq {seq}: signature does not recover ({exc})", seq)
                 if rec is None:
                     ctx.count("eip191_unavailable")
                     ctx.note("EIP-191 signer recovery " + _SKIP_UPSTREAM.format("executor/sig.py"))
@@ -365,16 +447,28 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
             d = ev.get("data") or {}
             mandates.setdefault(d.get("mandate_id"), []).append((seq, d))
     for mid, sigs in mandates.items():
-        if max(int(d.get("sig_total") or 1) for _, d in sigs) < 2:
-            continue
+        multi = max(_int(d.get("sig_total"), 1) for _, d in sigs) >= 2
         first: dict[str, int] = {}
+        signers: set[str] = set()  # distinct addresses backed by an accepted MANDATE signature on the same nonce
         for seq, d in sigs:
             addr = str(d.get("signer_address", "")).lower()
-            if addr in first:
+            if multi and addr in first:
                 ctx.bad(f"seq {seq}: mandate {mid} signature {d.get('sig_index')}/{d.get('sig_total')} reuses signer "
                         f"{addr} (seq {first[addr]})", seq)
             first.setdefault(addr, seq)
-        ctx.count("mandates_2of2")
+            s = accepted.get(d.get("nonce"))
+            if s and s[1].get("purpose") == "MANDATE" and s[2] == mid \
+                    and str(s[1].get("signer_address") or "").lower() == addr:
+                signers.add(addr)
+            if d.get("status") == "ACTIVE":
+                need = _int(d.get("sig_total"), 1)
+                if len(signers) < need:
+                    ctx.bad(f"seq {seq}: mandate {mid} ACTIVE with {len(signers)} distinct accepted signer(s), "
+                            f"needs {need}", seq)
+                else:
+                    ctx.count("mandates_active_quorum")
+        if multi:
+            ctx.count("mandates_2of2")
 
 
 # 5. payee changes: transition chain and cooling-off ordering
@@ -383,10 +477,13 @@ def _check_changes(events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
     visited: dict[str, set[str]] = {}
     not_before: dict[str, str] = {}
     cooled: dict[str, int] = {}
+    scheduled: set[str] = set()
+    chg_sigs: dict[str, dict[str, set[str]]] = {}  # change_id -> role -> accepted CHG signer addresses
     for seq, ev in events:
         t, d = ev.get("type"), ev.get("data") or {}
-        if t == "change_event" and d.get("event") == "cooling_scheduled" and isinstance(d.get("detail"), dict):
-            if d["detail"].get("not_before"):
+        if t == "change_event" and d.get("event") == "cooling_scheduled":
+            scheduled.add(d.get("change_id"))
+            if isinstance(d.get("detail"), dict) and d["detail"].get("not_before"):
                 not_before[d.get("change_id")] = d["detail"]["not_before"]
         elif t == "state_transition":
             cid, frm, to = d.get("change_id"), d.get("from"), d.get("to")
@@ -395,6 +492,8 @@ def _check_changes(events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
             state[cid] = to
             visited.setdefault(cid, set()).update({s for s in (frm, to) if s})
             if frm == "COOLING":
+                if cid not in scheduled:
+                    ctx.bad(f"seq {seq}: change {cid} left COOLING without an earlier cooling_scheduled event", seq)
                 nb, ts = _ts(not_before.get(cid)), _ts(ev.get("ts"))
                 if nb and ts and ts < nb:
                     ctx.bad(f"seq {seq}: change {cid} left COOLING at {ev.get('ts')}, before not_before "
@@ -405,8 +504,16 @@ def _check_changes(events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
                     ctx.bad(f"seq {seq}: change {cid} reached ACTIVE without a cooling-off period", seq)
                 else:
                     ctx.count("changes_cooled")
+                sigs = chg_sigs.get(cid, {})
+                if not any(c != tr for c in sigs.get("clerk", ()) for tr in sigs.get("treasury", ())):
+                    ctx.bad(f"seq {seq}: change {cid} reached ACTIVE without accepted CHG signatures from a clerk and "
+                            "a treasury (distinct keys)", seq)
+                else:
+                    ctx.count("changes_signed_2of2")
         elif t == "signature" and d.get("accepted") and d.get("purpose") == "CHG":
             cid = ev.get("subject_id")
+            chg_sigs.setdefault(cid, {}).setdefault(d.get("role"), set()).add(
+                str(d.get("signer_address") or "").lower())
             if cid in state and cid not in cooled:
                 ctx.bad(f"seq {seq}: change {cid} signature accepted before cooling-off ended", seq)
 
@@ -415,9 +522,12 @@ def _check_changes(events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
 def _check_executions(bundle: dict[str, Any], events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
     decisions: dict[str, tuple[int, str]] = {}
     executed: dict[str, tuple[int, dict[str, Any]]] = {}
+    pay_sigs: dict[str, list[int]] = {}  # proposal_id -> seqs of accepted PAY signatures
     for seq, ev in events:
         t, d = ev.get("type"), ev.get("data") or {}
-        if t == "decision":
+        if t == "signature" and d.get("accepted") and d.get("purpose") == "PAY":
+            pay_sigs.setdefault(ev.get("subject_id"), []).append(seq)
+        elif t == "decision":
             decisions[d.get("subject_id") or ev.get("subject_id")] = (seq, d.get("decision"))
         elif t == "execution":
             tx = d.get("tx_id")
@@ -429,6 +539,9 @@ def _check_executions(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
                 ctx.bad(f"seq {seq}: execution of {d.get('proposal_id')} without an earlier decision leaf", seq)
             elif dec[1] == "deny":
                 ctx.bad(f"seq {seq}: execution of {d.get('proposal_id')} after a deny decision (seq {dec[0]})", seq)
+            elif dec[1] == "challenge" and not any(dec[0] < s < seq for s in pay_sigs.get(d.get("proposal_id"), ())):
+                ctx.bad(f"seq {seq}: execution of {d.get('proposal_id')} after a challenge decision (seq {dec[0]}) "
+                        "without an accepted PAY signature in between", seq)
             else:
                 ctx.count("executions")
         elif t == "rail_submitted" and d.get("tx_id") not in executed:
@@ -484,15 +597,40 @@ def _check_replay(bundle: dict[str, Any], events: list[tuple[int, dict[str, Any]
 
 
 def verify(bundle: dict[str, Any], *, replay: bool = True,
-           quorum: tuple[tuple[str, ...], ...] = DEFAULT_QUORUM) -> Report:
-    """Leaf hashes, seq gaps, roots vs checkpoints, consistency, log/W1/W2 note signatures (quorum), checkpoint
-    leaves, digests, signer enrolment + challenge binding (+ re-render/recovery when the text is available),
-    2/2 distinctness, cooling-off ordering, execution <-> decision/ledger, decide() replay at policy_hash (S12)."""
+           quorum: tuple[tuple[str, ...], ...] = DEFAULT_QUORUM, trusted_vkeys: dict[str, str] | None = None,
+           allow_uncovered_tail: bool = False) -> Report:
+    """Verify an audit export offline (CONTRACTS §7.5).
+
+    Integrity: leaf hashes, contiguous seq, every checkpoint root recomputed from the bundle's own leaves, log/W1/W2
+    note signatures against `quorum`, checkpoint leaves <-> exported notes (extra cosignature lines added after the
+    fact, row 22b, are stripped before hashing), and every leaf covered by a quorum-valid checkpoint (only the
+    trailing `checkpoint` leaf of the last exported note may be uncovered; `allow_uncovered_tail=True` downgrades
+    the rest to a loud note, counted in checked['uncovered_leaves']).
+
+    Consistency between checkpoints: because every root is recomputed from the same leaf list, two checkpoints that
+    both match their roots are consistent by construction; the RFC 9162 consistency proof is recomputed only as a
+    cross-check. This detects a bundle edited after export, NOT a log that shows different histories to different
+    parties: real fork detection is the witnesses' job (S8, they keep the last size/root they cosigned).
+
+    Keys: with `trusted_vkeys` ({"log", "w1", "w2"?}, obtained out of band) only those keys verify notes and every
+    bundle key for a pinned role must equal its pin. Without it the bundle's own keys are used (self-asserted: an
+    attacker who rewrites the whole bundle can re-sign it), and Report.pinned is False.
+
+    Semantics (kept simple): digests on decision-relevant leaves; policy material hashes; accepted signers enrolled
+    with the right role, bound to an earlier challenge (re-render + EIP-191 recovery when the text is available);
+    nonces accepted once; a `mandate_signed` leaf with status ACTIVE needs sig_total distinct signer addresses among
+    that mandate's mandate_signed leaves, each backed by an accepted MANDATE signature on the same nonce; a payee
+    change reaching ACTIVE needs accepted CHG signatures from a clerk and a treasury with distinct addresses, a
+    COOLING period, and a cooling_scheduled change_event before it leaves COOLING (not before not_before); an
+    execution needs an earlier decision for its proposal: the latest one must not be deny, and if it is challenge
+    an accepted PAY signature for that proposal must lie between that decision and the execution; ledger rows match
+    execution leaves; decide() replay at the logged policy_hash (S12) unless replay=False."""
     ctx = _Ctx()
     if not isinstance(bundle, dict):
         return Report(False, ["bundle is not a JSON object"])
     events, hashes = _check_leaves(bundle, ctx)
-    _check_checkpoints(bundle, events, hashes, quorum, ctx)
+    _check_checkpoints(bundle, events, hashes, quorum, ctx, trusted=trusted_vkeys,
+                       allow_uncovered_tail=allow_uncovered_tail)
     _check_digests(bundle, events, ctx)
     _check_signatures(bundle, events, ctx)
     _check_changes(events, ctx)
@@ -501,25 +639,71 @@ def verify(bundle: dict[str, Any], *, replay: bool = True,
         _check_replay(bundle, events, ctx)
     else:
         ctx.note("decide() replay SKIPPED (--no-replay)")
-    return Report(not ctx.problems, ctx.problems, ctx.checked, ctx.notes)
+    return Report(not ctx.problems, ctx.problems, ctx.checked, ctx.notes, ctx.keys, trusted_vkeys is not None)
 
 
 def _ascii(s: str) -> str:
     return s.encode("ascii", "replace").decode("ascii")
 
 
+def _quorum_arg(text: str) -> tuple[tuple[str, ...], ...]:
+    try:
+        return parse_quorum(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _load_trust_keys(path: str) -> dict[str, str]:
+    """--trust-keys FILE: JSON {"log": vkey, "w1": vkey, "w2": vkey?} (raises ValueError / OSError)."""
+    with open(path, encoding="utf-8") as f:
+        keys = json.load(f)
+    if not isinstance(keys, dict) or not keys.get("log") or not keys.get("w1"):
+        raise ValueError('expected a JSON object {"log": vkey, "w1": vkey, "w2": vkey?}')
+    bad = set(keys) - set(ROLES)
+    if bad:
+        raise ValueError(f"unknown roles {sorted(bad)} (use {', '.join(ROLES)})")
+    out = {}
+    for role, vk in keys.items():
+        if vk is None:
+            continue
+        cp.parse_vkey(str(vk))  # NoteError is a ValueError
+        out[role] = str(vk)
+    return out
+
+
+def _key_lines(keys: dict[str, str], pinned: bool, what: str) -> list[str]:
+    used = ", ".join(f"{r} {k}" for r, k in keys.items()) or "none"
+    if pinned:
+        return [f"  keys (pinned via --trust-keys): {used}"]
+    note = ("self-asserted keys (taken from the receipt, not pinned)" if what == "receipt"
+            else "keys taken from the bundle (not pinned)")
+    return [f"  keys in use: {used}", f"  NOTE: {note}; whoever can rewrite it can re-sign it, pin with --trust-keys"]
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI; exit 1 on any problem."""
+    """CLI; exit 1 on any problem, 2 on bad arguments."""
     from executor.audit import receipt as rc
 
     ap = argparse.ArgumentParser(prog="python -m tools.verify_audit", description="Offline AirGap audit verifier")
     ap.add_argument("bundle", nargs="?", help="audit export JSON (GET /audit/export response)")
     ap.add_argument("--no-replay", action="store_true", help="skip decide() replay")
     ap.add_argument("--receipt", help="receipt JSON (GET /receipts/{tx_id} response) to verify")
-    ap.add_argument("--quorum", default="log,w1|w2", help="checkpoint quorum: ',' = AND, '|' = OR (default log,w1|w2)")
+    ap.add_argument("--quorum", default="log,w1|w2", type=_quorum_arg,
+                    help="checkpoint quorum: ',' = AND, '|' = OR (default log,w1|w2)")
+    ap.add_argument("--trust-keys", metavar="FILE",
+                    help='pinned verifier keys, JSON {"log": vkey, "w1": vkey, "w2": vkey?}')
+    ap.add_argument("--allow-uncovered-tail", action="store_true",
+                    help="report leaves after the last witnessed checkpoint as a warning instead of a failure")
     args = ap.parse_args(argv)
     if not args.bundle and not args.receipt:
         ap.error("give a bundle, --receipt, or both")
+    trusted = None
+    if args.trust_keys:
+        try:
+            trusted = _load_trust_keys(args.trust_keys)
+        except (OSError, ValueError) as exc:
+            ap.error(f"--trust-keys {args.trust_keys}: {exc}")
+    quorum_text = format_quorum(args.quorum)
     color = sys.stdout.isatty()
     green, red, off = ("\033[32m", "\033[31m", "\033[0m") if color else ("", "", "")
     problems: list[str] = []
@@ -535,31 +719,53 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(bundle, dict) and "response" in bundle and "leaves" not in bundle:
             bundle = bundle["response"]  # accept a contracts fixture envelope too
         if bundle is not None:
-            rep = verify(bundle, replay=not args.no_replay, quorum=parse_quorum(args.quorum))
+            try:
+                rep = verify(bundle, replay=not args.no_replay, quorum=args.quorum, trusted_vkeys=trusted,
+                             allow_uncovered_tail=args.allow_uncovered_tail)
+            except Exception as exc:  # noqa: BLE001 - malformed input must give a red report, not a traceback
+                rep = Report(False, [f"bundle {args.bundle}: malformed bundle ({type(exc).__name__}: {exc})"])
             c = rep.checked
             out.append(f"bundle: {args.bundle}  log {bundle.get('log_id') if isinstance(bundle, dict) else '?'}  "
                        f"leaves {c.get('leaves', 0)}  checkpoints {c.get('checkpoints', 0)}")
             out.append(f"  leaf hashes ok {c.get('leaf_hashes', 0)}/{c.get('leaves', 0)}, checkpoint roots ok "
                        f"{c.get('checkpoint_roots', 0)}, quorum ok {c.get('checkpoint_quorum', 0)} "
-                       f"({args.quorum}), consistency ok {c.get('consistency', 0)}, covered leaves "
-                       f"{c.get('covered_leaves', 0)}")
+                       f"({quorum_text}), consistency ok {c.get('consistency', 0)}, covered leaves "
+                       f"{c.get('covered_leaves', 0)}, uncovered {c.get('uncovered_leaves', 0)}")
+            out += _key_lines(rep.keys, rep.pinned, "bundle")
             out.append("  checked: " + ", ".join(f"{k}={v}" for k, v in sorted(c.items())))
             out += [f"  {n}" for n in rep.notes]
             problems += rep.problems
     if args.receipt:
+        r = None
         try:
             with open(args.receipt, encoding="utf-8") as f:
                 r = json.load(f)
-            if isinstance(r, dict) and "response" in r and "entry" not in r:
-                r = r["response"]
-            rp = rc.receipt_problems(r)
-            if isinstance(bundle, dict) and not rp:
-                rp = rc.bundle_problems(r, bundle)
-            out.append(f"receipt: {args.receipt}  tx {(r.get('tx') or {}).get('tx_id')}  seq {r.get('seq')}  "
-                       f"tree size {r.get('tree_size')}: {'ok' if not rp else 'FAILED'}")
-            problems += [f"receipt: {p}" for p in rp]
         except (OSError, ValueError) as exc:
             problems.append(f"receipt {args.receipt}: cannot read JSON ({exc})")
+        if r is not None:
+            if isinstance(r, dict) and "response" in r and "entry" not in r:
+                r = r["response"]
+            try:
+                rp = rc.receipt_problems(r, trusted_vkeys=trusted)
+                if isinstance(bundle, dict) and not rp:
+                    rp = rc.bundle_problems(r, bundle)
+            except Exception as exc:  # noqa: BLE001
+                rp = [f"malformed receipt ({type(exc).__name__}: {exc})"]
+            if isinstance(r, dict):
+                tx = r.get("tx") if isinstance(r.get("tx"), dict) else None
+                entry = r.get("entry") if isinstance(r.get("entry"), dict) else {}
+                tx_id = (tx or {}).get("tx_id") or (entry.get("data") or {}).get("tx_id")
+                out.append(f"receipt: {args.receipt}  tx {tx_id}  seq {r.get('seq')}  "
+                           f"tree size {r.get('tree_size')}: {'ok' if not rp else 'FAILED'}")
+                out += _key_lines(rc.receipt_keys(r, trusted_vkeys=trusted), trusted is not None, "receipt")
+                if tx is None:
+                    out.append("  NOTE: receipt has no tx: only the execution leaf (entry.data) is vouched for")
+                else:
+                    out.append(f"  vouched for: entry.data and tx fields {', '.join(rc.TX_FIELDS)} (other tx fields "
+                               "are not covered by the log)")
+            else:
+                out.append(f"receipt: {args.receipt}: FAILED")
+            problems += [f"receipt: {p}" for p in rp]
     if problems:
         out.append(f"{red}RESULT: FAIL - {len(problems)} problem(s){off}")
         out += [f"  - {p}" for p in problems[:50]]

@@ -228,3 +228,48 @@ def test_property_single_mutation_detected(keydir, data):
     rep = va.verify(b, replay=False)
     assert not rep.ok
     assert needle in "\n".join(rep.problems), (kind, rep.problems)
+
+
+def _enroll_leaves(h):
+    """Harness enrols via seed.enroll_signer (table only, no ceremony); log the enroll leaves the real ceremony
+    (tools/enroll.py) writes, so the verifier can check signer enrolment."""
+    for acct, role, device, i in ((h.clerk, "clerk", "GENUINE", 0), (h.treasury, "treasury", "EMULATOR", 1)):
+        log.append(log.make_event("enroll", {"address": acct.address.lower(), "role": role, "label": role,
+                                             "device": device, "device_model": "T3T1", "firmware_version": "2.12.5",
+                                             "cert_chain_sha256": "ab" * 32, "fw_hash": "ab" * 32,
+                                             "derivation_path": f"m/44'/60'/0'/0/{i}", "enroll_sig": "0x"},
+                                  subject_id=None, actor="tools"), store=h.store, settings=h.settings)
+
+
+@pytest.mark.xfail(strict=True, reason="WS-A: executor/handler.py logs accepted signature leaves with sig='' "
+                   "(S2 offline EIP-191 check impossible); remove this marker when fixed")
+def test_real_executor_run_verifies():
+    """A real executor run (2/2 mandate, allow, duplicate deny, challenge + PAY step-up, tick, export) verifies with
+    replay and the review's semantic checks (step-up signature, mandate signers, uncovered tail)."""
+    from tests.wsa_helpers import Harness
+
+    h = Harness()
+    _enroll_leaves(h)
+    h.mandate()
+    assert h.propose(1_000_000)[0] in (200, 201)
+    h.propose(1_000_000)  # duplicate -> deny
+    _, r = h.propose(12_500_050, vendor="ven_87654321", no="Z-1")
+    assert r["decision"]["decision"] == "challenge"
+    st_, sr = h.submit(r["decision"]["challenge"], h.clerk)
+    assert st_ == 200 and sr["effect"]["type"] == "payment_executed"
+    log.tick(store=h.store, settings=h.settings)
+    bundle = log.export("audit", store=h.store, settings=h.settings)
+    rep = va.verify(bundle, replay=True)
+    assert rep.ok, rep.problems
+    c = rep.checked
+    assert c["replayed"] == 4 and c["executions"] == 2 and c["mandates_active_quorum"] == 1
+    assert c["uncovered_leaves"] == 0 and c["signers_enrolled"] == 3
+
+    # drop the PAY step-up signature: the challenged execution is no longer backed by a signature
+    bad = copy.deepcopy(bundle)
+    sig = next(le for le in bad["leaves"] if le["event"]["type"] == "signature"
+               and le["event"]["data"]["purpose"] == "PAY")
+    sig["event"]["data"]["accepted"] = False
+    sig["leaf_hash"] = log.leaf_hash(sig["event"])
+    rep = va.verify(bad, replay=True)
+    assert any("after a challenge decision" in p and "without an accepted PAY signature" in p for p in rep.problems)

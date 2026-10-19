@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 
 	"golang.org/x/mod/sumdb/note"
 )
@@ -27,11 +29,16 @@ func main() {
 		os.Exit(1)
 	}
 	var verifiers []note.Verifier
+	var skipped []string // "name+keyhash" of vkeys stock note cannot verify (our 0x04 cosigner key)
 	for _, vk := range os.Args[2:] {
 		v, err := note.NewVerifier(vk)
-		if err != nil { // e.g. the 0x04 cosigner vkey: stock note only knows Ed25519 (0x01)
-			fmt.Fprintf(os.Stderr, "skip %s: %v\n", vk, err)
+		if err != nil && err.Error() == "unknown verifier algorithm" {
+			skipped = append(skipped, strings.Join(strings.SplitN(vk, "+", 3)[:2], "+"))
 			continue
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "bad vkey %s: %v\n", vk, err)
+			os.Exit(2)
 		}
 		verifiers = append(verifiers, v)
 	}
@@ -42,5 +49,10 @@ func main() {
 	}
 	for _, s := range n.Sigs {
 		fmt.Printf("OK %s %08x\n", s.Name, s.Hash)
+	}
+	for _, s := range n.UnverifiedSigs { // present and from a supplied key, but NOT checked by this tool
+		if slices.Contains(skipped, fmt.Sprintf("%s+%08x", s.Name, s.Hash)) {
+			fmt.Printf("UNCHECKED %s %08x (stock sumdb/note cannot verify this signature type)\n", s.Name, s.Hash)
+		}
 	}
 }

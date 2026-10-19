@@ -56,8 +56,11 @@ def test_stock_go_note_accepts_our_checkpoint(bins, logged):
     r = _verify(bins, note, vk["log"], vk["w1"])
     assert r.returncode == 0, r.stderr
     kid = vk["log"].split("+")[1]
-    assert r.stdout.decode().splitlines() == [f"OK {checkpoint.origin('audit', logged[2])} {kid}"]
-    assert b"skip" in r.stderr  # 0x04 cosigner vkey is not a stock-note algorithm; checked by our Python verifier
+    w1_kid = vk["w1"].split("+")[1]
+    # 0x04 cosigner vkey is not a stock-note algorithm: reported UNCHECKED, verified by our Python verifier
+    assert r.stdout.decode().splitlines() == [
+        f"OK {checkpoint.origin('audit', logged[2])} {kid}",
+        f"UNCHECKED {checkpoint.witness_name(logged[2])} {w1_kid} (stock sumdb/note cannot verify this signature type)"]
     assert set(checkpoint.verify_note(note, [vk["log"], vk["w1"]])["verified"]) == {
         checkpoint.origin("audit", logged[2]), checkpoint.witness_name(logged[2])}
 
@@ -85,7 +88,9 @@ def test_stock_go_note_accepts_contract_fixture(bins):
     vk = json.loads((FIXTURES / "receipts_get" / "ok.json").read_text())["response"]["vkeys"]
     r = _verify(bins, note, vk["log"], vk["w1"])
     assert r.returncode == 0, r.stderr
-    assert r.stdout.decode().splitlines() == [f"OK airgap.example/demo/audit {vk['log'].split('+')[1]}"]
+    assert r.stdout.decode().splitlines() == [  # fixture w1 vkey (0x04) matches the cosignature line's key id
+        f"OK airgap.example/demo/audit {vk['log'].split('+')[1]}",
+        "UNCHECKED airgap.example/demo/w1 7027bc92 (stock sumdb/note cannot verify this signature type)"]
 
 
 def test_merkle_matches_go_tlog(bins):
@@ -106,3 +111,10 @@ def test_merkle_matches_go_tlog(bins):
                 cproof = merkle.consistency_proof(i, tree)
                 assert [p.hex() for p in cproof] == go["consistency"][f"{i}/{size}"], (i, size)
                 assert merkle.verify_consistency(i, size, merkle.root(tree[:i]), root, cproof)
+
+
+def test_bad_log_vkey_exits_2(bins, logged):
+    note, vk, _ = logged
+    bad = vk["log"][:-4] + "AAAA"
+    r = _verify(bins, note, bad, vk["log"])
+    assert r.returncode == 2 and b"bad vkey" in r.stderr

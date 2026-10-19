@@ -10,8 +10,9 @@ What it does and does not check:
 
 - Log signature (vkey type `0x01`, Ed25519): verified by stock Go code.
 - W1 witness cosignature (vkey type `0x04`, C2SP tlog-cosignature): stock `note` does not know this
-  algorithm, so `noteverify` skips that vkey with a notice on stderr and ignores the signature line
-  (as signed-note requires for unknown keys). The cosignature is verified by our Python verifier
+  algorithm, so `noteverify` cannot verify it. When the note carries a signature from that supplied key, the
+  tool prints `UNCHECKED <name> <keyhash>` on stdout: exit 0 means only the `OK` lines were verified, never
+  the `UNCHECKED` ones. Any other bad vkey exits 2. The cosignature is verified by our Python verifier
   (`executor/audit/checkpoint.py verify_note`) and was cross-checked once, manually, against
   `filippo.io/torchwood` v0.10.0 `CosignatureVerifier`; that check is not part of CI.
 

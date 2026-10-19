@@ -41,7 +41,7 @@ def _serve(handler_cls):
         srv.server_close()
 
 
-def _executor_handler(store, settings, tamper=None):
+def _executor_handler(store, settings, tamper=None, w2_env=None):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -52,6 +52,16 @@ def _executor_handler(store, settings, tamper=None):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def do_POST(self):  # row 22b, as WS-A wires it: checkpoint.add_cosignature
+            u = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(u.query)
+            if u.path != "/checkpoint/cosignature":
+                return self._send(404, "text/plain", b"not found\n")
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            status, ctype, out = cp.add_cosignature(q["log_id"][0], int(q["size"][0]), body, store=store,
+                                                    settings=settings, env=w2_env or {})
+            self._send(status, ctype, out)
 
         def do_GET(self):
             u = urllib.parse.urlparse(self.path)
@@ -100,7 +110,7 @@ def _grow(store, settings, n: int) -> None:
 def world(tmp_path, monkeypatch):
     """Executor (own log key, W1 in-process) + W2 stand-in (own key dir and store, trusts the executor's log key)."""
     ex_settings, ex_store = make_settings(tmp_path / "executor"), FakeStore()
-    w2_settings, w2_store = make_settings(tmp_path / "w2"), FakeStore()
+    w2_settings, w2_store = make_settings(tmp_path / "w2", log_origin="supervisor.example"), FakeStore()
     real_trusted = witness.trusted_logs
     monkeypatch.setattr(witness, "trusted_logs",
                         lambda s: real_trusted(ex_settings) if s is w2_settings else real_trusted(s))
@@ -163,6 +173,55 @@ def test_relay_reports_w2_fork_refusal(world):
             _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_url:
         r = relay_w2.relay(executor_url=ex_url, w2_url=w2_url, old_size=size)
     assert r.status == 422 and r.cosignatures == []
+
+
+def test_relay_flags_w2_rollback(world):
+    """W2 already cosigned a larger tree than the executor serves: no resubmission, rollback flagged."""
+    ex_settings, ex_store, w2_settings, w2_store = world
+    _grow(ex_store, ex_settings, 3)
+    size = cp.latest("audit", store=ex_store)["size"]
+    w2_store.put("witness_state", {"origin": ORIGIN, "size": size + 50, "root_hash": "00" * 32, "note": ""})
+    seen: list[bytes] = []
+    with _serve(_executor_handler(ex_store, ex_settings)) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, seen)) as w2_url:
+        r = relay_w2.relay(executor_url=ex_url, w2_url=w2_url)
+    assert r.status == 409 and r.rollback_suspected and r.old_size == size + 50 and len(seen) == 1
+
+
+def test_relay_keeps_only_lines_verifying_against_w2_vkey(world, tmp_path):
+    ex_settings, ex_store, w2_settings, w2_store = world
+    _grow(ex_store, ex_settings, 3)
+    wrong = _w2_vkey(make_settings(tmp_path / "someone-else"))
+    with _serve(_executor_handler(ex_store, ex_settings)) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_url:
+        good = relay_w2.relay(executor_url=ex_url, w2_url=w2_url, w2_vkey=_w2_vkey(w2_settings))
+        relay_w2._known_size.clear()
+        w2_store.tables["witness_state"].clear()
+        bad = relay_w2.relay(executor_url=ex_url, w2_url=w2_url, w2_vkey=wrong)
+    assert good.status == 200 and len(good.cosignatures) == 1 and good.unverified == []
+    assert bad.status == 200 and bad.cosignatures == [] and len(bad.unverified) == 1
+
+
+def test_relay_uploads_w2_cosignature_row_22b(world):
+    ex_settings, ex_store, w2_settings, w2_store = world
+    _grow(ex_store, ex_settings, 3)
+    w2_vkey = _w2_vkey(w2_settings)
+    with _serve(_executor_handler(ex_store, ex_settings, w2_env={"AIRGAP_W2_VKEY": w2_vkey})) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_url:
+        r = relay_w2.relay(executor_url=ex_url, w2_url=w2_url, w2_vkey=w2_vkey)
+    assert r.status == 200 and r.upload_status == 200
+    stored = cp.latest("audit", store=ex_store)["note"]
+    vk = cp.vkeys(ex_settings)
+    assert cp.witness_name(w2_settings) == "supervisor.example/w1"  # distinct from the executor's W1 name
+    assert set(cp.verify_note(stored, [vk["log"], vk["w1"], w2_vkey])["verified"]) == {
+        cp.origin("audit", ex_settings), cp.witness_name(ex_settings), cp.witness_name(w2_settings)}
+
+
+def test_relay_once_returns_executor_error(world):
+    ex_settings, ex_store, w2_settings, w2_store = world  # no checkpoint yet -> executor 404
+    with _serve(_executor_handler(ex_store, ex_settings)) as ex_url, \
+            _serve(_w2_standin_handler(w2_store, w2_settings, [])) as w2_url:
+        assert relay_w2.relay_once(executor_url=ex_url, w2_url=w2_url) == 404
 
 
 def test_relay_refuses_export_that_contradicts_checkpoint(world):
