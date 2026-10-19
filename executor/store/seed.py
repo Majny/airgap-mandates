@@ -1,0 +1,44 @@
+"""Seed helpers for dev/CI (memory/moto): canonical demo registry (CONTRACTS §1 hard rules) and enrolled signers.
+
+The demo on AWS is seeded by tools/seed_data.py (WS-D) and tools/enroll.py (WS-C); this module only gives tests and
+`make dev` the same canonical fictitious data. Owner: WS-A.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from executor.policy.mandate import REGISTRY_META, registry_snapshot
+
+DEMO_VENDORS: list[dict[str, Any]] = [
+    {"vendor_id": "ven_12345678", "ico": "12345678", "name": "ACME s.r.o.", "domain": "acme.cz",
+     "iban": "CZ6508000000192000145399", "country": "CZ", "phone": "+420 200 000 001",
+     "contact_email": "accounting@acme.cz", "registered_since": "2023-02-01", "in_network": True,
+     "issuer_pins": [], "iban_history": [{"iban": "CZ6508000000192000145399", "from": "2024-03-01", "to": None,
+                                          "change_id": None}]},
+    {"vendor_id": "ven_87654321", "ico": "87654321", "name": "Beta Servis a.s.", "domain": "betaservis.cz",
+     "iban": "CZ6203000000000123456789", "country": "CZ", "phone": "+420 200 000 002",
+     "contact_email": "fakturace@betaservis.cz", "registered_since": "2022-06-15", "in_network": False,
+     "issuer_pins": [], "iban_history": [{"iban": "CZ6203000000000123456789", "from": "2022-06-15", "to": None,
+                                          "change_id": None}]},
+]
+
+
+def seed_registry(store: Any, vendors: list[dict[str, Any]] | None = None, version: int = 1) -> dict[str, Any]:
+    for v in vendors if vendors is not None else DEMO_VENDORS:
+        store.put("registry", dict(v))
+    snap = registry_snapshot(store)
+    store.put("registry", {**REGISTRY_META, "registry_version": version, "registry_hash": snap["hash"]})
+    return snap
+
+
+def enroll_signer(store: Any, address: str, role: str, *, device: str = "EMULATOR", label: str = "") -> None:
+    """Test/dev enrolment only (no ceremony); the real one is tools/enroll.py (WS-C)."""
+    store.put("enrolled_signers", {"address": address.lower(), "role": role, "label": label or role,
+                                   "device": device, "device_model": "T3T1", "firmware_version": "2.12.5",
+                                   "derivation_path": "m/44'/60'/0'/0/0", "enroll_sig": "", "active": True,
+                                   "enrolled_at": "2026-10-19T12:00:00Z"})
+
+
+def seed_demo(store: Any) -> None:
+    if store.get("registry", REGISTRY_META) is None:
+        seed_registry(store)
