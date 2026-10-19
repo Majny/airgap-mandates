@@ -551,8 +551,9 @@ def key_id(name, pub, t):
     return hashlib.sha256(name.encode() + b"\n" + bytes([t]) + pub).digest()[:4]
 
 
-def vkey(name, pub):
-    return f"{name}+{key_id(name, pub, 1).hex()}+{base64.b64encode(bytes([1]) + pub).decode()}"
+def vkey(name, pub, t=1):
+    """0x01 = log signer (sumdb/note), 0x04 = Ed25519 cosigner (torchwood.NewCosignatureVerifier)."""
+    return f"{name}+{key_id(name, pub, t).hex()}+{base64.b64encode(bytes([t]) + pub).decode()}"
 
 
 LOG_NAME, W1_NAME = "airgap.example/demo/audit", "airgap.example/demo/w1"
@@ -571,7 +572,7 @@ def checkpoint_note(size, root_hex, t=1792411200):
 
 
 NOTE40, NOTE40_BODY, NOTE40_SIGS = checkpoint_note(40, _h("root40"))
-VKEYS = {"log": vkey(LOG_NAME, _pub(LOG_SK)), "w1": vkey(W1_NAME, _pub(W1_SK))}
+VKEYS = {"log": vkey(LOG_NAME, _pub(LOG_SK)), "w1": vkey(W1_NAME, _pub(W1_SK), 4)}
 KEY_IDS = {"log": key_id(LOG_NAME, _pub(LOG_SK), 1).hex(), "w1": key_id(W1_NAME, _pub(W1_SK), 4).hex()}
 
 # ----------------------------------------------------------------------------- domain fixtures

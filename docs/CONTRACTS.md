@@ -294,7 +294,7 @@ in the `memory`/`moto` backends it is the trusted `principal` argument of `dispa
 | 19 | `GET /audit/export?log_id=audit&from_seq=0&redact=0` | auditor | — | 200 `audit_export.response` | |
 | 20 | `GET /receipts/{tx_id}` | any | — | 200 `receipt` | 404 |
 | 21 | `GET /checkpoint?log_id=audit` | any | — | 200 `text/plain` `checkpoint_note` (latest, with cosignatures) | 404 |
-| 22 | `POST /witness/add-checkpoint` | checkpointer → W1 λ | `text/plain` `add_checkpoint.request` (C2SP tlog-witness) | 200 `text/plain` cosignature line(s) | 403 bad signature, 404 unknown origin, 409 `text/x.tlog.size` (stale), 422 bad proof |
+| 22 | `POST /witness/add-checkpoint` | checkpointer → W1 λ | `text/plain` `add_checkpoint.request` (C2SP tlog-witness) | 200 `text/plain` cosignature line(s) | 400 old size > size, 403 bad signature, 404 unknown origin, 409 `text/x.tlog.size` (stale), 422 bad proof |
 | 23 | `GET /export/pain001/{tx_id}` | auditor / host | — | 200 `pain001.response` | 404 |
 | 24 | `GET /vendors` / `GET /vendors/{vendor_id}` | any (the tools λ masks IBANs to `..5399` for the agent) | — | 200 `vendor_list.response` / `vendor` | 404 |
 | 25 | `GET /ledger?vendor_id=` | any | — | 200 `ledger_list.response` | |
@@ -691,8 +691,10 @@ restrictions the output is byte-identical to RFC 8785 JCS (`tests/test_canonical
 - **Witness** = C2SP [tlog-witness](https://c2sp.org/tlog-witness): `POST /witness/add-checkpoint`, body `old <size>\n`,
   ≤ 63 base64 consistency-proof lines, an empty line, then the checkpoint. 200 = cosignature line(s)
   ([tlog-cosignature](https://c2sp.org/tlog-cosignature) type `0x04`: key id = `SHA-256(name || 0x0A || 0x04 || pubkey)[:4]`,
-  signed message `cosignature/v1\ntime <t>\n` + checkpoint body, signature line `base64(keyid4 || uint64be(t) || sig)` [U,
-  check torchwood vectors]); 409 stale (`text/x.tlog.size` body), 403 bad signature, 404 unknown origin, 422 bad proof.
+  signed message `cosignature/v1\ntime <t>\n` + checkpoint body incl. extension lines, signature line
+  `base64(keyid4 || uint64be(t) || sig)`, verified against torchwood v0.10.0; cosigner vkey
+  `name+<keyid(0x04) hex>+<base64(0x04 || pubkey)>`, parsed by `torchwood.NewCosignatureVerifier`); 400 old size >
+  checkpoint size, 409 stale (`text/x.tlog.size` body), 403 bad signature, 404 unknown origin, 422 bad proof.
   Size check and persistence are **one** conditional write on `witness_state`. Refusals append `witness_refusal`.
   W1 = witness λ (own role, own KMS key, own table); W2 = unmodified litewitness on its own EC2 instance and key
   (`AIRGAP_W2_URL`), "independent supervisor witness (simulated operator)". Quorum: `log AND (W1 OR W2)`.
