@@ -13,7 +13,7 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from executor.attest import vc as _vc
 from executor.canonical import canonical_json
@@ -241,18 +241,42 @@ def _old_since(vendor: dict[str, Any]) -> str:
     return str(vendor.get("registered_since", ""))[:10]
 
 
+def _severity_rank(fs: FactSet) -> tuple[int, int]:
+    sevs = [f["severity"] for f in _f_facts(fs["facts"])]
+    return (sevs.count("BLOCK"), sevs.count("WARN"))
+
+
+def _facts_for_cited_email(req: dict[str, Any], vendor: dict[str, Any], *, store: Any, settings: Any,
+                           now: datetime) -> tuple[dict[str, Any], FactSet]:
+    """(request with the email the change is judged on, its FactSet). The candidates are `email_id` and every inbox
+    email named by `evidence_ids` (the tools surface sends only evidence_ids); the WORST FactSet wins (most BLOCK,
+    then most WARN; ties keep the earlier candidate), so citing more evidence can only move a change toward deny."""
+    cands: list[str | None] = [req["email_id"]] if req.get("email_id") else []
+    cands += [e for e in _inbox.resolve_email_ids(req.get("evidence_ids"), store=store, settings=settings)
+              if e not in cands]
+    best: tuple[dict[str, Any], FactSet] | None = None
+    for eid in cands or [None]:
+        cand = {**req, "email_id": eid}
+        fs = compute_change_facts(cand, vendor, store=store, settings=settings, now=now)
+        if best is None or _severity_rank(fs) > _severity_rank(best[1]):
+            best = (cand, fs)
+    assert best is not None
+    return best
+
+
 def create(req: dict[str, Any], facts: FactSet, vendor: dict[str, Any], *, store: Any, settings: Any,
            now: datetime) -> Change:
     """POST /changes: initial state REJECTED (any F BLOCK) | PENDING_ATTEST (in_network) | CALLBACK_PENDING;
     tripwire to the registered contact on every create; change_event + state_transition leaves.
 
     The caller's `facts` are recomputed here with the full store-backed state (inbox email, first-seen), so a
-    caller that passed a thinner state can never skip F-DOMAIN / F-DKIM (fail closed). H facts are kept."""
+    caller that passed a thinner state can never skip F-DOMAIN / F-DKIM (fail closed). H facts are kept. The email
+    judged is the worst of `email_id` and the emails named by `evidence_ids` (_facts_for_cited_email)."""
     if req.get("vendor_id", vendor["vendor_id"]) != vendor["vendor_id"]:
         raise ApiError(ErrorCode.INVALID_REQUEST, "vendor_id does not match the registry row")
     if req["new_iban"] == vendor["iban"]:
         raise ApiError(ErrorCode.INVALID_REQUEST, "new_iban is already the active IBAN")
-    full = compute_change_facts(req, vendor, store=store, settings=settings, now=now)
+    req, full = _facts_for_cited_email(req, vendor, store=store, settings=settings, now=now)
     facts = {**full, "facts": [f for f in full["facts"] if f["kind"] == "F"]
              + [f for f in facts["facts"] if f["kind"] == "H"]}
     n = store.increment("counters", {"name": "change_no"}, "value")
@@ -619,10 +643,13 @@ def _activate(change: Change, *, expect: dict[str, Any], store: Any, settings: A
 
 
 def on_signature(change: Change, *, role: str, signer_address: str, nonce: str, store: Any, settings: Any,
-                 now: datetime) -> Change:
+                 now: datetime, on_accept: Callable[[], None] | None = None) -> Change:
     """Guards for CHG signatures (§6.1): attestation_insufficient / missing_callback_attestation /
     cooling_off / sigs_insufficient / emulator_not_allowed; SIG_CLERK -> SIG_TREASURY -> ACTIVE.
-    The caller (POST /signatures, §4.3) has already verified the signature, the enrolment and consumed the nonce."""
+    The caller (POST /signatures, §4.3) has already verified the signature, the enrolment and consumed the nonce.
+    `on_accept` (the caller's accepted `signature` leaf) runs once every guard and the R0 re-check passed and before
+    the state_transition leaf, so the log shows the signature before its effect (§7.5: ACTIVE needs earlier
+    accepted clerk + treasury CHG signatures)."""
     change = advance(_load(store, change["change_id"]), store=store, settings=settings, now=now)
     state = S(change["state"])
     if state is S.PENDING_ATTEST:
@@ -647,6 +674,8 @@ def on_signature(change: Change, *, role: str, signer_address: str, nonce: str, 
     sig = {"role": role, "address": addr, "nonce": nonce, "signed_at": iso(now)}
     if state is S.SIG_CLERK:
         _recheck(change, store=store, settings=settings, now=now)
+        if on_accept is not None:
+            on_accept()
         change["signatures"].append(sig)
         change["pending_challenge"] = ports.issue_chg_challenge(change, role="treasury", sig_index=2, store=store,
                                                                 settings=settings, now=now)
@@ -659,6 +688,10 @@ def on_signature(change: Change, *, role: str, signer_address: str, nonce: str, 
         if signer.get("device") != DeviceAuthenticity.GENUINE.value:
             raise ApiError(ErrorCode.EMULATOR_NOT_ALLOWED, "prod profile requires a GENUINE treasury device")
     _recheck(change, store=store, settings=settings, now=now)
+    if _vendor(store, change["vendor_id"])["iban"] != change["old_iban"]:  # before on_accept: no "accepted" leaf
+        raise ApiError(ErrorCode.STATE_CONFLICT, "registry IBAN changed since the request", {"state": state.value})
+    if on_accept is not None:
+        on_accept()
     change["signatures"].append(sig)
     change["pending_challenge"] = None
     return _activate(change, expect=expect, store=store, settings=settings, now=now)

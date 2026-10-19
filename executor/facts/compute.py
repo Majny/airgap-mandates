@@ -132,6 +132,12 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
 
     if state.get("email"):
         facts.extend(_email_facts(state["email"], payee, state, now, snapshots))
+    elif subject.get("email_id"):
+        # The request cites an email the inbox does not hold: there is no verified sender at all (fail closed;
+        # without this a made-up email_id would silently drop F-DOMAIN / F-DKIM).
+        cited = str(subject["email_id"])[:64]
+        add(_util.make_fact("F-DKIM", "BLOCK", f"Cited email {cited} is not in the inbox", "DKIM FAIL",
+                            evidence={"result": "none", "d": None, "s": None, "aligned": False}))
 
     mr_path = _util.snapshot_path(state, "mostlyright")
     add(warnlist.warnlist_fact(name, [payee.get("domain", "")], mr_path=mr_path), "mostlyright")
