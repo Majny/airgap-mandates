@@ -115,3 +115,13 @@ def test_a3_real_domain_takeover_dkim_pass_stays_dark():
                                            "evidence_ids": ["eml_001"]})
     assert out["status"] in ("PENDING_ATTEST", "REJECTED"), out
     assert w.challenges == [] and w.vendors[vendor_id(ACME["ico"])]["iban"] == ACME["iban"]
+
+
+def test_prompt_breakdown():
+    from bench.score import prompt_breakdown
+    ch = [{"channel": "device", "kind": "change", "rules": ["CHG-2OF2"]},
+          {"channel": "device", "kind": "change", "rules": ["CHG-2OF2"]},
+          {"channel": "device", "kind": "pay", "rules": ["F-MANDATE", "I-PER", "I-WARN"]},
+          {"channel": "device", "kind": "pay", "rules": ["F-FIRSTSEEN", "I-WARN"]},
+          {"channel": "ui", "kind": "pay"}]
+    assert prompt_breakdown(ch) == {"change_2of2": 2, "pay_over_cap": 1, "pay_new_account": 1, "pay_other": 0}
