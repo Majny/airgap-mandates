@@ -206,35 +206,52 @@ def get_driver(transport: str | None = None) -> SignerDriver:
     return TrezorDriver(transport)
 
 
-def sign_challenge(nonce: str, role: str, *, executor_url: str | None = None, transport: str | None = None,
-                   timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """GET /challenges/{nonce}, driver.sign(), POST /signatures; returns the signature_submit.response."""
-    import httpx
-
+def executor_call(executor_url: str | None = None) -> Any:
+    """call(method, path, body, who) -> (status, json) for the executor at `executor_url`. The AWS regional API
+    (execute-api) is SigV4-signed with the principal's IAM role (airgap-<who>, via infra.aws_e2e); any other URL is
+    plain HTTP with X-Client (local `make dev`)."""
     if executor_url is None:
         from executor.config import Settings
 
         executor_url = Settings.from_env().executor_url
     base = executor_url.rstrip("/")
-    with httpx.Client(timeout=30) as http:
-        r = http.get(f"{base}/challenges/{nonce}")
-        r.raise_for_status()
-        challenge = r.json()
-        if challenge.get("role") and challenge["role"] != role:
-            raise ValueError(f"challenge is for role {challenge['role']}, not {role}")
-        driver = get_driver(transport)
-        try:
-            approval = driver.sign(challenge, role, timeout)
-        finally:
-            close = getattr(driver, "close", None)
-            if close:
-                close()
-        r = http.post(f"{base}/signatures", json={
-            "nonce": approval["nonce"], "role": role, "sig": approval["sig"],
-            "address": approval["address"], "displayed_text": approval["displayed_text"],
-        })
-        r.raise_for_status()
-        return r.json()
+    if ".execute-api." in base:
+        from infra.aws_e2e import signed_call
+
+        return signed_call(base)
+    import httpx
+
+    client = httpx.Client(base_url=base, timeout=30)
+
+    def call(m: str, p: str, b: Any, who: str) -> tuple[int, Any]:
+        r = client.request(m, p, json=b, headers={"X-Client": who})
+        return r.status_code, r.json() if "json" in r.headers.get("content-type", "") else r.text
+
+    return call
+
+
+def sign_challenge(nonce: str, role: str, *, executor_url: str | None = None, transport: str | None = None,
+                   timeout: float = DEFAULT_TIMEOUT) -> dict:
+    """GET /challenges/{nonce}, driver.sign(), POST /signatures; returns the signature_submit.response."""
+    call = executor_call(executor_url)
+    st, challenge = call("GET", f"/challenges/{nonce}", None, "host")
+    if st != 200:
+        raise RuntimeError(f"GET /challenges/{nonce} -> {st} {challenge}")
+    if challenge.get("role") and challenge["role"] != role:
+        raise ValueError(f"challenge is for role {challenge['role']}, not {role}")
+    driver = get_driver(transport)
+    try:
+        approval = driver.sign(challenge, role, timeout)
+    finally:
+        close = getattr(driver, "close", None)
+        if close:
+            close()
+    st, r = call("POST", "/signatures", {"nonce": approval["nonce"], "role": role, "sig": approval["sig"],
+                                         "address": approval["address"],
+                                         "displayed_text": approval["displayed_text"]}, "host")
+    if st != 200:
+        raise RuntimeError(f"POST /signatures -> {st} {r}")
+    return r
 
 
 # --------------------------------------------------------------------------- demo harness and fallback kit
@@ -346,16 +363,27 @@ def demo_signers(*, settings: Any = None, auto_treasury: bool = True, auto_clerk
     return clerk, treasury
 
 
-def run_s1(*, auto_treasury: bool = True, auto_clerk: bool | None = None) -> dict:
-    """Demo beat S1 in-process (memory backend, development/rehearsal) with real device signatures."""
+def run_s1(*, auto_treasury: bool = True, auto_clerk: bool | None = None, url: str | None = None) -> dict:
+    """Demo beat S1 with real device signatures: in-process on the memory backend (rehearsal), or against a running
+    executor at `url` (the AWS regional API: SigV4 as airgap-host / airgap-tools; the device addresses must already
+    be enrolled there, see data/enrollment.json)."""
     from datetime import datetime, timezone
 
-    from executor import e2e, handler
+    from executor import e2e
+
+    clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
+    if url:
+        call = executor_call(url)
+        st, health = call("GET", "/health", None, "host")
+        print(f"executor {url}: {st} backend={health.get('backend')} profile={health.get('render_profile')}")
+        print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
+        return e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc))
+
+    from executor import handler
     from executor.config import Settings
     from executor.store import seed
     from executor.store.memory import MemoryStore
 
-    clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
     # Same setup as executor.e2e.in_process(), with device addresses enrolled instead of software keys.
     s = Settings(backend="memory", data_dir=seed.dev_data_dir())
     ctx = handler.Context(s, MemoryStore(s))
@@ -378,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     s1 = sub.add_parser("s1", help="run demo beat S1 in-process with real device signatures (rehearsal)")
     s1.add_argument("--manual-treasury", action="store_true", help="operate the treasury emulator by hand")
     s1.add_argument("--manual-clerk", action="store_true", help="fallback mode: operate the clerk emulator by hand")
+    s1.add_argument("--url", default=None, help="drive a running executor (e.g. the AWS regional API) instead")
     sc = sub.add_parser("sign", help="GET /challenges/{nonce}, sign on the device, POST /signatures")
     sc.add_argument("nonce")
     sc.add_argument("role", choices=sorted(ROLE_PATHS))
@@ -387,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
     if a.cmd == "s1":
-        run_s1(auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None)
+        run_s1(auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None, url=a.url)
         print("\nS1 WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
     elif a.cmd == "sign":
         print(json.dumps(sign_challenge(a.nonce, a.role, executor_url=a.url, transport=a.transport), indent=1))
