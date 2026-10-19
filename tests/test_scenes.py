@@ -1,6 +1,4 @@
 """Demo beats S2 / S3 through dispatch on the memory backend (executor/scenes.py). Owner: WS-A."""
-import pytest
-
 from executor import scenes
 
 
@@ -16,8 +14,28 @@ def test_scene_s3_takeover_rejected_without_challenge():
     assert out["takeover"]["state"] == "REJECTED"
 
 
-@pytest.mark.xfail(strict=True, reason="WS-D: attestation rows keyed by sk vc#<n> and CHG challenges via "
-                   "policy.challenge.issue_challenge (in flight); remove this marker with that fix")
 def test_scene_s3_legit_change_reaches_active():
     out = scenes.scene_s3(log=lambda s: None)
     assert out["legit"]["state"] == "ACTIVE"
+
+
+def test_host_reject_expired_change_gets_no_challenge_and_reason_is_kept():
+    from datetime import timedelta
+
+    env = scenes.DemoEnv()
+    st, r = env.call("POST", "/changes", {"vendor_id": scenes.ACME, "new_iban": scenes.TAKEOVER_IBAN,
+                                          "email_id": scenes.TAKEOVER_EMAIL, "hints": []}, "tools")
+    cid = r["change"]["change_id"]
+    # live change: host reject issues a CHG_REJECT challenge; the clerk's signature rejects with the reason kept
+    st, r = env.call("POST", f"/changes/{cid}/reject", {"reason": "clerk: not expected"}, "host")
+    assert st == 200 and r["challenge"]["purpose"] == "CHG_REJECT"
+    st, s = env.sign(r["challenge"], env.clerk)
+    assert st == 200 and s["effect"]["type"] == "change_rejected", s
+    assert "clerk: not expected" in str(s["change"]["history"][-1])
+    # expired but never read: lazily advanced first -> 409, no challenge, no nonce
+    _, r = env.call("POST", "/changes", {"vendor_id": scenes.ACME, "new_iban": scenes.LEGIT_NEW_IBAN,
+                                         "email_id": scenes.LEGIT_CHANGE_EMAIL, "hints": []}, "tools")
+    cid2 = r["change"]["change_id"]
+    env.at(env.now + timedelta(seconds=env.settings.change_ttl_seconds + 1))
+    st, r = env.call("POST", f"/changes/{cid2}/reject", {"reason": "late"}, "host")
+    assert (st, r["error"]) == (409, "state_conflict") and not env.nonces_for(cid2)
