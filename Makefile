@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv test test-render dev ui bench verify e2e contracts lint ci lock deploy teardown
+.PHONY: help venv data test test-render dev ui bench verify e2e contracts lint ci lock deploy teardown
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -11,7 +11,10 @@ venv:  ## create .venv (Python 3.12) and install the package with dev/ui/host ex
 lock:  ## refresh uv.lock
 	uv lock
 
-test:  ## run all tests (memory/moto backends)
+data:  ## build data/mostlyright/snapshot.sqlite from the (uncommitted) CSV if missing; checks snapshot.sha256
+	$(PY) -m tools.load_mostlyright ensure
+
+test: data  ## run all tests (memory/moto backends)
 	.venv/bin/pytest -q
 
 test-render:  ## run canonical renderer tests only
@@ -23,12 +26,12 @@ lint:  ## ruff
 contracts:  ## regenerate contracts/schemas and contracts/fixtures from contracts/build.py
 	$(PY) -m contracts.build
 
-ci:  ## contracts (must be up to date) -> ruff -> pytest; run on every merge
+ci: data  ## contracts (must be up to date) -> ruff -> pytest; run on every merge
 	$(PY) -m contracts.build && git diff --exit-code -- contracts/
 	.venv/bin/ruff check .
 	.venv/bin/pytest -q
 
-dev:  ## run executor locally (in-memory backend, development only) on :8000
+dev: data  ## run executor locally (in-memory backend, development only) on :8000
 	AIRGAP_BACKEND=memory .venv/bin/uvicorn executor.app:app --reload --port 8000
 
 ui:  ## run Streamlit host UI
@@ -37,7 +40,7 @@ ui:  ## run Streamlit host UI
 bench:  ## run AgentPayBench
 	$(PY) -m bench.run_bench --out bench/results
 
-e2e:  ## demo beat S1 end to end (memory backend; URL=http://127.0.0.1:8000 CLERK_KEY= TREASURY_KEY= to drive a server)
+e2e: data  ## demo beat S1 end to end (memory backend; URL=http://127.0.0.1:8000 CLERK_KEY= TREASURY_KEY= to drive a server)
 	$(PY) -m executor.e2e $(if $(URL),--url $(URL) --clerk-key $(CLERK_KEY) --treasury-key $(TREASURY_KEY))
 
 verify:  ## verify an audit export offline

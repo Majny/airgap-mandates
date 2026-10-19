@@ -99,14 +99,21 @@ def _s3_bytes(uri: str) -> tuple[bytes, str]:
     return s3.get_object(Bucket=bucket, Key=key)["Body"].read(), key.rsplit("/", 1)[-1]
 
 
+# Team copy of the dataset outside the repo (the raw CSV is never committed).
+SHARED_DIR = Path.home() / "Desktop" / "MyProjects" / "mostlyright-dataset"
+
+
 def resolve_src(src: str | None, out_dir: str | os.PathLike[str]) -> str:
-    """--src, else $AIRGAP_MOSTLYRIGHT_CSV, else the newest *.csv in out_dir, else the S3 prefix."""
+    """--src, else $AIRGAP_MOSTLYRIGHT_CSV, else the newest *.csv in out_dir, then in the team copy, else S3."""
     if src:
         return str(src)
     if os.environ.get(ENV_SRC):
         return os.environ[ENV_SRC]
-    local = sorted(Path(out_dir).glob("*.csv"))
-    return str(local[-1]) if local else DEFAULT_S3
+    for d in (Path(out_dir), SHARED_DIR):
+        local = sorted(d.glob("*.csv"))
+        if local:
+            return str(local[-1])
+    return DEFAULT_S3
 
 
 def read_source(src: str) -> tuple[bytes, str]:
@@ -303,6 +310,28 @@ def load(src: str | None = None, out_dir: str = "data/mostlyright") -> str:
     return sha
 
 
+class SnapshotMismatch(RuntimeError):
+    """The rebuilt snapshot does not match the committed snapshot.sha256 (dataset or loader changed)."""
+
+
+def ensure(src: str | None = None, out_dir: str = "data/mostlyright") -> str:
+    """Make sure snapshot.sqlite exists and matches the committed snapshot.sha256 (the facts' prov).
+
+    Without the snapshot the MostlyRight facts fail safe to WARN, so every payment steps up: build it instead.
+    A rebuild that yields a different SHA leaves the committed sidecar untouched and raises SnapshotMismatch."""
+    out = Path(out_dir)
+    side = out / "snapshot.sha256"
+    expected = side.read_text(encoding="ascii").split()[0] if side.exists() else None
+    db = out / "snapshot.sqlite"
+    if db.exists() and expected and hashlib.sha256(db.read_bytes()).hexdigest() == expected:
+        return expected
+    sha = load(src, out_dir)
+    if expected and sha != expected:
+        side.write_text(f"{expected}  snapshot.sqlite\n", encoding="ascii")
+        raise SnapshotMismatch(f"rebuilt snapshot {sha} != committed {expected}; update snapshot.sha256 on purpose")
+    return sha
+
+
 def stats(out_dir: str = "data/mostlyright") -> dict[str, Any]:
     path = Path(out_dir) / "snapshot.sqlite"
     meta = mr.meta(path)
@@ -316,9 +345,20 @@ def main(argv: list[str] | None = None) -> int:
     p_load = sub.add_parser("load", help="build snapshot.sqlite + snapshot.sha256")
     p_load.add_argument("--src", default=None, help=f"CSV path or s3:// URI (default ${ENV_SRC}, local CSV, S3)")
     p_load.add_argument("--out", default="data/mostlyright")
+    p_ens = sub.add_parser("ensure", help="build the snapshot only if missing or stale; check the committed sha")
+    p_ens.add_argument("--src", default=None)
+    p_ens.add_argument("--out", default="data/mostlyright")
     p_stats = sub.add_parser("stats", help="print snapshot meta and row counts")
     p_stats.add_argument("--out", default="data/mostlyright")
     args = ap.parse_args(argv)
+    if args.cmd == "ensure":
+        try:
+            print(ensure(args.src, args.out))
+        except (FileNotFoundError, SnapshotMismatch) as e:
+            print(f"MostlyRight snapshot: {e}. Set ${ENV_SRC} to the CSV path or AWS_PROFILE=hackathon for S3.",
+                  file=sys.stderr)
+            return 1
+        return 0
     if args.cmd == "load":
         sha = load(args.src, args.out)
         print(sha)
