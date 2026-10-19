@@ -3,8 +3,9 @@
 record_type 'sanction' rows (eu_financial_sanctions): national id == ICO, or name / alias match (rapidfuzz
 token_sort_ratio >= 92 on legal-form-stripped names; length guard: names under 10 chars must match exactly
 (>= 5 chars), longer ones within 85 % length).
-Hit -> BLOCK 'EU SANCTION HIT', else INFO 'SANCTIONS CLEAR'; prov = MostlyRight snapshot sha256. Missing snapshot ->
-WARN 'SANCTIONS N/A' (never CLEAR without data). Owner: WS-D.
+Malformed (record_ok = 0) sanction rows match too. Hit -> BLOCK 'EU SANCTION HIT', else INFO 'SANCTIONS CLEAR';
+prov = MostlyRight snapshot sha256. Missing snapshot, or one with unclassifiable rows -> WARN 'SANCTIONS N/A' (never
+CLEAR without data). Owner: WS-D.
 """
 from __future__ import annotations
 
@@ -27,6 +28,10 @@ def sanction_fact(name: str, ico: str, *, mr_path: str | os.PathLike[str] | None
                                evidence=evidence)
     sha = mr.snapshot_sha(mr_path)
     hit = mr.sanction_hit(name, ico, mr_path=mr_path)
+    if hit is None and mr.unclassified_rows(mr_path):
+        evidence["snapshot"] = "partial"
+        return _util.make_fact("F-SANCTION", "WARN", f"{LABEL}: snapshot has unreadable rows, not fully checked",
+                               "SANCTIONS N/A", evidence=evidence, prov=sha)
     if hit is None:
         return _util.make_fact("F-SANCTION", "INFO", f"{LABEL}: no match", "SANCTIONS CLEAR", evidence=evidence,
                                prov=sha)

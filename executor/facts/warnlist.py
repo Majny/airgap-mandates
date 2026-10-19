@@ -2,8 +2,9 @@
 
 record_type 'warning' rows (amf_blacklists, esma_non_compliant_casps, any other warning list): near-exact name match
 (rapidfuzz token_sort_ratio >= 95 on legal-form-stripped names AND the same first token) or the payee domain (or a
-parent of it) listed as website_domain / email_domain. Hit -> BLOCK 'WARNLIST HIT', else INFO 'WARNLIST CLEAR';
-prov = MostlyRight snapshot sha256. Missing snapshot -> WARN 'WARNLIST N/A' (never CLEAR without data). Owner: WS-D.
+parent of it) listed as website_domain / email_domain; malformed (record_ok = 0) warning rows match too. Hit -> BLOCK
+'WARNLIST HIT', else INFO 'WARNLIST CLEAR'; prov = MostlyRight snapshot sha256. Missing snapshot, or one with
+unclassifiable rows -> WARN 'WARNLIST N/A' (never CLEAR without data). Owner: WS-D.
 """
 from __future__ import annotations
 
@@ -37,6 +38,10 @@ def warnlist_fact(name: str, domains: list[str], *, mr_path: str | os.PathLike[s
         if hit is not None:
             break
         hit = mr.warning_domain_hit(d, mr_path=mr_path)
+    if hit is None and mr.unclassified_rows(mr_path):
+        evidence["snapshot"] = "partial"
+        return _util.make_fact("F-WARNLIST", "WARN", f"{LABEL}: snapshot has unreadable rows, not fully checked",
+                               "WARNLIST N/A", evidence=evidence, prov=sha)
     if hit is None:
         return _util.make_fact("F-WARNLIST", "INFO", f"{LABEL}: no name or domain match", "WARNLIST CLEAR",
                                evidence=evidence, prov=sha)

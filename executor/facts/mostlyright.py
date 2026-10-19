@@ -2,8 +2,10 @@
 
 CONTRACTS.md v2 §2.1 (MostlyRight snapshot). The sqlite file is built by `tools/load_mostlyright.py`; the same
 normalisation functions are used at load time and at query time. Used by F-PSP, F-WARNLIST, F-SANCTION and the
-MostlyRight leg of F-DOMAIN (`warning_domain_hit`). Only rows with record_ok = 1 ever produce a positive match.
-Owner: WS-D.
+MostlyRight leg of F-DOMAIN (`warning_domain_hit`). A licence / payment-scheme match (which can only help a payee)
+needs record_ok = 1; sanction and warning rows match even when malformed (record_ok = 0: a listed entity must never
+come out CLEAR because its row did not line up), and `unclassified_rows` counts rows that could be anything, so
+F-SANCTION / F-WARNLIST report N/A instead of CLEAR on such a snapshot. Owner: WS-D.
 """
 from __future__ import annotations
 
@@ -44,6 +46,21 @@ _LEGAL_SUFFIXES = sorted({
 }, key=lambda s: -len(s))
 _LEGAL_PREFIXES = ("jsc", "pjsc", "ojsc", "cjsc", "ooo", "oao", "zao", "pao", "ao", "uab", "llc", "tov")
 _DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$")
+
+
+RECORD_TYPES = ("licence", "warning", "sanction", "payment_scheme")
+SANCTION_LISTS = ("eu_financial_sanctions",)
+WARNING_LISTS = ("amf_blacklists", "esma_non_compliant_casps")
+
+
+def _rows_of(kind: str, lists: tuple[str, ...], alias: str = "r") -> str:
+    """SQL predicate: rows of record_type `kind`, ok or not, plus malformed rows whose source_list says `kind`."""
+    names = ", ".join(f"'{x}'" for x in (*lists, kind))
+    return (f"({alias}.record_type = '{kind}' OR ({alias}.record_ok = 0 AND {alias}.source_list IN ({names})))")
+
+
+_SANCTION_ROWS = _rows_of("sanction", SANCTION_LISTS)
+_WARNING_ROWS = _rows_of("warning", WARNING_LISTS)
 
 
 # --- normalisation (load time and query time) ---------------------------------------------------------------------
@@ -196,13 +213,13 @@ def psp_rows(path: str | os.PathLike[str], *, bic: str | None, national_id: str 
 
 
 def warning_name_hit(name: str, *, mr_path: str | os.PathLike[str]) -> dict[str, Any] | None:
-    """Exact / near-exact match of a payee name against warning rows: token_sort_ratio >= 95 on legal-form-stripped
+    """Exact / near-exact match of a payee name against warning rows (malformed ones included): token_sort_ratio >= 95 on legal-form-stripped
     names AND the same first token. Returns the best hit (ties -> lowest seq) or None."""
     core = core_name(name)
     if not core:
         return None
     sql = ("SELECT n.name, n.core, r.seq, r.record_id, r.source_list, r.category, r.since FROM names n "
-           "JOIN records r ON r.seq = n.seq WHERE n.first_tok = ? AND r.record_type = 'warning' AND r.record_ok = 1 "
+           f"JOIN records r ON r.seq = n.seq WHERE n.first_tok = ? AND {_WARNING_ROWS} "
            "ORDER BY r.seq, n.name")
     best: dict[str, Any] | None = None
     for r in connect(mr_path).execute(sql, (first_token(core),)):
@@ -227,8 +244,8 @@ def warning_domain_hit(domain: str, *, mr_path: str | os.PathLike[str]) -> dict[
     qs = ",".join("?" * len(cands))
     conn = connect(mr_path)
     sql = (f"SELECT d.domain, d.kind, r.seq, r.record_id, r.source_list, r.category, r.since FROM domains d "
-           f"JOIN records r ON r.seq = d.seq WHERE d.domain IN ({qs}) AND r.record_type = 'warning' "
-           f"AND r.record_ok = 1 ORDER BY length(d.domain) DESC, r.seq LIMIT 1")
+           f"JOIN records r ON r.seq = d.seq WHERE d.domain IN ({qs}) AND {_WARNING_ROWS} "
+           f"ORDER BY length(d.domain) DESC, r.seq LIMIT 1")
     r = conn.execute(sql, cands).fetchone()
     if r is None:
         return None
@@ -240,13 +257,30 @@ def warning_domain_hit(domain: str, *, mr_path: str | os.PathLike[str]) -> dict[
             "source_list": r["source_list"], "category": r["category"], "since": r["since"]}
 
 
+_UNCLASSIFIED: dict[tuple[str, int, int], int] = {}
+
+
+def unclassified_rows(path: str | os.PathLike[str]) -> int:
+    """Malformed rows that are neither a known record_type nor a sanction / warning by source_list: one of them could
+    be a lost sanctions or warning entry, so F-SANCTION / F-WARNLIST never report CLEAR while this is > 0."""
+    key = _key(path)
+    n = _UNCLASSIFIED.get(key)
+    if n is None:
+        types = ", ".join(f"'{t}'" for t in RECORD_TYPES)
+        n = int(connect(path).execute(
+            f"SELECT count(*) FROM records r WHERE r.record_ok = 0 AND r.record_type NOT IN ({types}) "
+            f"AND NOT {_SANCTION_ROWS} AND NOT {_WARNING_ROWS}").fetchone()[0])
+        _UNCLASSIFIED[key] = n
+    return n
+
+
 def _sanction_names(path: str | os.PathLike[str]) -> tuple[list[str], list[int]]:
     key = _key(path)
     hit = _SANCTION_NAMES.get(key)
     if hit is None:
         rows = connect(path).execute(
-            "SELECT n.core, n.seq FROM names n JOIN records r ON r.seq = n.seq WHERE r.record_type = 'sanction' "
-            "AND r.record_ok = 1 AND length(n.core) >= ? ORDER BY n.seq, n.core", (SANCTION_MIN_LEN,)).fetchall()
+            f"SELECT n.core, n.seq FROM names n JOIN records r ON r.seq = n.seq WHERE {_SANCTION_ROWS} "
+            "AND length(n.core) >= ? ORDER BY n.seq, n.core", (SANCTION_MIN_LEN,)).fetchall()
         hit = ([r["core"] for r in rows], [r["seq"] for r in rows])
         _SANCTION_NAMES[key] = hit
     return hit
@@ -260,13 +294,13 @@ def _len_ok(a: str, b: str) -> bool:
 
 
 def sanction_hit(name: str, ico: str, *, mr_path: str | os.PathLike[str]) -> dict[str, Any] | None:
-    """National id (ICO) equality, else name/alias match against record_ok sanction rows: exact core name (>= 5
+    """National id (ICO) equality, else name/alias match against sanction rows (malformed ones included): exact core name (>= 5
     chars), or token_sort_ratio >= 92 when both cores are >= 10 chars and lengths within 85 %. Best hit or None."""
     conn = connect(mr_path)
     nid = norm_national_id(ico)
     if len(nid) >= 6:
-        r = conn.execute("SELECT seq, record_id, source_list, name, category, since FROM records WHERE nid = ? "
-                         "AND record_type = 'sanction' AND record_ok = 1 ORDER BY seq LIMIT 1", (nid,)).fetchone()
+        r = conn.execute("SELECT seq, record_id, source_list, name, category, since FROM records r WHERE nid = ? "
+                         f"AND {_SANCTION_ROWS} ORDER BY seq LIMIT 1", (nid,)).fetchone()
         if r is not None:
             return {"match": "national_id", "record_id": r["record_id"], "source_list": r["source_list"],
                     "listed_name": r["name"], "category": r["category"], "since": r["since"], "score": 100}

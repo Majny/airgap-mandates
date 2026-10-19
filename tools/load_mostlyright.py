@@ -7,9 +7,12 @@ Feeds F-PSP, F-WARNLIST, F-SANCTION and the website_domain leg of F-DOMAIN. Owne
 The raw CSV is not clean UTF-8: most records carry the low byte of each code point (Latin-1 for U+0000..U+00FF,
 control characters / stray quotes / line breaks for letters such as c-caron), a few are UTF-8. Parsing is done on
 the Latin-1 view of the bytes (lossless), records split by a stray line break are re-joined, and each record is then
-decoded on its own: UTF-8, else cp1250 when its 0x80-0x9F bytes are cp1250 letters, else Latin-1. Records that
-still do not line up (record_type outside licence/warning/sanction/payment_scheme) are kept with record_ok = 0 and
-never produce a positive match.
+decoded on its own: UTF-8, else cp1250 when its 0x80-0x9F bytes are cp1250 letters, else Latin-1. The text is cut
+into records at every line that starts with a record id and a record_type before csv parsing, so a stray quote never
+swallows the records after it; a one-line record whose other_names holds stray quotes/commas is re-anchored on its
+clean head and tail fields. Records that still do not line up are kept with record_ok = 0; sanction / warning rows
+among them stay matchable by name and national id (fail closed), and the facts report N/A, never CLEAR, while the
+snapshot holds a row that cannot be classified at all.
 
 The build is deterministic (sorted rows, fixed schema, no timestamps, VACUUM, the writer-version header field pinned):
 the same CSV gives the same file sha256, which is the `prov` of every MostlyRight-derived fact.
@@ -34,7 +37,7 @@ from typing import Any
 
 from executor.facts import mostlyright as mr
 
-LOADER_VERSION = "mostlyright-loader/4"
+LOADER_VERSION = "mostlyright-loader/5"
 DEFAULT_S3 = "s3://ai-hackathon-datasets-422928733782/MostlyRIght/"
 ENV_SRC = "AIRGAP_MOSTLYRIGHT_CSV"
 ENV_PROFILE = "AIRGAP_MOSTLYRIGHT_PROFILE"  # falls back to AWS_PROFILE
@@ -50,6 +53,11 @@ NCOL = len(COLUMNS)
 RECORD_TYPES = frozenset({"licence", "warning", "sanction", "payment_scheme"})
 _I_OTHER = COLUMNS.index("other_names")
 _ID_RE = re.compile(r"^[0-9a-f]{32}$")
+# Start of a record: a line that begins with a record id and a known record_type. Records are split here BEFORE csv
+# parsing, so a stray quote (the low byte of a lost Cyrillic letter) can never swallow the records that follow it.
+_RECORD_START_RE = re.compile(r"(?m)^(?=[0-9a-f]{32},(?:licence|warning|sanction|payment_scheme),)")
+_N_HEAD = COLUMNS.index("other_names")  # fields before other_names (clean in every malformed record seen)
+_N_TAIL = NCOL - _N_HEAD - 1  # fields after it
 _DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})?$")
 _ASOF_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 _HDR_VERSION_OFFSET = 96
@@ -203,16 +211,83 @@ def repair_rows(rows: list[list[str]]) -> list[tuple[list[str], int, int]]:
     return out
 
 
+def _take(s: str, n: int) -> tuple[list[str], int]:
+    """Up to n CSV fields from the start of s (quotes as in the csv module, lenient: text after a closing quote is
+    kept), and the index where the rest begins."""
+    out: list[str] = []
+    i = 0
+    while len(out) < n and i <= len(s):
+        if i < len(s) and s[i] == '"':
+            j, buf = i + 1, []
+            while j < len(s):
+                if s[j] == '"':
+                    if s[j + 1:j + 2] == '"':
+                        buf.append('"')
+                        j += 2
+                        continue
+                    j += 1
+                    break
+                buf.append(s[j])
+                j += 1
+            k = s.find(",", j)
+            k = len(s) if k < 0 else k
+            out.append("".join(buf) + s[j:k])
+        else:
+            k = s.find(",", i)
+            k = len(s) if k < 0 else k
+            out.append(s[i:k])
+        i = k + 1
+    return out, i
+
+
+def _anchor(line: str) -> list[str] | None:
+    """A one-line record whose other_names holds stray quotes / commas (lost letters): the fields before
+    other_names are read from the left, the fields after it from the right (quoting is symmetric), and whatever lies
+    between is other_names. Accepted only when the result has 34 sane fields."""
+    head, start = _take(line, _N_HEAD)
+    tail_rev, k = _take(line[::-1], _N_TAIL)
+    end = len(line) - k
+    if len(head) != _N_HEAD or len(tail_rev) != _N_TAIL or end < start - 1:
+        return None
+    other = line[start:max(start, end)]
+    if len(other) >= 2 and other[0] == other[-1] == '"':
+        other = other[1:-1]
+    fields = head + [other] + [f[::-1] for f in reversed(tail_rev)]
+    return fields if len(fields) == NCOL and _is_head(fields) and _sane(fields) else None
+
+
+def split_records(body: str) -> list[str]:
+    """CSV body (no header) -> one text chunk per record (a record plus any stray-line-break continuation lines)."""
+    starts = [m.start() for m in _RECORD_START_RE.finditer(body)]
+    bounds = ([0] if not starts or starts[0] != 0 else []) + starts + [len(body)]
+    return [body[a:b] for a, b in zip(bounds, bounds[1:]) if body[a:b].strip()]
+
+
+def _parse_chunk(chunk: str) -> list[tuple[list[str], int, int]]:
+    rows = [r for r in csv.reader(io.StringIO(chunk, newline="")) if any(r)]
+    out = repair_rows(rows)
+    if len(out) == 1 and len(out[0][0]) == NCOL and _sane(out[0][0]):
+        return out
+    line = chunk.rstrip("\r\n")
+    if _RECORD_START_RE.match(chunk) and "\n" not in line:
+        fixed = _anchor(line)
+        if fixed is not None:
+            return [(fixed, 1, len(rows[0]) if rows else 0)]
+    return out
+
+
 def parse_csv(raw: bytes) -> list[dict[str, Any]]:
     """Raw CSV bytes -> record dicts (34 columns + record_ok, repaired, src_encoding, field_count, extra)."""
     text = raw.decode("latin-1")
     if text.startswith("\xef\xbb\xbf"):
         text = text[3:]
-    rows = list(csv.reader(io.StringIO(text, newline="")))
-    if not rows or [c.strip() for c in rows[0]] != list(COLUMNS):
-        raise ValueError(f"unexpected header: {rows[0] if rows else None}")
+    header_line, _, body = text.partition("\n")
+    header = next(csv.reader(io.StringIO(header_line, newline="")), None)
+    if not header or [c.strip() for c in header] != list(COLUMNS):
+        raise ValueError(f"unexpected header: {header}")
+    parsed = [rec for chunk in split_records(body) for rec in _parse_chunk(chunk)]
     out = []
-    for fields, repaired, count in repair_rows([r for r in rows[1:] if any(r)]):
+    for fields, repaired, count in parsed:
         dec, enc = decode_record(fields)
         vals = (dec + [""] * NCOL)[:NCOL]
         rec: dict[str, Any] = dict(zip(COLUMNS, vals))
