@@ -160,12 +160,12 @@ def tab_receipts(st: Any) -> None:
     if code != 200:
         st.warning(r)
         return
-    try:
-        from executor.audit.receipt import qr_payload, receipt_qr_svg
-        st.markdown(receipt_qr_svg(r, scale=6), unsafe_allow_html=True)
-        st.caption("If a phone cannot scan it, verify this text offline: python -m tools.verify_audit --receipt <file>")
-        st.code(qr_payload(r), language="text")
-    except (ImportError, NotImplementedError) as exc:
+    try:  # short URL-form QR (AGR2, ~v8): scans with a stock phone camera; the full AGR1 receipt is file-only
+        from executor.audit.receipt import short_qr_payload, short_qr_png
+        st.image(short_qr_png(r), width=480)
+        st.code(short_qr_payload(r), language="text")
+        st.caption("scan → the verifier checks this receipt offline against the signed log")
+    except (ImportError, NotImplementedError, RuntimeError) as exc:  # RuntimeError: segno missing
         st.info(f"receipt QR unavailable ({exc}); install the [ui] extra (segno)")
     st.json(r, expanded=False)
 
