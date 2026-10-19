@@ -1,11 +1,16 @@
 """Self-contained receipt (tlog-proof style), shown as QR. CONTRACTS.md v2 §7.4. Owner: WS-B."""
 from __future__ import annotations
 
+import base64
+import io
 import json
+import re
+import zlib
 from typing import Any
 
 from executor.audit import checkpoint as cp
 from executor.audit import log, merkle
+from executor.canonical import canonical_json
 
 QUORUM: tuple[tuple[str, ...], ...] = (("log",), ("w1",))  # a receipt needs the log signature AND W1
 TX_FIELDS = ("tx_id", "proposal_id", "vendor_id", "iban", "amount_minor", "currency", "authorization")
@@ -173,3 +178,95 @@ def bundle_problems(r: dict[str, Any], bundle: dict[str, Any]) -> list[str]:
     if r.get("checkpoint_note") not in (bundle.get("checkpoints") or []):
         problems.append("receipt checkpoint note is not among the bundle's checkpoints")
     return problems
+
+
+# --- QR transport (UI) -------------------------------------------------------------------------------------------
+QR_PREFIX = "AGR1:"
+QR_MAX_JSON = 64 * 1024  # decompressed cap (zip-bomb guard); real receipts are ~2-4 KB
+_B64URL = re.compile(r"^[A-Za-z0-9_-]*$")
+
+
+def qr_payload(r: dict[str, Any]) -> str:
+    """'AGR1:' + base64url-no-padding(zlib.compress(canonical_json(r), 9)): lossless, ASCII, one string per receipt.
+
+    Why compressed: a full receipt is ~2-3 KB of JSON (entry, tx, a 1-14 hash inclusion proof as hex, a checkpoint
+    note with 2-3 signatures, vkeys), while a QR code tops out at 2953 bytes (version 40, EC level L, byte mode).
+    zlib + base64url saves ~30% (hex digests and repeated keys compress; signatures do not), which keeps EC level
+    M up to ~10^5 leaves and level L (fallback) far beyond. Measured (FakeStore log, demo execution leaf + ledger row
+    in the middle of the tree, log + W1 note, no W2): tree size 10 -> proof 4, JSON 2116 B, payload 1436 chars,
+    QR v31-M; 100 -> 7, 2322, 1609, v33-M; 1000 -> 10, 2528, 1777, v35-M; 10000 -> 14, 2801, 1993, v38-M.
+    Each extra proof hash adds ~55 chars; a W2 cosignature ~100."""
+    return QR_PREFIX + base64.urlsafe_b64encode(zlib.compress(canonical_json(r), 9)).decode("ascii").rstrip("=")
+
+
+def _no_float(text: str) -> Any:
+    raise ValueError(f"non-integer number {text!r}")
+
+
+def parse_qr_payload(text: str) -> dict[str, Any]:
+    """Inverse of qr_payload (whitespace around it is ignored). Strict: ValueError unless it is 'AGR1:' + canonical
+    base64url (no padding) of a complete zlib stream of at most QR_MAX_JSON bytes of canonical JSON for an object.
+    The receipt itself is NOT verified here: run verify_receipt / receipt_problems on the result."""
+    if not isinstance(text, str):
+        raise ValueError("QR payload must be text")
+    text = text.strip()
+    if not text.startswith(QR_PREFIX):
+        raise ValueError(f"not an {QR_PREFIX[:-1]} receipt payload")
+    b64 = text[len(QR_PREFIX):]
+    if not b64 or not _B64URL.match(b64) or len(b64) % 4 == 1:
+        raise ValueError("payload is not unpadded base64url")
+    raw = base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))
+    if base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=") != b64:
+        raise ValueError("payload is not canonical base64url")
+    d = zlib.decompressobj()
+    try:
+        data = d.decompress(raw, QR_MAX_JSON + 1)
+    except zlib.error as exc:
+        raise ValueError(f"payload is not zlib data ({exc})") from None
+    if len(data) > QR_MAX_JSON or d.unconsumed_tail:
+        raise ValueError(f"payload decompresses to more than {QR_MAX_JSON} bytes")
+    if not d.eof or d.unused_data:
+        raise ValueError("payload is not exactly one complete zlib stream")
+    try:
+        obj = json.loads(data.decode("utf-8"), parse_float=_no_float, parse_constant=_no_float)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ValueError(f"payload is not JSON ({exc})") from None
+    if not isinstance(obj, dict):
+        raise ValueError("payload JSON is not an object")
+    if canonical_json(obj) != data:
+        raise ValueError("payload JSON is not canonical")
+    return obj
+
+
+def _qr(r: dict[str, Any]) -> Any:
+    try:
+        import segno
+    except ImportError:
+        raise RuntimeError("receipt QR codes need segno: pip install segno") from None
+    payload = qr_payload(r)
+    for level in ("M", "L"):  # boost_error raises M to Q/H when that fits the same version
+        try:
+            return segno.make(payload, error=level, mode="byte", micro=False, boost_error=True)
+        except segno.DataOverflowError:
+            continue
+    raise ValueError(f"receipt payload ({len(payload)} chars) does not fit a version 40 QR code")
+
+
+def receipt_qr(r: dict[str, Any]) -> tuple[int, str]:
+    """(QR version, error correction level) the receipt's payload is encoded with (needs segno)."""
+    q = _qr(r)
+    return int(q.version), str(q.error)
+
+
+def receipt_qr_png(r: dict[str, Any], *, scale: int = 4, border: int = 4) -> bytes:
+    """PNG of the receipt's QR code (payload: qr_payload). EC level M (boosted when it fits), else L. Needs segno."""
+    buf = io.BytesIO()
+    _qr(r).save(buf, kind="png", scale=scale, border=border)
+    return buf.getvalue()
+
+
+def receipt_qr_svg(r: dict[str, Any], *, scale: int = 4, border: int = 4) -> str:
+    """SVG (UTF-8 text, ASCII content) of the receipt's QR code; same encoding as receipt_qr_png. Needs segno."""
+    buf = io.BytesIO()
+    _qr(r).save(buf, kind="svg", scale=scale, border=border)
+    return buf.getvalue().decode("utf-8")

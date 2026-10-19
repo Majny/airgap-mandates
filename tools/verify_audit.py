@@ -687,7 +687,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m tools.verify_audit", description="Offline AirGap audit verifier")
     ap.add_argument("bundle", nargs="?", help="audit export JSON (GET /audit/export response)")
     ap.add_argument("--no-replay", action="store_true", help="skip decide() replay")
-    ap.add_argument("--receipt", help="receipt JSON (GET /receipts/{tx_id} response) to verify")
+    ap.add_argument("--receipt", help="receipt JSON (GET /receipts/{tx_id} response) or a text file holding its "
+                                      "AGR1: QR payload, to verify")
     ap.add_argument("--quorum", default="log,w1|w2", type=_quorum_arg,
                     help="checkpoint quorum: ',' = AND, '|' = OR (default log,w1|w2)")
     ap.add_argument("--trust-keys", metavar="FILE",
@@ -739,7 +740,15 @@ def main(argv: list[str] | None = None) -> int:
         r = None
         try:
             with open(args.receipt, encoding="utf-8") as f:
-                r = json.load(f)
+                text = f.read()
+            if text.strip().startswith(rc.QR_PREFIX):  # what a phone QR scanner yields (receipt.qr_payload)
+                try:
+                    r = rc.parse_qr_payload(text)
+                except ValueError as exc:
+                    out.append(f"receipt: {args.receipt} (QR payload): FAILED")
+                    problems.append(f"receipt: malformed receipt (QR payload: {exc})")
+            else:
+                r = json.loads(text)
         except (OSError, ValueError) as exc:
             problems.append(f"receipt {args.receipt}: cannot read JSON ({exc})")
         if r is not None:
