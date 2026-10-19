@@ -71,3 +71,43 @@ def test_device_signer_replays_captured_signature_without_device():
 def test_auto_confirm_refused_for_physical_device():
     with pytest.raises(ValueError):
         signer.DeviceSigner(FakeDriver(emulator=False), "clerk", auto_confirm=True, log=lambda *_: None)
+
+
+def _signer(drv=None):
+    return signer.DeviceSigner(drv or FakeDriver(), "clerk", log=lambda *_: None)
+
+
+def test_create_mandate_two_devices_in_process():
+    from executor import scenes
+    from executor.store import seed
+
+    env = scenes.DemoEnv()
+    clerk, treasury = _signer(), signer.DeviceSigner(FakeDriver(), "treasury", log=lambda *_: None)
+    seed.enroll_signer(env.store, clerk.address, "clerk", settings=env.settings)
+    seed.enroll_signer(env.store, treasury.address, "treasury", settings=env.settings)
+    m = signer.create_mandate(env.call, clerk, treasury, log=lambda *_: None)
+    assert m["status"] == "ACTIVE" and m["sig_required"] == 2
+
+
+def test_pay_up_signs_pending_and_proves_replay_refused():
+    drv = FakeDriver()
+    clerk = _signer(drv)
+    ch = {"nonce": "0C55A1E7", "role": "clerk", "text": "AG1/DEMO PAY 4\n125000.50 CZK"}
+    seen = []
+
+    def call(m, p, b, who):
+        seen.append((m, p, who))
+        if p.startswith("/proposals"):
+            return 200, {"proposals": [{"proposal_id": "prp_4", "proposal_no": 4, "challenge_nonce": "0C55A1E7",
+                                        "invoice": {"vendor_id": "ven_x", "amount_minor": 12500050, "currency": "CZK"}}]}
+        if p.startswith("/challenges/"):
+            return 200, ch
+        if sum(1 for s in seen if s[1] == "/signatures") == 1:
+            assert verify_eip191(ch["text"], b["sig"]) == clerk.address
+            return 200, {"effect": {"type": "payment_executed", "tx_id": "tx_1"}}
+        return 403, {"error": "nonce_reused"}
+
+    out = signer.pay_up(call, clerk, vendor_id="ven_x", log=lambda *_: None)
+    assert out[0]["effect"]["type"] == "payment_executed"
+    assert ("GET", "/proposals?status=PENDING_SIG&vendor_id=ven_x", "host") in seen
+    assert drv.calls == 1  # the replay re-sent the captured signature; the human holds once
