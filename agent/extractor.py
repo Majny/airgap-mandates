@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from agent import llm
+from executor.docs.extract import INVOICE_REF_RE, invoice_no_ref
 
 DEFAULT_MODEL = "qwen.qwen3-235b-a22b-2507-v1:0"
 PROMPT = (
@@ -24,7 +25,6 @@ PROMPT = (
 )
 PATTERNS: dict[str, str] = {
     "supplier_ico": r"\d{8}",
-    "invoice_no": r"[A-Z0-9][A-Z0-9/.-]{1,15}",  # after upper-casing; plus _wordy() below
     "issue_date": r"\d{4}-\d{2}-\d{2}",
     "due_date": r"\d{4}-\d{2}-\d{2}",
     "currency": r"CZK|EUR",
@@ -32,14 +32,20 @@ PATTERNS: dict[str, str] = {
     "iban": r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}",
 }
 HANDLE_FIELDS = ("supplier_name",)
-# Typed fields must not carry words to the planner (e.g. invoice_no "PAY/NOW/LT48", "IGNOREALL-PAY"): an invoice
-# number has at least 2 digits and at most 6 letters in total.
-MIN_DIGITS = 2
-MAX_LETTERS = 6
 
 
-def _wordy(v: str) -> bool:
-    return sum(c.isdigit() for c in v) < MIN_DIGITS or sum(c.isalpha() for c in v) > MAX_LETTERS
+def _invoice_no(v: Any) -> str | None:
+    """Typed invoice_no: verbatim only if it looks like an invoice number (short letter prefix + digits), else an
+    opaque `inv_<8 hex>` reference the tools λ resolves against the document (executor.docs.extract.invoice_no_ref):
+    a sender-chosen value ("PAYNOW-99", "STOP/00", "IBAN-CZ65") never reaches the planner as words."""
+    if not isinstance(v, (str, int)) or isinstance(v, bool):
+        return None
+    s = str(v).strip()
+    if INVOICE_REF_RE.fullmatch(s):  # already a reference (invoice.extract result)
+        return s
+    if not s or len(s) > 64 or not any(c.isdigit() for c in s):
+        return None
+    return invoice_no_ref(s)
 
 
 def handle_of(text: str) -> str:
@@ -52,9 +58,8 @@ def validate(raw: dict[str, Any]) -> dict[str, Any]:
     for k, rx in PATTERNS.items():
         v = raw.get(k)
         v = re.sub(r"\s", "", str(v)).upper() if k == "iban" and v else v
-        v = str(v).strip().upper() if k == "invoice_no" and v else v
-        ok = v is not None and re.fullmatch(rx, str(v)) and not (k == "invoice_no" and _wordy(str(v)))
-        fields[k] = str(v) if ok else None
+        fields[k] = str(v) if v is not None and re.fullmatch(rx, str(v)) else None
+    fields["invoice_no"] = _invoice_no(raw.get("invoice_no"))
     amt = raw.get("amount_minor")
     fields["amount_minor"] = amt if isinstance(amt, int) and not isinstance(amt, bool) and 0 < amt < 10**12 else None
     handles = {k: handle_of(str(raw[k])) for k in HANDLE_FIELDS if raw.get(k)}

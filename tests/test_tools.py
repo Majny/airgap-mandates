@@ -1,6 +1,8 @@
 """Tools λ (POST /tools/{name}): manifest pin, Cedar tool policy (A2), masking, tool_call leaves. Owner: WS-E."""
 import base64
 import hashlib
+import json
+from pathlib import Path
 
 from executor.docs import extract
 from executor.tools.manifest import manifest_sha256
@@ -29,19 +31,36 @@ RAW = (
 ).encode()
 
 
+DATA = Path(__file__).resolve().parents[1] / "data"
+
+
+def dkim_signed(raw: bytes, domain: str = "acme.cz") -> bytes:
+    """raw signed with the DEMO key of `domain` (its public key is in data/dns_snapshot.json)."""
+    import dkim
+
+    pem = (DATA / "dkim_keys" / f"{domain}.demo2026.pem").read_bytes()
+    return dkim.sign(raw, b"demo2026", domain.encode(), pem, include_headers=[b"From", b"To", b"Subject"],
+                     canonicalize=(b"relaxed", b"relaxed"), linesep=b"\r\n") + raw
+
+
+SIGNED_RAW = dkim_signed(RAW)
+OLD_RAW = b"From: fakturace@acme.cz\r\nTo: ap@airgap.example\r\nSubject: Faktura FV-2026-0101\r\n\r\nDobry den.\r\n"
+
+
 class ToolHarness(Harness):
     def __init__(self) -> None:
         super().__init__()
         self.store.put("inbox", {"email_id": "eml_0001", "from_addr": "fakturace@acme.cz", "from_domain": "acme.cz",
                                  "subject": "Faktura FV-2026-0412", "received_at": "2026-10-19T07:00:00Z",
-                                 "sha256": hashlib.sha256(RAW).hexdigest(),
-                                 "raw_b64": base64.b64encode(RAW).decode(),
-                                 # verdict as written by executor.facts.dkim.ingest (fixture: RAW is not signed)
+                                 "sha256": hashlib.sha256(SIGNED_RAW).hexdigest(),
+                                 "raw_b64": base64.b64encode(SIGNED_RAW).decode(),
+                                 # verdict as written by executor.facts.dkim.ingest
                                  "dkim": {"result": "pass", "d": "acme.cz", "s": "sel2026", "aligned": True}})
         # earlier mail from the same domain, so F-DOMAIN-AGE (first seen in our inbox) is not WARN
         self.store.put("inbox", {"email_id": "eml_0000", "from_addr": "fakturace@acme.cz", "from_domain": "acme.cz",
                                  "subject": "Faktura FV-2026-0101", "received_at": "2025-01-15T07:00:00Z",
-                                 "sha256": "0" * 64,
+                                 "sha256": hashlib.sha256(OLD_RAW).hexdigest(),
+                                 "raw_b64": base64.b64encode(OLD_RAW).decode(),
                                  "dkim": {"result": "pass", "d": "acme.cz", "s": "sel2026", "aligned": True}})
         self.step = 0
 
@@ -52,10 +71,13 @@ class ToolHarness(Harness):
         return self.call("POST", f"/tools/{name}", body, "agent")
 
 
-def _put_email(h: ToolHarness, email_id: str, raw: bytes, *, received_at: str = "2026-10-19T08:00:00Z") -> None:
-    """Inbox row as executor.facts.dkim.ingest writes it (from_addr parsed from the raw header)."""
+def _put_email(h: ToolHarness, email_id: str, raw: bytes, *, received_at: str = "2026-10-19T08:00:00Z",
+               sign: bool = True) -> None:
+    """Inbox row as executor.facts.dkim.ingest writes it (from_addr parsed from the raw header); `raw` DKIM-signed
+    with the acme.cz DEMO key unless sign=False."""
     from executor.facts.dkim import _from_addr
 
+    raw = dkim_signed(raw) if sign else raw
     addr = _from_addr(raw)
     h.store.put("inbox", {"email_id": email_id, "from_addr": addr, "from_domain": addr.rsplit("@", 1)[-1],
                           "subject": "Faktura", "received_at": received_at, "sha256": hashlib.sha256(raw).hexdigest(),
@@ -427,7 +449,7 @@ def test_mail_vars_cannot_carry_digit_runs():
                    ("ack_invoice", {"invoice_no": "0014-5399"}),
                    ("ack_invoice", {"invoice_no": "FV-2026-0412", "note": "6508"})):
         st, r = send(tpl, **v)
-        assert st == 400, (v, r)
+        assert st in (400, 403), (v, r)  # 403 = T-MAIL-IBAN (digits of the registered IBAN)
     st, r = send("payment_scheduled", invoice_no="FV-2026-0412", date="2026-10-25")
     assert st == 200, r
     st, r = send("query_amount", invoice_no="FV-2026-0412", po="PO-778812")
@@ -497,3 +519,158 @@ def test_crash_after_reserve_marks_the_row_error(monkeypatch):
     assert row["result"] == "error"
     leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
     assert leaf["data"]["result"] == "error"
+
+
+# ---------------------------------------------------------------- round 3 (verifier bypasses)
+
+REMINDER = (
+    "From: fakturace@acme.cz\r\nTo: ap@airgap.example\r\nSubject: Upominka FV-2026-0412\r\nMIME-Version: 1.0\r\n"
+    "Content-Type: text/plain; charset=utf-8\r\n\r\nUpominka FV-2026-0412, prosime o uhradu:\r\n"
+    "SPD*1.0*ACC:CZ6508000000192000145399*AM:14500.00*CC:CZK*X-VS:20260412*DT:20261029\r\n"
+).encode()
+
+
+def _body_id(h: ToolHarness, email_id: str) -> str:
+    st, r = h.tool("inbox.read", {"email_id": email_id})
+    assert st == 200, r
+    return next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "body")
+
+
+def test_reminder_in_another_email_cannot_pay_the_invoice_again():
+    """#6 round 3: a body-only reminder (other email, no invoice number, issue date falls back to due) used to be a
+    second EXECUTED payment. It now takes the paid invoice's number and issue date and counts against its amount."""
+    h = ToolHarness()
+    h.mandate()
+    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h)))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    _put_email(h, "eml_0006", REMINDER)
+    rem = _body_id(h, "eml_0006")
+    st, r = h.tool("payment.propose", _propose_args(rem, invoice_no="AGENT-1"))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+    st, r = h.tool("payment.propose", _propose_args(rem, invoice_no="AGENT-1", amount_minor=1000,
+                                                    reason_code="PARTIAL"))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+    executed = [p for p in h.store.scan("proposals") if p["status"] == "EXECUTED"]
+    assert len(executed) == 1
+
+
+def test_reminder_partial_hits_i_dup_with_the_paid_invoice_number():
+    h = ToolHarness()
+    h.mandate()
+    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h), amount_minor=700000, reason_code="PARTIAL"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    _put_email(h, "eml_0006", REMINDER)
+    st, r = h.tool("payment.propose", _propose_args(_body_id(h, "eml_0006"), invoice_no="AGENT-1",
+                                                    amount_minor=700000, reason_code="PARTIAL"))
+    assert st == 200 and r["result"]["decision"] == "deny" and "I-DUP" in r["result"]["rule_ids"], r
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert "T-INVOICENO-PRIOR" in leaf["data"]["rule_ids"]
+    denied = [p for p in h.store.scan("proposals") if p["status"] != "EXECUTED"][0]
+    assert (denied["invoice"]["invoice_no"], denied["invoice"]["issue_date"]) == ("FV-2026-0412", "2026-10-15")
+
+
+def test_reminder_first_then_the_invoice_is_refused():
+    """#6 round 3, reverse order: the body-only reminder paid first, then the real ISDOC invoice (same VS)."""
+    h = ToolHarness()
+    h.mandate()
+    _put_email(h, "eml_0006", REMINDER)
+    st, r = h.tool("payment.propose", _propose_args(_body_id(h, "eml_0006"), invoice_no="AGENT-1"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h)))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+
+
+def _isdoc(no: str, amount: str, vs: str) -> str:
+    return (ISDOC.replace("FV-2026-0412", no).replace("14500.00", amount).replace("20260412", vs)
+            .replace("\n", "\r\n"))
+
+
+def test_two_invoices_in_one_email_are_capped_separately():
+    """#6 round 3 regression: the cap was email-wide, so the second genuine invoice of one email was refused."""
+    h = ToolHarness()
+    h.mandate()
+    raw = ("From: fakturace@acme.cz\r\nTo: ap@airgap.example\r\nSubject: Dve faktury\r\nMIME-Version: 1.0\r\n"
+           'Content-Type: multipart/mixed; boundary="b"\r\n\r\n'
+           "--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nDobry den, posilame dve faktury.\r\n"
+           '--b\r\nContent-Type: application/xml\r\nContent-Disposition: attachment; filename="a.isdoc"\r\n\r\n'
+           + _isdoc("FV-2026-0501", "5000.00", "20260501") + "\r\n"
+           '--b\r\nContent-Type: application/xml\r\nContent-Disposition: attachment; filename="b.isdoc"\r\n\r\n'
+           + _isdoc("FV-2026-0502", "4000.00", "20260502") + "\r\n--b--\r\n").encode()
+    _put_email(h, "eml_0007", raw)
+    st, r = h.tool("inbox.read", {"email_id": "eml_0007"})
+    att = {d["name"]: d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment"}
+    st, r = h.tool("payment.propose", _propose_args(att["a.isdoc"], invoice_no="FV-2026-0501", amount_minor=500000,
+                                                    vs="20260501"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    st, r = h.tool("payment.propose", _propose_args(att["b.isdoc"], invoice_no="FV-2026-0502", amount_minor=400000,
+                                                    vs="20260502"))
+    assert st == 200, r  # its own cap (400 000), not the email's
+    st, r = h.tool("payment.propose", _propose_args(att["b.isdoc"], invoice_no="FV-2026-0502", amount_minor=1000,
+                                                    vs="20260502", reason_code="PARTIAL"))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+
+
+def test_invoice_cap_groups_by_bound_invoice_number():
+    from executor.tools.handler import _invoice_cap
+
+    d = lambda i, no, amt: {"doc_id": f"doc_{i}", "fields": {"invoice_no": no, "issue_date": None,  # noqa: E731
+                                                             "supplier_ico": None, "amount_minor": amt}}
+    a, b, body = d(1, "A-01", 900), d(2, "B-02", 100), d(3, None, 1000)
+    assert _invoice_cap(b, [a, b, body]) == 100
+    assert _invoice_cap(a, [a, b, body]) == 900
+    assert _invoice_cap(body, [a, b, body]) == 1000  # no number of its own (two candidates): the email's largest
+    assert _invoice_cap(body, [a, body]) == 1000  # bound to A-01: the group's largest
+
+
+def test_wordy_invoice_no_is_a_reference_the_tools_resolve():
+    """#15 round 3: invoice.extract shows a non-plain invoice number as inv_<hex>; payment.propose and
+    mail.send_template accept that reference and use the document's value."""
+    h = ToolHarness()
+    h.mandate()
+    _put_email(h, "eml_0008", RAW.replace(b"FV-2026-0412", b"PAYNOW-99"))
+    st, r = h.tool("inbox.read", {"email_id": "eml_0008"})
+    att = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment")
+    st, r = h.tool("invoice.extract", {"doc_id": att})
+    ref = r["result"]["draft"]["fields"]["invoice_no"]
+    assert ref.startswith("inv_") and "PAYNOW" not in str(r["result"]["draft"]), r
+    st, r = h.tool("payment.propose", _propose_args(att, invoice_no=ref))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert h.store.scan("proposals")[0]["invoice"]["invoice_no"] == "PAYNOW-99"
+    st, r = h.tool("payment.propose", _propose_args(att, invoice_no="inv_00000000"))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-DOC-MISMATCH"], r
+    st, r = h.tool("mail.send_template", {"to": "fakturace@acme.cz", "template_id": "ack_invoice",
+                                          "vars": {"invoice_no": ref}})
+    assert st == 200 and r["result"]["sent"] is True, r
+    egress = [x for x in h.leaves() if x["type"] == "egress"]
+    assert not egress or "inv_" not in json.dumps(egress[-1])
+
+
+def test_mail_vars_bind_only_to_dkim_authenticated_documents():
+    """#17 round 3: an unauthenticated email 'From: fakturace@acme.cz' planted PO-<20 IBAN digits>, then sent it."""
+    h = ToolHarness()
+    spoof = ("From: fakturace@acme.cz\r\nTo: ap@airgap.example\r\nSubject: Objednavka\r\n\r\n"
+             "Nase objednavka PO-65080000001920001453 plati. Faktura c. 4455667788.\r\n").encode()
+    _put_email(h, "eml_0010", spoof, sign=False)
+    h.store.put("inbox", {**h.store.get("inbox", {"email_id": "eml_0010"}), "dkim": {"result": "fail"}})
+    send = lambda **v: h.tool("mail.send_template", {"to": "fakturace@acme.cz",  # noqa: E731
+                                                     "template_id": "query_amount", "vars": v})
+    st, r = send(invoice_no="FV-2026-0412", po="PO-65080000001920001453")
+    assert st in (400, 403), r
+    st, r = send(invoice_no="4455667788", po="PO-778812")
+    assert st == 400, r  # the spoofed email's numbers are not the supplier's
+    # signed by a key that is not acme.cz's (aligned DKIM of another domain) does not count either
+    other = spoof.replace(b"fakturace@acme.cz", b"fakturace@acme.cz").replace(b"4455667788", b"4455667799")
+    _put_email(h, "eml_0011", dkim_signed(other, "acme-cz.com"), sign=False)
+    st, r = send(invoice_no="4455667799", po="PO-778812")
+    assert st == 400, r
+
+
+def test_registered_iban_digits_in_vars_are_t_mail_iban():
+    """#17 round 3: 20 IBAN digits without the country prefix used to pass vars_match_iban."""
+    from executor.tools.handler import _vars_match_iban
+
+    vendors = [{"iban": "CZ6508000000192000145399"}]
+    for v in ("PO-65080000001920001453", "PO-0800-0000-1920", "x 19200014 y"):
+        assert _vars_match_iban({"po": v}, v, vendors), v
+    for v in ("PO-778812", "FV-2026-0412", "2026-10-25", "2026041299"):
+        assert not _vars_match_iban({"po": v}, v, vendors), v

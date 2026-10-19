@@ -5,7 +5,7 @@ CONTRACTS.md v2 §4.5 (tool surface), §9 (AGENT_MODE, AIRGAP_SONNET_BUDGET). Ow
 A plain Bedrock Converse tool loop. Two modes:
 - naive (A0 baseline): the planner sees tool results as returned, including <untrusted> email text.
 - quarantined (CaMeL-style): results of untrusted reads never reach the planner as text. inbox.read is replaced by a
-  typed view (sender address, document ids, and per document the quarantined extractor's validated fields); free text
+  typed view (sender as handles + registered vendor domain, document ids, and per document the quarantined extractor's validated fields); free text
   appears only as opaque handles (txt_...). invoice.extract keeps typed fields only.
 Useful, never decisive: every effect goes through the tools λ and the executor; the agent has no IBAN argument (P3)
 and payment amounts are bound to the document by the tools λ and the executor.
@@ -136,21 +136,28 @@ class Quarantine:
         self.vault[h] = text
         return h
 
-    def sender(self, v: Any) -> str | None:
-        """Typed sender: a handle for the local part (never verbatim: it is sender-chosen text) + @domain."""
+    def sender(self, v: Any, registered: Any = None) -> str | None:
+        """Typed sender: never verbatim sender-chosen text. The local part is a handle; the domain is shown only when
+        it is a registered vendor's domain (the tools λ says so: `registered_vendor_id`), else the whole address is a
+        handle (an attacker-registered domain label is up to 63 chars of words)."""
         addr = _typed_email(v)
         if addr is None:
             return None
         local, domain = addr.rsplit("@", 1)
-        return f"{self.handle(local)}@{domain}" if _typed_domain(domain) else None
+        return f"{self.handle(local)}@{domain}" if registered and _typed_domain(domain) else self.handle(addr)
+
+    def domain(self, v: Any, registered: Any = None) -> str | None:
+        d = _typed_domain(v)
+        return None if d is None else d if registered else self.handle(d)
 
     def view(self, tool: str, args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         if "error" in result:
             return {k: result.get(k) for k in ("error", "rule_ids")}
         if tool == "inbox.list":
             return {"emails": [{"email_id": e.get("email_id"),
-                                "from_addr": self.sender(e.get("from_addr")),
-                                "from_domain": _typed_domain(e.get("from_domain")),
+                                "from_addr": self.sender(e.get("from_addr"), e.get("registered_vendor_id")),
+                                "from_domain": self.domain(e.get("from_domain"), e.get("registered_vendor_id")),
+                                "registered_vendor_id": _typed_id(e.get("registered_vendor_id")),
                                 "subject": self.handle(str(e.get("subject", ""))),
                                 "received_at": e.get("received_at")} for e in result.get("emails", [])]}
         if tool == "inbox.read":
@@ -166,7 +173,9 @@ class Quarantine:
                     typed = _typed_draft((ex or {}).get("draft") or {})
                     typed.pop("doc_id", None)
                 docs.append({"doc_id": d["doc_id"], "kind": d.get("kind"), **typed})
-            return {"email_id": result.get("email_id"), "from": self.sender(result.get("from")),
+            reg = result.get("registered_vendor_id")
+            return {"email_id": result.get("email_id"), "from": self.sender(result.get("from"), reg),
+                    "registered_vendor_id": _typed_id(reg),
                     "subject": self.handle(str(result.get("subject", ""))),
                     "content": self.handle(str(result.get("content", ""))), "documents": docs}
         if tool == "invoice.extract":
@@ -182,6 +191,11 @@ def _typed_email(v: Any) -> str | None:
     """The value only if it is exactly one address (no display name to hide a second one in)."""
     s = str(v or "").strip()
     return s.lower() if _EMAIL_RE.fullmatch(s) else None
+
+
+def _typed_id(v: Any) -> str | None:
+    s = str(v or "")
+    return s if re.fullmatch(r"ven_[0-9]{8}", s) else None
 
 
 def _typed_domain(v: Any) -> str | None:
