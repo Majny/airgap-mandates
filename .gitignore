@@ -13,3 +13,4 @@ bench/results/*.jsonl
 .hypothesis/
 data/mostlyright/*.csv
 data/mostlyright/snapshot.sqlite
+.streamlit/secrets.toml

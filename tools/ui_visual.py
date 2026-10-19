@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CHECKS = {
     "Overview": ["Paid automatically", "Needs a human", "Account-change attack stopped", "Mailbox takeover stopped",
                  "Replay attack stopped", "Hijacked agent", "New account active", "Mandate signed on hardware"],
-    "Payments": ["Paid · within mandate", "Paid · confirmed on Trezor", "Blocked", "Beta Servis", "imitates vendor domain"],
+    "Payments": ["Paid · within mandate", "Paid · confirmed on Trezor", "Blocked", "Beta Servis", "imitates vendor domain",
+                 "pain.001 (ISO 20022)", "pain.001 files (zip", "hash matches the signed audit log"],
     "Payee changes": ["rejected", "active", "0 of 3 independent confirmations", "not us"],
     "Approvals": ["accepted", "refused: nonce_reused", "GENUINE"],
     "Mandate": ["Per payment", "80 000.00 CZK", "existing payees only"],
@@ -30,7 +31,7 @@ CHECKS = {
     "Reports": ["Attack benchmark"],
 }
 HEADER = ["AirGap Mandates", "Paid to registered suppliers", "Paid to unregistered accounts", "0.00 CZK",
-          "Blocked attempts"]
+          "Blocked attempts", "local, no SSO"]
 
 
 def _free_port() -> int:
@@ -48,6 +49,33 @@ def _wait_http(url: str, timeout: float = 60) -> None:
         except OSError:
             time.sleep(0.5)
     raise SystemExit(f"streamlit did not come up at {url}")
+
+
+def _check_downloads(page, panel, out: Path) -> list[str]:  # noqa: ANN001 - playwright Page / Locator
+    """Click the first per-payment pain.001 download and the day zip; the files must be what core banking gets."""
+    import json
+    import zipfile
+
+    fails: list[str] = []
+    try:
+        with page.expect_download(timeout=20_000) as d:
+            panel.get_by_role("button", name="pain.001 (ISO 20022)").first.click()
+        xml = out / "pain001-one.xml"
+        d.value.save_as(str(xml))
+        text = xml.read_text()
+        if "urn:iso:std:iso:20022:tech:xsd:pain.001.001.09" not in text or "<CdtTrfTxInf>" not in text:
+            fails.append("Payments: per-payment download is not a pain.001.001.09 file")
+        with page.expect_download(timeout=20_000) as d:
+            panel.get_by_role("button", name="pain.001 files (zip").first.click()
+        zpath = out / "pain001-day.zip"
+        d.value.save_as(str(zpath))
+        with zipfile.ZipFile(zpath) as z:
+            m = json.loads(z.read("manifest.json"))
+            if not m["files"] or m["excluded"] or len(z.namelist()) != len(m["files"]) + 2:
+                fails.append(f"Payments: day zip manifest unexpected: {len(m['files'])} files, {m['excluded']}")
+    except Exception as e:  # noqa: BLE001 - report, keep checking the other tabs
+        fails.append(f"Payments: download failed: {type(e).__name__}: {e}"[:300])
+    return fails
 
 
 def run(url: str, out: Path, strict: bool) -> list[str]:
@@ -90,6 +118,8 @@ def run(url: str, out: Path, strict: bool) -> list[str]:
                         failures.append(f"{tab}: missing {text!r}")
                 if panel.locator("[data-testid='stException']").count():
                     failures.append(f"{tab}: Streamlit exception")
+                if tab == "Payments" and strict:
+                    failures += _check_downloads(page, panel, out)
                 print(f"  {'OK  ' if not [f for f in failures if f.startswith(tab)] else 'FAIL'}  {tab:<14} {shot}")
             failures += [f"page error: {e}" for e in errors]
     finally:
