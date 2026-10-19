@@ -91,3 +91,6 @@ All named `airgap-probe-*`, tagged `project=airgap-mandates`, deleted right afte
   either missed real reminders or refused legitimate recurring invoices permanently. The executor's I-DUP / F-SPLIT,
   the mandate cap and the human step-up remain the gate (demo/REAL_VS_SIMULATED.md gap 5).
 - Lambda pool of 10 means overlapping ticks are possible; W2 answers 409 and the relay catches up.
+- A `POST /tools/{name}` body that fails the request schema (e.g. fractional / NaN / negative `step`) is refused with 400
+  by the executor's schema check before the tools λ runs, so it leaves no `tool_call` leaf (no effect, no row; whole
+  floats and bad args ARE logged). Fix belongs in `executor/handler.py` post_tool (WS-A).
