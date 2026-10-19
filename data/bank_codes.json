@@ -1,4 +1,11 @@
 {
-  "CZ": {"0800": "Ceska sporitelna", "0300": "CSOB", "0100": "Komercni banka"},
-  "LT": {"39990": "EMI Lithuania (fict.)"}
+  "_note": "Bank-code snapshot (fictitious demo subset). Names are for the UI only and never reach the device.",
+  "CZ": {
+    "0100": {"name": "Bank 0100 (CZ)", "bic": "KOMBCZPP", "kind": "bank"},
+    "0300": {"name": "Bank 0300 (CZ)", "bic": "CEKOCZPP", "kind": "bank"},
+    "0800": {"name": "Bank 0800 (CZ)", "bic": "GIBACZPX", "kind": "bank"}
+  },
+  "LT": {
+    "39990": {"name": "EMI Lithuania (fict.)", "bic": null, "kind": "emi"}
+  }
 }

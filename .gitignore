@@ -11,3 +11,5 @@ bench/results/*.jsonl
 *.egg-info/
 .pytest_cache/
 .hypothesis/
+data/mostlyright/*.csv
+data/mostlyright/snapshot.sqlite
