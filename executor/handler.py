@@ -176,7 +176,7 @@ def _evaluate(ctx: Context, pid: str, invoice: dict, hints: list, now: datetime,
     if invoice.get("email_id"):
         from executor.facts import inbox
 
-        extra = inbox.email_state(invoice["email_id"], store=ctx.store)
+        extra = inbox.email_state(invoice["email_id"], store=ctx.store, settings=ctx.settings)
     facts = shims.compute_facts({"kind": "proposal", "subject_id": pid, "proposal_id": pid, "invoice": invoice,
                                  "hints": hints, "email_id": invoice.get("email_id")},
                                 {**state, **extra, "snapshots": None, "tool_log": None, "change": None,
@@ -335,7 +335,7 @@ REJECT_LIMIT, REJECT_WINDOW_S = 5, 600
 def post_change_reject(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
     body = validate(body or {}, "change_reject.request")
     st, now, cid = ctx.store, _now(ctx), p["change_id"]
-    c = _change_or_404(ctx, cid)
+    c = _machine().advance(_change_or_404(ctx, cid), store=st, settings=ctx.settings, now=now)  # lazy EXPIRE first
     window = int(now.timestamp()) // REJECT_WINDOW_S
     if st.increment("counters", {"name": f"reject#{cid}#{window}"}, "value") > REJECT_LIMIT:
         raise ApiError(ErrorCode.RATE_LIMITED, "too many reject requests", {"retry_after_seconds": REJECT_WINDOW_S})
@@ -352,6 +352,7 @@ def post_change_reject(ctx: Context, p: dict, q: dict, body: Any, principal: str
                               params={"change_no": c["change_no"], "vendor_name": c["vendor_name"],
                                       "vendor_ico": c["vendor_ico"], "new_iban": c["new_iban"]},
                               facts_digest=None, store=st, settings=ctx.settings, now=now)
+    st.update_if("nonces", {"nonce": ch["nonce"]}, {"reject_reason": body["reason"]}, {"used": False})
     return 200, {"change": _change_out(c), "challenge": ch}
 
 
@@ -369,7 +370,7 @@ def post_vc(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
     _change_or_404(ctx, p["change_id"])
     payload = dict(body)  # WS-D sets payload["attest_result"] (AttestResult) for the response
     c = _machine().transition(p["change_id"], ChangeEvent.VC_RECEIVED, payload=payload, store=ctx.store,
-                              settings=ctx.settings, now=_now(ctx))
+                              settings=ctx.settings, now=_now(ctx), actor=principal or "issuer")
     return 200, {"change": _change_out(c), "attest": payload.get("attest_result")}
 
 
@@ -510,7 +511,8 @@ def _apply_signature(ctx: Context, row: dict, signer: str, sig: str, now: dateti
         return out
     if purpose == "CHG_REJECT":
         c = _machine().transition(row["subject_id"], ChangeEvent.CLERK_REJECT_SIGNED,
-                                  payload={"actor": "host", "signer_address": signer, "nonce": row["nonce"]},
+                                  payload={"actor": "host", "signer_address": signer, "nonce": row["nonce"],
+                                           "reason": row.get("reject_reason", "")},
                                   store=st, settings=settings, now=now)
         sig_leaf()
         return {"effect": {"type": "change_rejected", "state": c["state"]}, "change": _change_out(c)}
