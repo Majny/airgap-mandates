@@ -1,4 +1,4 @@
-"""I-REGISTRY input: payee IBAN inside the registry snapshot pinned by the mandate (CHG-3). Owner: WS-A."""
+"""Handler checks: I-REGISTRY snapshot input (CHG-3) and audit of malformed tool calls. Owner: WS-A."""
 from executor import handler
 from executor.config import Settings
 from executor.store import seed
@@ -35,3 +35,19 @@ def test_original_iban_and_missing_payee():
     p = _payee("2026-10-19T11:00:00Z")
     del p["iban_history"][1]["from"]
     assert handler._reg_hit(ctx, p, MANDATE) is False
+
+
+def test_malformed_tool_call_is_logged():
+    """WS-E finding: a schema-invalid POST /tools/{name} is refused 400 but still leaves a tool_call leaf."""
+    import json
+
+    ctx = _ctx()
+    for step in (1.5, -1, "1", None):
+        st, r = handler.dispatch("POST", "/tools/mandate.write", None,
+                                 {"session_id": "ses_x", "step": step, "args": {"max_total_minor": 1.5},
+                                  "manifest_sha256": "0" * 64}, principal="agent", ctx=ctx)
+        assert st == 400 and r["error"] == "invalid_request"
+    leaves = [json.loads(x["event"]) for x in ctx.store.query("audit", ("log_id", "audit"))]
+    bad = [e for e in leaves if e["type"] == "tool_call" and e["data"]["rule_ids"] == ["T-BAD-REQUEST"]]
+    assert len(bad) == 4 and all(e["data"]["result"] == "error" and e["data"]["tool"] == "mandate.write" for e in bad)
+    assert ctx.store.scan("tool_calls") == []
