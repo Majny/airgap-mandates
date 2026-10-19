@@ -32,6 +32,32 @@ def empty(table: str) -> int:
         kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
 
 
+def reset_w2() -> None:
+    """W2 (litewitness) remembers the last log size it cosigned; after wiping the log it must forget it too, or the
+    next relay is (correctly) refused as a rollback. Keeps the W2 key. Skipped when the stack has no W2."""
+    import json
+    import subprocess
+    from pathlib import Path
+
+    post = Path(__file__).resolve().parent / "evidence" / "post_deploy.json"
+    if not post.exists() or not json.loads(post.read_text()).get("w2_instance"):
+        print("no W2 instance: skipped")
+        return
+    log_vkey = json.loads(post.read_text())["vkeys"]["log"]
+    cmd_id = subprocess.run([str(Path(__file__).resolve().parent / "w2_ctl.sh"), "reset", log_vkey],
+                            check=True, capture_output=True, text=True).stdout.strip()
+    ssm = boto3.client("ssm", region_name=REGION)
+    iid = json.loads(post.read_text())["w2_instance"]
+    for _ in range(30):
+        time.sleep(2)
+        r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=iid)
+        if r["Status"] not in ("Pending", "InProgress", "Delayed"):
+            break
+    print(f"W2 reset: {r['Status']}")
+    if r["Status"] != "Success":
+        raise SystemExit(f"W2 reset failed: {r.get('StandardErrorContent', '')[:300]}")
+
+
 def activate_fallback_clerk(st, settings) -> None:
     """Re-enrol the inactive EMULATOR clerk(s) of data/enrollment.json as active: a new, logged enroll leaf."""
     import json
@@ -82,6 +108,7 @@ def main() -> None:
         st = get_store(aws_settings())
         if a.fallback_clerk:
             activate_fallback_clerk(st, aws_settings())
+        reset_w2()
         size = int((st.get("audit", {"log_id": "head#audit", "seq": 0}) or {}).get("next_seq", 0))
         stale = [c for c in st.query("checkpoints", ("log_id", "audit")) if int(c.get("size", 0)) > size]
         if stale:
