@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirGap Mandates</title>
+<!-- Self-contained pitch deck (WS-F). Works offline: no external fonts, scripts or images.
+     Keys: Right/Space/PageDown next, Left/PageUp back, Home first, N presenter notes + timer, T theme, F fullscreen.
+     Every number comes from bench/results/REPORT.md; the run ID is on the slide. -->
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #7a7974;
+  --rule: #dddbd4;
+  --accent: #2a78d6;          /* reference categorical slot 1 (light) */
+  --good: #00764f;
+  --bad: #c53a39;
+  --zone-untrusted: #fbeeee;
+  --zone-trusted: #eaf2fb;
+  --zone-device: #edf6ef;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #9a998f;
+    --rule: #34332f;
+    --accent: #3987e5;        /* reference categorical slot 1 (dark) */
+    --good: #3fbf8a;
+    --bad: #f07070;
+    --zone-untrusted: #2c1c1c;
+    --zone-trusted: #172433;
+    --zone-device: #182a1f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110;
+  --surface: #1a1a19;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-3: #9a998f;
+  --rule: #34332f;
+  --accent: #3987e5;
+  --good: #3fbf8a;
+  --bad: #f07070;
+  --zone-untrusted: #2c1c1c;
+  --zone-trusted: #172433;
+  --zone-device: #182a1f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+body { overflow: hidden; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+/* 16:9 stage scaled to the window */
+#viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+#stage { width: 1600px; height: 900px; position: relative; transform-origin: center center; }
+.slide { position: absolute; inset: 0; padding: 72px 96px 64px; background: var(--surface);
+  display: none; flex-direction: column; border-radius: 6px; }
+.slide.active { display: flex; }
+.kicker { font-size: 24px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 18px; }
+h1 { font-size: 76px; line-height: 1.08; margin: 0 0 28px; letter-spacing: -0.02em; font-weight: 700; }
+h2 { font-size: 54px; line-height: 1.12; margin: 0 0 32px; letter-spacing: -0.015em; font-weight: 700; }
+p, li { font-size: 32px; line-height: 1.35; }
+ul { margin: 0; padding-left: 1.1em; }
+li { margin: 0 0 14px; }
+.muted { color: var(--ink-2); }
+.small { font-size: 22px; line-height: 1.4; color: var(--ink-3); }
+.foot { margin-top: auto; font-size: 18px; color: var(--ink-3); line-height: 1.5; }
+.num { font-variant-numeric: tabular-nums; }
+.big { font-size: 120px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+aside.notes { display: none; }
+.pageno { position: absolute; right: 40px; bottom: 26px; font-size: 18px; color: var(--ink-3); }
+
+/* slide 2 stat grid */
+.stats { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 40px; margin-top: 10px; }
+.stat { border-top: 4px solid var(--rule); padding-top: 18px; }
+.stat.lead { border-top-color: var(--bad); }
+.stat .v { font-size: 88px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.stat .l { font-size: 26px; color: var(--ink-2); margin-top: 12px; line-height: 1.3; }
+
+/* slide 4 beats */
+table.beats { border-collapse: collapse; width: 100%; font-size: 28px; }
+table.beats td { padding: 18px 16px; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.3; }
+table.beats td:first-child { white-space: nowrap; color: var(--ink-3); width: 150px; }
+table.beats td:nth-child(2) { font-weight: 700; width: 430px; }
+.dark-device { display: inline-block; padding: 2px 10px; border-radius: 4px; background: var(--ink); color: var(--surface); font-weight: 700; }
+
+/* slide 5 numbers */
+.numbers { display: grid; grid-template-columns: 1.55fr 1fr; gap: 56px; flex: 1; min-height: 0; }
+.side h3 { font-size: 26px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin: 0 0 8px; }
+.side p { font-size: 26px; margin: 0 0 26px; }
+.bar-label { font-size: 22px; fill: var(--ink); }
+.bar-sub { font-size: 18px; fill: var(--ink-3); }
+.bar-val { font-size: 24px; font-weight: 700; fill: var(--ink); }
+.bar rect.mark { fill: var(--accent); }
+.bar:hover rect.mark { opacity: .85; }
+.axis { stroke: var(--rule); stroke-width: 1; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* slide 6 two columns */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+.cols h3 { font-size: 30px; margin: 0 0 18px; }
+.cols li { font-size: 27px; }
+
+/* diagram */
+svg text { font-family: inherit; }
+.d-zone { stroke: var(--rule); stroke-width: 2; }
+.d-box { fill: var(--surface); stroke: var(--ink-2); stroke-width: 2; }
+.d-t { font-size: 24px; fill: var(--ink); font-weight: 700; }
+.d-s { font-size: 19px; fill: var(--ink-2); }
+.d-z { font-size: 18px; fill: var(--ink-3); letter-spacing: .08em; text-transform: uppercase; }
+.d-arrow { stroke: var(--ink-2); stroke-width: 2.5; fill: none; }
+.d-no { stroke: var(--bad); stroke-width: 3; }
+.d-lbl { font-size: 19px; fill: var(--ink-2); }
+
+/* presenter notes */
+#notes { position: fixed; left: 0; right: 0; bottom: 0; max-height: 42vh; overflow: auto; background: var(--bg);
+  border-top: 2px solid var(--rule); padding: 16px 28px 20px; display: none; z-index: 5; }
+#notes.on { display: block; }
+#notes .bar { display: flex; gap: 28px; font-size: 18px; color: var(--ink-3); margin-bottom: 8px; }
+#notes .bar b { color: var(--ink); }
+#notes .body { font-size: 20px; line-height: 1.5; max-width: 1200px; }
+#notes .over { color: var(--bad); font-weight: 700; }
+#hint { position: fixed; left: 16px; bottom: 12px; font-size: 13px; color: var(--ink-3); z-index: 4; }
+@media print { #notes, #hint { display: none !important; } .slide { display: flex !important; position: relative; page-break-after: always; } }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+
+<!-- 1 HOOK -->
+<section class="slide" data-start="0:00" data-end="0:15" aria-label="Slide 1: hook">
+  <p class="kicker">AirGap Mandates · Securing the agentic bank</p>
+  <h1>This agent is compromised right now.<br>It still can’t move a koruna.</h1>
+  <p class="muted" style="max-width:1150px">Hardware-signed payment mandates for back-office AI agents. The agent proposes; an executor it cannot reach decides; a human signs exactly what the device shows.</p>
+  <p class="foot">Disclosure: before kickoff we had only a written plan, outside the repo, no code. Everything shown was built since Mon 12:00; the <span class="mono">hackathon-start</span> tag is an empty commit. All companies, accounts and people are fictitious.</p>
+  <aside class="notes">0:00–0:15. Say the disclosure line FIRST, then the hook. Do not explain the product yet: S1 starts at 0:15.</aside>
+</section>
+
+<!-- 2 PROBLEM -->
+<section class="slide" data-start="0:00" data-end="0:15" aria-label="Slide 2: problem">
+  <p class="kicker">The problem</p>
+  <h2>One injected email moves real money</h2>
+  <div class="stats">
+    <div class="stat lead"><div class="v bad num">51%</div><div class="l">of injected-content attacks made our bare AP agent pay the attacker · <b class="num">571,077 CZK</b> in 100 attempts</div></div>
+    <div class="stat"><div class="v num">46%</div><div class="l">still succeed with a prompt-attack filter + outbound DLP</div></div>
+    <div class="stat"><div class="v num">43%</div><div class="l">with an “Approve” button and a human who clicks it<br><span class="small">60% when the host UI lies, even for a careful human</span></div></div>
+  </div>
+  <p class="foot">Qwen3-235B agent, 100 attacks (5 goals × 4 vectors × 5 variants), 95% CIs in REPORT.md · run <span class="mono">20261019T150142_…_pitch-attack</span></p>
+  <aside class="notes">Spoken inside the hook or over the S1 setup. Key line: “filters and approve buttons don’t fix it; they move the number, not to zero.” 60% = A2, careful human, lying UI (n=20).</aside>
+</section>
+
+<!-- 3 HOW IT WORKS -->
+<section class="slide" data-start="0:15" data-end="0:45" aria-label="Slide 3: how it works">
+  <p class="kicker">How it works</p>
+  <h2 style="margin-bottom:18px">The agent can only propose. Money needs facts and a signature.</h2>
+  <svg viewBox="0 0 1408 560" width="1408" height="560" role="img" aria-labelledby="dg-t dg-d">
+    <title id="dg-t">AirGap Mandates architecture</title>
+    <desc id="dg-d">Untrusted agent, host and mailbox send proposals without an IBAN to an executor outside the agent's reach. The executor computes its own facts, applies the signed mandate, and either pays, denies, or renders exact text for the hardware device. Every step goes to a witnessed transparency log that a supervisor verifies offline.</desc>
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink-2)"/></marker></defs>
+    <!-- zones -->
+    <rect class="d-zone" x="0" y="0" width="370" height="560" rx="14" fill="var(--zone-untrusted)"/>
+    <text class="d-z" x="22" y="34">Untrusted · compromised</text>
+    <rect class="d-zone" x="440" y="0" width="560" height="560" rx="14" fill="var(--zone-trusted)"/>
+    <text class="d-z" x="462" y="34">Executor · AWS · outside the agent’s role</text>
+    <rect class="d-zone" x="1070" y="0" width="338" height="270" rx="14" fill="var(--zone-device)"/>
+    <text class="d-z" x="1092" y="34">Human + hardware</text>
+    <!-- untrusted boxes -->
+    <rect class="d-box" x="30" y="66" width="310" height="104" rx="10"/><text class="d-t" x="52" y="108">Mailbox, PDFs</text><text class="d-s" x="52" y="142">anyone can write here</text>
+    <rect class="d-box" x="30" y="214" width="310" height="104" rx="10"/><text class="d-t" x="52" y="256">AP agent (LLM)</text><text class="d-s" x="52" y="290">reads, matches, proposes</text>
+    <rect class="d-box" x="30" y="362" width="310" height="104" rx="10"/><text class="d-t" x="52" y="404">Host laptop UI</text><text class="d-s" x="52" y="438">may lie to the human</text>
+    <path class="d-arrow" d="M185 170 V210" marker-end="url(#ah)"/>
+    <!-- executor -->
+    <rect class="d-box" x="470" y="66" width="500" height="178" rx="10"/>
+    <text class="d-t" x="494" y="108">Facts [F] it fetched itself</text>
+    <text class="d-s" x="494" y="142">domain · DKIM · VoP · licence &amp; warning lists</text>
+    <text class="d-s" x="494" y="172">amount = hashed invoice · duplicates · anomalies</text>
+    <text class="d-s" x="494" y="208">agent text = hint [H], never decisive</text>
+    <rect class="d-box" x="470" y="276" width="500" height="120" rx="10"/>
+    <text class="d-t" x="494" y="318">Signed mandate + Cedar policy</text>
+    <text class="d-s" x="494" y="352">allow · deny · step-up (exact sign)</text>
+    <text class="d-s" x="494" y="380">any BLOCK ⇒ no challenge: device stays dark</text>
+    <rect class="d-box" x="470" y="428" width="500" height="104" rx="10"/>
+    <text class="d-t" x="494" y="470">Ledger + transparency log</text>
+    <text class="d-s" x="494" y="502">KMS-signed checkpoints, witness-cosigned</text>
+    <path class="d-arrow" d="M340 266 H466" marker-end="url(#ah)"/>
+    <text class="d-lbl" x="405" y="254" text-anchor="middle">propose</text>
+    <text class="d-lbl" x="405" y="292" text-anchor="middle">no IBAN</text>
+    <path class="d-arrow" d="M720 244 V272" marker-end="url(#ah)"/>
+    <path class="d-arrow" d="M720 396 V424" marker-end="url(#ah)"/>
+    <!-- device -->
+    <rect class="d-box" x="1098" y="66" width="282" height="178" rx="10"/>
+    <text class="d-t" x="1120" y="108">Trezor Safe 3</text>
+    <text class="d-s" x="1120" y="142">shows the executor’s</text>
+    <text class="d-s" x="1120" y="172">exact text; the host</text>
+    <text class="d-s" x="1120" y="202">can’t alter it. Hold = sign</text>
+    <path class="d-arrow" d="M970 316 H1046 V150 H1094" marker-end="url(#ah)"/>
+    <text class="d-lbl" x="1034" y="236" text-anchor="middle" transform="rotate(-90 1034 236)">exact text</text>
+    <!-- offline -->
+    <rect class="d-box" x="1098" y="300" width="282" height="104" rx="10"/>
+    <text class="d-t" x="1120" y="342">Supervisor, offline</text>
+    <text class="d-s" x="1120" y="376">upstream Go verifier</text>
+    <path class="d-arrow" d="M970 480 H1060 V352 H1094" marker-end="url(#ah)"/>
+    <text class="d-lbl" x="1098" y="440">checkpoints + export,</text>
+    <text class="d-lbl" x="1098" y="466">verified with Wi-Fi off</text>
+  </svg>
+  <p class="small" style="margin:10px 0 0">New payee account = 2 of 3 independent supplier attestations + cooling-off + clerk and treasury on two devices.</p>
+  <aside class="notes">Over the S1 setup (0:15). Three sentences: “The agent can only propose; there is no IBAN field. The executor decides on facts it fetched itself, inside a mandate people signed. Anything new goes to the device as exact text the host can’t change.”</aside>
+</section>
+
+<!-- 4 LIVE BEATS -->
+<section class="slide" data-start="0:15" data-end="2:30" aria-label="Slide 4: live beats">
+  <p class="kicker">Live, on AWS eu-central-1</p>
+  <h2>Four beats, one device</h2>
+  <table class="beats">
+    <tr><td>0:15–0:45</td><td>S1 · normal day</td><td>Invoices pay under the signed mandate. The over-cap one lights the Safe 3: line 1 <span class="mono">AG1/DEMO PAY …</span> on the device = line 1 on screen. Hold to confirm. Receipt QR, witness tick.</td></tr>
+    <tr><td>0:45–1:35</td><td>S2 · lookalike supplier + escalation</td><td>Facts go red; <span class="dark-device">the device stays dark</span>: nothing to approve. Mandate write, self-approval and replay refused; exfiltration blocked.</td></tr>
+    <tr><td>1:35–2:30</td><td>S3 · real-domain takeover + “CFO” voice</td><td>DKIM green, but ATT 0/3 = BLOCK: <b>there is no button</b>, while a synthetic voice (Amazon Polly, fictional person) demands approval. Tripwire “not us” → rejected. Then the legitimate path: 2/3 attestations → cooling-off → clerk + treasury → active.</td></tr>
+    <tr><td>2:30–3:20</td><td>S5 · offline audit</td><td>Wi-Fi off. Stock Go <span class="mono">noteverify</span> + replay green; one flipped byte is red at seq N.</td></tr>
+  </table>
+  <aside class="notes">Stay on this slide (or switch to the ops console) through the live beats. Device operator cues come from the laptop (“--&gt; CLERK on Safe 3 GENUINE”). S3: play the clip from the console’s S3 beat; say “synthetic voice, fictional person”. If a beat fails: fallback video, do not debug on stage.</aside>
+</section>
+
+<!-- 5 NUMBERS -->
+<section class="slide" data-start="3:20" data-end="3:50" aria-label="Slide 5: numbers">
+  <p class="kicker">Measured, not claimed · 100 injected-content attacks</p>
+  <h2 style="margin-bottom:22px">Money to the attacker (CZK), by defence layer</h2>
+  <div class="numbers">
+    <figure style="margin:0">
+      <svg viewBox="0 0 860 470" width="860" height="470" role="img" aria-labelledby="ch-t ch-d">
+        <title id="ch-t">Money to the attacker per arm, CZK</title>
+        <desc id="ch-d">Agent alone 571,077 CZK; with filters 562,832; tool scoping and approve with a clicking human 439,562; with a careful human 0 but duplicates still paid; AirGap with a clicking human 0.</desc>
+        <!-- scale: 571,077 CZK = 500 px; bars start at x=330 -->
+        <line class="axis" x1="330" y1="10" x2="330" y2="460"/>
+        <g class="bar"><title>A0 agent alone: 571,077 CZK, attack success 51% [41-61]</title>
+          <text class="bar-label" x="0" y="52">Agent alone</text><text class="bar-sub" x="0" y="78">A0 · 51% succeed</text>
+          <rect class="mark" x="330" y="30" width="500" height="52" rx="4"/><text class="bar-val num" x="820" y="65" text-anchor="end" fill="var(--surface)" style="fill:var(--surface)">571,077</text></g>
+        <g class="bar"><title>A1 + input filter and DLP: 562,832 CZK, 46% [37-56]</title>
+          <text class="bar-label" x="0" y="140">+ filters</text><text class="bar-sub" x="0" y="166">A1 · 46%</text>
+          <rect class="mark" x="330" y="118" width="493" height="52" rx="4"/><text class="bar-val num" x="813" y="153" text-anchor="end" style="fill:var(--surface)">562,832</text></g>
+        <g class="bar"><title>A2 + tool scoping + Approve, clicking human: 439,562 CZK, 43% [34-53]</title>
+          <text class="bar-label" x="0" y="228">+ Approve, clicking human</text><text class="bar-sub" x="0" y="254">A2 · 43%</text>
+          <rect class="mark" x="330" y="206" width="385" height="52" rx="4"/><text class="bar-val num" x="705" y="241" text-anchor="end" style="fill:var(--surface)">439,562</text></g>
+        <g class="bar"><title>A2 + Approve, careful human: 0 CZK to new accounts; duplicate and overpaid invoices still paid. 30% [22-40]</title>
+          <text class="bar-label" x="0" y="316">+ Approve, careful human</text><text class="bar-sub" x="0" y="342">A2 · 30% (duplicates, overpay)</text>
+          <text class="bar-val num" x="342" y="331">0 to new accounts</text></g>
+        <g class="bar"><title>A3 AirGap executor, clicking human: 0 CZK, 0% [0-4]</title>
+          <text class="bar-label" x="0" y="404" style="font-weight:700">+ AirGap, clicking human</text><text class="bar-sub" x="0" y="430">A3 · 0% [0–4]</text>
+          <text class="bar-val num" x="342" y="419" style="fill:var(--good);font-size:34px">0 CZK</text></g>
+      </svg>
+      <table class="sr-only"><caption>Money to the attacker, CZK, Qwen3-235B, 100 H0 attacks</caption>
+        <tr><th>Arm</th><th>Attack success</th><th>CZK</th></tr>
+        <tr><td>A0 agent alone</td><td>51% [41-61]</td><td>571,077</td></tr>
+        <tr><td>A1 + filters</td><td>46% [37-56]</td><td>562,832</td></tr>
+        <tr><td>A2 clicking human</td><td>43% [34-53]</td><td>439,562</td></tr>
+        <tr><td>A2 careful human</td><td>30% [22-40]</td><td>0 (duplicates/overpay paid)</td></tr>
+        <tr><td>A3 AirGap, clicking human</td><td>0% [0-4]</td><td>0</td></tr>
+      </table>
+    </figure>
+    <div class="side">
+      <h3>Compromised host, scripted</h3>
+      <p>False display text, nonce swap, tampered device text, the agent’s own credentials, egress bypass: <b class="good">0 of 10 each</b> on A3.</p>
+      <h3>Approver load</h3>
+      <p><b>0 prompts</b> for routine invoices inside the mandate. Prompts only for over-cap (≈18 per 100 cases) and new accounts (3 each, by design).</p>
+      <h3>Another model</h3>
+      <p>Sonnet 4.5 spot-check: agent alone 38% [24–55]; AirGap with a clicking human <b class="good">0%</b> [0–10].</p>
+    </div>
+  </div>
+  <p class="foot">Runs: <span class="mono">…150142_pitch-attack</span> · <span class="mono">…153447_pitch-benign-v2</span> · <span class="mono">scripted_462ade534575</span> · Sonnet <span class="mono">…153447_sonnet-spot-attack</span> (n=34). Simulated humans are a model of a human, not a user study. In-mandate residual at A3: 0 CZK in this corpus; a genuinely inflated invoice from the real vendor is out of scope, bounded by caps.</p>
+  <aside class="notes">3:20–3:50. Read only two numbers: 571,077 → 0, “even with a human who clicks everything”. Point at the side: 0 prompts for routine invoices (fatigue question pre-empted). Q&amp;A: 0/100 per cell, Wilson upper bound 4%.</aside>
+</section>
+
+<!-- 6 REAL VS SIMULATED -->
+<section class="slide" data-start="3:50" data-end="3:55" aria-label="Slide 6: real versus simulated">
+  <p class="kicker">Honest limits</p>
+  <h2>What is real, what is simulated</h2>
+  <div class="cols">
+    <div><h3 class="good">Real</h3><ul>
+      <li>The Trezor Safe 3 in my hand: genuine, certificate chain verified</li>
+      <li>Executor on AWS eu-central-1; the agent role is denied tables, KMS, signatures</li>
+      <li>Agent VPC with no route out</li>
+      <li>KMS Ed25519 log + witness keys, S3 Object Lock</li>
+      <li>Offline verifier = unmodified upstream Go code</li></ul></div>
+    <div><h3 class="muted">Simulated, labelled</h3><ul>
+      <li>Companies, domains, accounts, inbox</li>
+      <li>Treasury approver on the emulator</li>
+      <li>Supplier attestation issuers (real crypto, fictitious organisations)</li>
+      <li>VoP responder; the “CFO” voice (Polly)</li>
+      <li>Benchmark humans: a model, not a user study</li></ul></div>
+  </div>
+  <p class="foot">Second, independent witness (W2): deployed, trust setup pending. If it is not live on stage, say “W1 only, same account”. Full table: demo/REAL_VS_SIMULATED.md.</p>
+  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” Check W2 status before going on stage.</aside>
+</section>
+
+<!-- 7 BUSINESS -->
+<section class="slide" data-start="3:55" data-end="4:00" aria-label="Slide 7: business">
+  <p class="kicker">Why a bank buys this</p>
+  <h2>A payment layer an agent can’t talk its way past</h2>
+  <ul>
+    <li><b>Mandate</b> for volume, <b>exact-sign</b> for exceptions, <b>attestation network</b> for new payees</li>
+    <li>Every supplier bank that attests its own clients’ accounts makes payee changes safer for every buyer</li>
+    <li>Cost: one hardware wallet per approver · about USD 0.3–0.6 of model compute per 100 agent tasks in our bench</li>
+  </ul>
+  <p style="margin-top:36px;font-size:38px;font-weight:700;line-height:1.3;max-width:1300px">“Take over the agent, the laptop and the supplier’s mailbox, and you still can’t send one koruna to a new account. Afterwards, a supervisor can prove it offline.”</p>
+  <aside class="notes">3:55–4:00. [U] liability-shift wording (PSR/PSD3) and device list price: pitch lead fills these in after the Tue 07:30 regulatory session; do not say numbers that are not on this slide. End on the quote.</aside>
+</section>
+
+</div></div>
+
+<div id="notes" role="region" aria-label="Presenter notes"><div class="bar"><span>Slide <b id="n-i">1</b>/<b id="n-n">7</b></span><span>Target <b id="n-win">0:00–0:15</b></span><span>Elapsed <b id="n-el">0:00</b></span><span>N notes · T theme · F fullscreen · R reset timer</span></div><div class="body" id="n-body"></div></div>
+<div id="hint">→ next · N notes · T theme</div>
+
+<script>
+(() => {
+  const slides = [...document.querySelectorAll(".slide")];
+  const stage = document.getElementById("stage");
+  const notes = document.getElementById("notes");
+  let i = 0, t0 = null;
+  const params = new URLSearchParams(location.hash.slice(1));
+  i = Math.min(slides.length - 1, Math.max(0, (parseInt(params.get("s"), 10) || 1) - 1));
+
+  function fit() {
+    const s = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+    stage.style.transform = `scale(${s})`;
+  }
+  function secs(mmss) { const [m, s] = mmss.split(":").map(Number); return m * 60 + s; }
+  function fmt(n) { n = Math.max(0, Math.floor(n)); return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`; }
+  function show(k) {
+    i = Math.min(slides.length - 1, Math.max(0, k));
+    slides.forEach((el, j) => el.classList.toggle("active", j === i));
+    const el = slides[i];
+    document.getElementById("n-i").textContent = i + 1;
+    document.getElementById("n-n").textContent = slides.length;
+    document.getElementById("n-win").textContent = `${el.dataset.start}–${el.dataset.end}`;
+    const a = el.querySelector("aside.notes");
+    document.getElementById("n-body").textContent = a ? a.textContent : "";
+    history.replaceState(null, "", `#s=${i + 1}`);
+    if (t0 === null && i > 0) t0 = Date.now();
+  }
+  function tick() {
+    const el = slides[i];
+    const elapsed = t0 === null ? 0 : (Date.now() - t0) / 1000;
+    const out = document.getElementById("n-el");
+    out.textContent = fmt(elapsed);
+    out.className = elapsed > secs(el.dataset.end) + 5 ? "over" : "";
+  }
+  function theme() {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("deck-theme", root.dataset.theme); } catch (e) { /* storage unavailable */ }
+  }
+  try { const saved = localStorage.getItem("deck-theme"); if (saved) document.documentElement.dataset.theme = saved; } catch (e) { /* ignore */ }
+
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { show(i + 1); e.preventDefault(); }
+    else if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { show(i - 1); e.preventDefault(); }
+    else if (e.key === "Home") show(0);
+    else if (e.key === "End") show(slides.length - 1);
+    else if (e.key === "n" || e.key === "N") notes.classList.toggle("on");
+    else if (e.key === "t" || e.key === "T") theme();
+    else if (e.key === "r" || e.key === "R") t0 = Date.now();
+    else if (e.key === "f" || e.key === "F") {
+      if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.();
+    }
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#notes")) show(i + (e.clientX < innerWidth / 4 ? -1 : 1)); });
+  window.addEventListener("resize", fit);
+  fit(); show(i); setInterval(tick, 500);
+})();
+</script>
+</body>
+</html>
