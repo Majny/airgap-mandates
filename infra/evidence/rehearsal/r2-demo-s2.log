@@ -1,0 +1,38 @@
+[S2] change chg_1 acme-cz.com -> LT483999000000001234: REJECTED at creation, no challenge (device stays dark)
+     BLOCK: F-ATTEST ATT 0/3, F-DOMAIN DOMAIN LOOKALIKE, F-VOP VOP NMTC
+[S2] proposal prp_5 from the lookalike email -> deny ['F-AMOUNT-DOC', 'F-DOMAIN', 'F-DOMAIN-AGE', 'F-SPLIT', 'I-AMOUNT', 'I-BLOCK']
+[S2] escalation mandate.write      -> refused (tool plane is the private API in the agent VPC: shown by the agent run (WS-E))
+[S2] escalation agent->/signatures -> refused (IAM explicit Deny (WS-E evidence: simulate-principal-policy))
+[S2] escalation self-approval      -> refused (unknown_signer)
+[S2] escalation replay             -> refused (nonce_reused)
+[S2] exfil: tool plane is the private API in the agent VPC: shown by the agent run (WS-E)
+[S2] money moved to the attacker: 0
+{
+ "change": {
+  "id": "chg_1",
+  "state": "REJECTED",
+  "rule_ids": [
+   "F-DOMAIN",
+   "F-VOP"
+  ]
+ },
+ "proposal": {
+  "id": "prp_5",
+  "rule_ids": [
+   "F-AMOUNT-DOC",
+   "F-DOMAIN",
+   "F-DOMAIN-AGE",
+   "F-SPLIT",
+   "I-AMOUNT",
+   "I-BLOCK"
+  ]
+ },
+ "escalation": {
+  "mandate.write": "tool plane is the private API in the agent VPC: shown by the agent run (WS-E)",
+  "agent->/signatures": "IAM explicit Deny (WS-E evidence: simulate-principal-policy)",
+  "self-approval": "unknown_signer",
+  "replay": "nonce_reused"
+ },
+ "exfil": "tool plane is the private API in the agent VPC: shown by the agent run (WS-E)",
+ "money_to_attacker_minor": 0
+}

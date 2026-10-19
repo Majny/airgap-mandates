@@ -162,6 +162,8 @@ class AirgapStack(Stack):
                                     environment={**base_env, **(env or {})},
                                     log_retention=logs.RetentionDays.ONE_WEEK, **extra)
 
+        if ctx("w2_vkey"):  # W2 litewitness cosigner vkey (printed by litewitness at startup; infra/w2_ctl.sh vkey)
+            base_env["AIRGAP_W2_VKEY"] = ctx("w2_vkey")
         f_exec = fn("executor", "airgap_entry.handler", r_exec,
                     env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id,  # egress E-GUARDRAILS 2nd opinion
                          "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})  # GetPublicKey only (vkeys in /health, export)
