@@ -1,0 +1,205 @@
+{
+  "endpoint": "POST /changes/{change_id}/reject",
+  "status": 200,
+  "request": {
+    "reason": "clerk: not expected"
+  },
+  "response": {
+    "change": {
+      "change_id": "chg_8",
+      "change_no": 8,
+      "state": "SIG_CLERK",
+      "vendor_id": "ven_12345678",
+      "vendor_ico": "12345678",
+      "vendor_name": "ACME s.r.o.",
+      "old_iban": "CZ6508000000192000145399",
+      "old_since": "2024-03-01",
+      "new_iban": "CZ8601000000000099887766",
+      "email_id": "eml_9a8b7c6d5e4f3021",
+      "in_network": true,
+      "break_glass": false,
+      "change_nonce": "cbcde84bd6711075eae757f41d17a768",
+      "aud": "AG1/DEMO/changes/chg_8",
+      "facts": [
+        {
+          "id": "F-ATTEST",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Supplier attestations (distinct pinned classes)",
+          "display_line": "ATT 2/3 ERP BANK",
+          "evidence": {
+            "k": 2,
+            "n": 3,
+            "classes": "supplier-erp,supplier-bank"
+          }
+        },
+        {
+          "id": "F-DOMAIN",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Sender domain vs registry",
+          "display_line": "DOMAIN MATCH",
+          "evidence": {
+            "from_domain": "acme.cz",
+            "registry_domain": "acme.cz",
+            "distance": 0
+          },
+          "prov": "05d68ab8ffb8a861a8ac87becf913f7b0d7c2b68dc614ad1f610d9dcd7508a86"
+        },
+        {
+          "id": "F-DKIM",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "DKIM signature",
+          "display_line": "DKIM PASS",
+          "evidence": {
+            "d": "acme.cz",
+            "valid": true
+          },
+          "prov": "d1c2ca3253f4e69fa8942c2488f68e96534c09bd78b88b1d407f4971886044dd"
+        },
+        {
+          "id": "F-WARNLIST",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Regulator warning lists",
+          "display_line": "WARNLIST CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-SANCTION",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "EU sanctions (entities)",
+          "display_line": "SANCTIONS CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Verification of Payee",
+          "display_line": "VOP CMTC",
+          "evidence": {
+            "code": "CMTC"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+        },
+        {
+          "id": "F-PSP",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+          "display_line": "PSP INST VOP OK",
+          "evidence": {
+            "bank_code": "0100",
+            "in_sct_inst": true,
+            "in_vop": true,
+            "licensed": true
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Bank from IBAN",
+          "display_line": "BANK DOMESTIC",
+          "evidence": {
+            "country": "CZ",
+            "bank_code": "0100"
+          },
+          "prov": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
+        }
+      ],
+      "attestations": [
+        {
+          "issuer_class": "supplier-erp",
+          "iss": "https://issuer.acme.example/erp",
+          "verified": true,
+          "error": null,
+          "verified_at": "2026-10-19T12:00:40Z"
+        },
+        {
+          "issuer_class": "supplier-bank",
+          "iss": "https://issuer.bank-a.example/vc",
+          "verified": true,
+          "error": null,
+          "verified_at": "2026-10-19T12:00:40Z"
+        }
+      ],
+      "attest_count": 2,
+      "not_before": "2026-10-19T12:01:00Z",
+      "expires_at": "2026-10-19T13:00:00Z",
+      "callback": {
+        "status": "none",
+        "code_exp": null,
+        "attempts": 0
+      },
+      "tripwire_sent_at": "2026-10-19T12:00:01Z",
+      "signatures": [],
+      "pending_challenge": {
+        "nonce": "7C11A0E1",
+        "purpose": "CHG",
+        "role": "clerk",
+        "subject_id": "chg_8",
+        "deployment": "DEMO",
+        "profile": "safe5-mono-18x7",
+        "exp": "2026-10-19T12:10:00Z",
+        "text": "AG1/DEMO CHG 8\nACME S.R.O.\nICO 12345678\nOLD ..5399 2024-03\nNEW CZ86 0100 0000\n    0000 9988 7766\nBANK 0100 CZ\n0 BLOCK 1 WARN\nVOP CMTC\n+7 MORE 0 BLOCK\nCOOLOFF DONE\nROLE CLERK 1/2\nN 7C11A0E1\nH 6bdaf1c3a614cad1",
+        "text_sha256": "58a6b5fbc85a168ed82d12ee6c6d698f85db26fe2eb9fe3a8571ad15eff40ff2",
+        "subject_hash": "6bdaf1c3a614cad156f9f725e2d32b216c2b3d23a28df850609beae797bbba10",
+        "width": 18,
+        "lines_per_page": 7,
+        "pages": 2,
+        "line_count": 14
+      },
+      "history": [
+        {
+          "from": null,
+          "to": "PENDING_ATTEST",
+          "at": "2026-10-19T12:00:00Z",
+          "reason": "created",
+          "actor": "tools"
+        },
+        {
+          "from": "PENDING_ATTEST",
+          "to": "COOLING",
+          "at": "2026-10-19T12:00:40Z",
+          "reason": "VC_RECEIVED: 2/3 distinct classes",
+          "actor": "issuer"
+        },
+        {
+          "from": "COOLING",
+          "to": "SIG_CLERK",
+          "at": "2026-10-19T12:01:00Z",
+          "reason": "COOLING_ELAPSED",
+          "actor": "scheduler"
+        }
+      ],
+      "created_at": "2026-10-19T12:00:00Z"
+    },
+    "challenge": {
+      "nonce": "1A2B3C4D",
+      "purpose": "CHG_REJECT",
+      "role": "clerk",
+      "subject_id": "chg_8",
+      "deployment": "DEMO",
+      "profile": "safe5-mono-18x7",
+      "exp": "2026-10-19T12:12:00Z",
+      "text": "AG1/DEMO REJECT 8\nACME S.R.O.\nICO 12345678\nNEW ..7766\nROLE CLERK\nN 1A2B3C4D\nH 4111fcb2fcfb91a5",
+      "text_sha256": "b7a045ddec2075238745b4e5acbd3d9dd54256b84a1bedfa7b9fb68e31475a1f",
+      "subject_hash": "4111fcb2fcfb91a58fdc48c963e5d7f948d2bf6adbcf47d9b2c85a4df197f19d",
+      "width": 18,
+      "lines_per_page": 7,
+      "pages": 1,
+      "line_count": 7
+    }
+  }
+}

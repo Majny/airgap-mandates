@@ -1,0 +1,15 @@
+{
+  "endpoint": "POST /callbacks/{change_id}",
+  "status": 403,
+  "request": {
+    "code": "000001",
+    "outcome": "confirm"
+  },
+  "response": {
+    "error": "callback_attempts_exceeded",
+    "message": "3 failed attempts; change chg_9 REJECTED",
+    "details": {
+      "state": "REJECTED"
+    }
+  }
+}

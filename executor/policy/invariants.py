@@ -1,37 +1,33 @@
-"""In-mandate invariants I-* (pure functions). CONTRACTS.md §8.1.
+"""Helpers that compute the Cedar context from snapshots/ledger (pure). CONTRACTS.md v2 §8.1.
 
-Owner: WS-E.
+The rules themselves are Cedar policies (executor/policy/cedar/). Owner: WS-A.
 """
 from __future__ import annotations
 
 from typing import Any
 
 
-def check_mandate(invoice: dict[str, Any], mandate: dict[str, Any] | None, *, now: Any) -> list[str]:
-    """Violated ids among I-MANDATE, I-EXP, I-PER, I-BUDGET, I-COUNT."""
-    raise NotImplementedError("TODO WS-E")
+def cedar_context(subject: dict[str, Any], facts: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    """Context for action `pay` per cedar schema: amount_minor, vop, reg_hit, warn_hit, block_hit, warn_count,
+    anom, dup, split_sum, z_hit, now (epoch s), attest_count. [F] only."""
+    raise NotImplementedError("TODO WS-A")
 
 
-def check_payee(invoice: dict[str, Any], vendor: dict[str, Any] | None) -> list[str]:
-    """['I-PAYEE'] if vendor unknown or iban != vendor.iban."""
-    raise NotImplementedError("TODO WS-E")
+def is_duplicate(invoice: dict[str, Any], history: list[dict[str, Any]]) -> bool:
+    """I-DUP: normalized invoice no, or (vendor, amount +-50 bp, issue_date +-3 d) EXECUTED/PENDING_SIG."""
+    raise NotImplementedError("TODO WS-A")
 
 
-def check_dup(invoice: dict[str, Any], history: list[dict[str, Any]]) -> list[str]:
-    """['I-DUP'] per normalized invoice no or (vendor, amount +-50 bp, date +-3 d)."""
-    raise NotImplementedError("TODO WS-E")
+def split_sum(invoice: dict[str, Any], history: list[dict[str, Any]], *, now: Any) -> int:
+    """I-SPLIT: executed sum for the vendor in the last 24 h (minor units)."""
+    raise NotImplementedError("TODO WS-A")
 
 
-def check_split(invoice: dict[str, Any], history: list[dict[str, Any]], mandate: dict[str, Any] | None, *, now: Any) -> list[str]:
-    """['I-SPLIT'] if 24 h vendor sum + amount > max_per_payment_minor."""
-    raise NotImplementedError("TODO WS-E")
-
-
-def check_z(invoice: dict[str, Any], history: list[dict[str, Any]]) -> list[str]:
-    """['I-Z'] if robust z-score (median/MAD) > 3.5."""
-    raise NotImplementedError("TODO WS-E")
+def z_hit(invoice: dict[str, Any], history: list[dict[str, Any]]) -> bool:
+    """I-Z: robust z-score (median/MAD) > 3.5."""
+    raise NotImplementedError("TODO WS-A")
 
 
 def normalize_invoice_no(invoice_no: str) -> str:
     """Uppercase, strip non-alphanumerics, strip leading zeros of numeric runs."""
-    raise NotImplementedError("TODO WS-E")
+    raise NotImplementedError("TODO WS-A")

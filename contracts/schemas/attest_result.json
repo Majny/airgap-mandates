@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/attest_result.json",
+  "title": "attest_result",
+  "$ref": "common.json#/$defs/attest_result"
+}

@@ -1,0 +1,16 @@
+{
+  "endpoint": "POST /signatures",
+  "status": 403,
+  "request": {
+    "nonce": "7C11A0E0",
+    "role": "clerk",
+    "sig": "0x8579a2e05d754cd5b95a2b7a390ae1463cb0e3fc2cad54c184b2a08fc10e3dc18579a2e05d754cd5b95a2b7a390ae1463cb0e3fc2cad54c184b2a08fc10e3dc11b"
+  },
+  "response": {
+    "error": "attestation_insufficient",
+    "message": "ACME s.r.o. 1/3 distinct issuer classes for the new IBAN",
+    "details": {
+      "state": "PENDING_ATTEST"
+    }
+  }
+}

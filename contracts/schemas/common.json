@@ -29,7 +29,7 @@
     },
     "nonce": {
       "type": "string",
-      "pattern": "^[0-9A-F]{6}$"
+      "pattern": "^[0-9A-F]{8}$"
     },
     "hex64": {
       "type": "string",
@@ -55,24 +55,21 @@
         "MANDATE",
         "CHG",
         "PAY",
-        "VENDOR_ATTEST"
+        "VENDOR_ATTEST",
+        "ENROLL",
+        "CHG_REJECT"
       ]
     },
     "change_state": {
       "enum": [
-        "REQUESTED",
-        "FACTS_DONE",
-        "ATTESTATION_CHECK",
-        "TRIPWIRE_SENT",
+        "PENDING_ATTEST",
         "CALLBACK_PENDING",
-        "CALLBACK_CONFIRMED",
-        "CALLBACK_DENIED",
         "COOLING",
         "SIG_CLERK",
         "SIG_TREASURY",
         "ACTIVE",
-        "EXPIRED",
-        "REJECTED"
+        "REJECTED",
+        "EXPIRED"
       ]
     },
     "fact": {
@@ -104,6 +101,10 @@
         },
         "evidence": {
           "type": "object"
+        },
+        "prov": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       },
       "required": [
@@ -112,6 +113,99 @@
         "severity",
         "label",
         "display_line"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "F"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "display_line": {
+                "maxLength": 18,
+                "minLength": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "display_line": {
+                "maxLength": 200
+              },
+              "severity": {
+                "const": "INFO"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "factset": {
+      "type": "object",
+      "properties": {
+        "subject_id": {
+          "type": "string"
+        },
+        "computed_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.json#/$defs/fact"
+          }
+        },
+        "facts_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "snapshots": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "mostlyright",
+              "adis",
+              "dns",
+              "whois",
+              "bank_codes",
+              "registry",
+              "vop",
+              "toollog"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "max_severity": {
+          "anyOf": [
+            {
+              "enum": [
+                "INFO",
+                "WARN",
+                "BLOCK"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "subject_id",
+        "computed_at",
+        "facts",
+        "facts_digest",
+        "snapshots",
+        "max_severity"
       ],
       "additionalProperties": false
     },
@@ -140,14 +234,16 @@
       "properties": {
         "nonce": {
           "type": "string",
-          "pattern": "^[0-9A-F]{6}$"
+          "pattern": "^[0-9A-F]{8}$"
         },
         "purpose": {
           "enum": [
             "MANDATE",
             "CHG",
             "PAY",
-            "VENDOR_ATTEST"
+            "VENDOR_ATTEST",
+            "ENROLL",
+            "CHG_REJECT"
           ]
         },
         "role": {
@@ -162,26 +258,48 @@
         "subject_id": {
           "type": "string"
         },
+        "deployment": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{1,5}$"
+        },
+        "profile": {
+          "enum": [
+            "safe5-mono-18x7",
+            "ui-preview-32"
+          ]
+        },
         "exp": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
         },
         "text": {
           "type": "string",
-          "pattern": "^[ -~\\n]+$"
+          "pattern": "^AG1/[A-Z0-9]{1,5} [ -~\\n]+$"
         },
         "text_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
+        "subject_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "width": {
           "type": "integer",
-          "minimum": 24
+          "minimum": 18
+        },
+        "lines_per_page": {
+          "const": 7
+        },
+        "pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
         },
         "line_count": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 8
+          "maximum": 14
         },
         "used": {
           "type": "boolean"
@@ -196,10 +314,15 @@
         "purpose",
         "role",
         "subject_id",
+        "deployment",
+        "profile",
         "exp",
         "text",
         "text_sha256",
+        "subject_hash",
         "width",
+        "lines_per_page",
+        "pages",
         "line_count"
       ],
       "additionalProperties": false
@@ -211,7 +334,8 @@
           "enum": [
             "allow",
             "deny",
-            "challenge"
+            "challenge",
+            "pending"
           ]
         },
         "rule_ids": {
@@ -226,6 +350,10 @@
           "items": {
             "$ref": "common.json#/$defs/fact"
           }
+        },
+        "facts_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         },
         "mandate_id": {
           "anyOf": [
@@ -250,10 +378,34 @@
         "decision",
         "rule_ids",
         "facts",
+        "facts_digest",
         "mandate_id",
         "policy_hash"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "challenge"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "challenge"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "challenge"
+              ]
+            }
+          }
+        }
+      ]
     },
     "error": {
       "type": "object",
@@ -271,19 +423,28 @@
                 "nonce_reused",
                 "expired",
                 "missing_callback_attestation",
-                "vendor_attestation_missing",
+                "attestation_insufficient",
+                "kb_jwt_invalid",
+                "issuer_not_pinned",
+                "break_glass_required",
+                "callback_attempts_exceeded",
+                "emulator_not_allowed",
                 "attestation_quorum",
                 "cooling_off",
                 "sigs_insufficient",
                 "egress_blocked",
                 "callback_code_invalid",
+                "caller_not_allowed",
                 "state_conflict",
+                "stale_checkpoint",
+                "checkpoint_inconsistent",
+                "rate_limited",
                 "internal_error"
               ]
             },
             {
               "type": "string",
-              "pattern": "^rule_violation:I-[A-Z]+$"
+              "pattern": "^rule_violation:I-[A-Z-]+$"
             }
           ]
         },
@@ -300,6 +461,36 @@
       ],
       "additionalProperties": false
     },
+    "mandate_signer": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "enum": [
+            "clerk",
+            "treasury"
+          ]
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{40}$"
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[0-9A-F]{8}$"
+        },
+        "signed_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+        }
+      },
+      "required": [
+        "role",
+        "address",
+        "nonce",
+        "signed_at"
+      ],
+      "additionalProperties": false
+    },
     "mandate": {
       "type": "object",
       "properties": {
@@ -313,7 +504,8 @@
         },
         "status": {
           "enum": [
-            "PENDING_SIG",
+            "PENDING_SIG_CLERK",
+            "PENDING_SIG_TREASURY",
             "ACTIVE",
             "EXPIRED",
             "SUPERSEDED"
@@ -334,6 +526,10 @@
         "payee_scope": {
           "const": "existing_only"
         },
+        "valid_from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+        },
         "valid_until": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
@@ -341,20 +537,47 @@
         "currency": {
           "const": "CZK"
         },
+        "require_vop": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "MTCH",
+              "CMTC",
+              "NMTC",
+              "NOAP"
+            ]
+          },
+          "minItems": 1
+        },
+        "max_anom": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "payee_registry_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payee_registry_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "policy_hash": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
-        "signer_address": {
-          "anyOf": [
-            {
-              "type": "string",
-              "pattern": "^0x[0-9a-f]{40}$"
-            },
-            {
-              "type": "null"
-            }
+        "sig_required": {
+          "enum": [
+            1,
+            2
           ]
+        },
+        "signers": {
+          "type": "array",
+          "items": {
+            "$ref": "common.json#/$defs/mandate_signer"
+          },
+          "maxItems": 2
         },
         "spent_minor": {
           "type": "integer",
@@ -366,7 +589,7 @@
         },
         "challenge_nonce": {
           "type": "string",
-          "pattern": "^[0-9A-F]{6}$"
+          "pattern": "^[0-9A-F]{8}$"
         },
         "created_at": {
           "type": "string",
@@ -392,10 +615,16 @@
         "max_total_minor",
         "max_count",
         "payee_scope",
+        "valid_from",
         "valid_until",
         "currency",
+        "require_vop",
+        "max_anom",
+        "payee_registry_version",
+        "payee_registry_hash",
         "policy_hash",
-        "signer_address",
+        "sig_required",
+        "signers",
         "spent_minor",
         "count",
         "challenge_nonce",
@@ -407,10 +636,18 @@
     "invoice": {
       "type": "object",
       "properties": {
+        "vendor_id": {
+          "type": "string",
+          "pattern": "^ven_[0-9]{8}$"
+        },
         "invoice_no": {
           "type": "string",
           "minLength": 1,
           "maxLength": 64
+        },
+        "invoice_ref": {
+          "type": "string",
+          "pattern": "^doc_[0-9a-f]{16}$"
         },
         "issue_date": {
           "type": "string",
@@ -419,18 +656,6 @@
         "due_date": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-        },
-        "vendor_ico": {
-          "type": "string",
-          "pattern": "^[0-9]{8}$"
-        },
-        "vendor_name": {
-          "type": "string",
-          "maxLength": 200
-        },
-        "iban": {
-          "type": "string",
-          "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
         },
         "amount_minor": {
           "type": "integer",
@@ -446,6 +671,14 @@
           "type": "string",
           "pattern": "^[0-9]{1,10}$"
         },
+        "reason_code": {
+          "enum": [
+            "DUE",
+            "PARTIAL",
+            "ADVANCE",
+            "OTHER"
+          ]
+        },
         "email_id": {
           "type": "string"
         },
@@ -455,13 +688,13 @@
         }
       },
       "required": [
+        "vendor_id",
         "invoice_no",
+        "invoice_ref",
         "issue_date",
-        "vendor_ico",
-        "vendor_name",
-        "iban",
         "amount_minor",
-        "currency"
+        "currency",
+        "reason_code"
       ],
       "additionalProperties": false
     },
@@ -479,7 +712,7 @@
         },
         "nonce": {
           "type": "string",
-          "pattern": "^[0-9A-F]{6}$"
+          "pattern": "^[0-9A-F]{8}$"
         },
         "signer_address": {
           "type": "string",
@@ -496,7 +729,7 @@
       "properties": {
         "tx_id": {
           "type": "string",
-          "pattern": "^tx_[0-9]+$"
+          "pattern": "^tx_[0-9a-f]{16}$"
         },
         "proposal_id": {
           "type": "string"
@@ -531,13 +764,43 @@
         "authorization": {
           "$ref": "common.json#/$defs/authorization"
         },
-        "leaf_index": {
+        "seq": {
           "type": "integer",
           "minimum": 0
         },
         "executed_at": {
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+        },
+        "rail": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "PENDING",
+                "ACTC",
+                "ACSC",
+                "RJCT",
+                "DUPL"
+              ]
+            },
+            "xml_c14n_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "xml_c14n_sha256"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -549,8 +812,9 @@
         "currency",
         "vs",
         "authorization",
-        "leaf_index",
-        "executed_at"
+        "seq",
+        "executed_at",
+        "rail"
       ],
       "additionalProperties": false
     },
@@ -575,14 +839,7 @@
           ]
         },
         "vendor_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": "string"
         },
         "invoice": {
           "$ref": "common.json#/$defs/invoice"
@@ -606,7 +863,7 @@
           "anyOf": [
             {
               "type": "string",
-              "pattern": "^[0-9A-F]{6}$"
+              "pattern": "^[0-9A-F]{8}$"
             },
             {
               "type": "null"
@@ -616,7 +873,8 @@
         "tx_id": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "pattern": "^tx_[0-9a-f]{16}$"
             },
             {
               "type": "null"
@@ -643,6 +901,104 @@
       ],
       "additionalProperties": false
     },
+    "attest_summary": {
+      "type": "object",
+      "properties": {
+        "issuer_class": {
+          "enum": [
+            "supplier-erp",
+            "supplier-bank",
+            "registry"
+          ]
+        },
+        "iss": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verified_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+        }
+      },
+      "required": [
+        "issuer_class",
+        "iss",
+        "verified",
+        "error",
+        "verified_at"
+      ],
+      "additionalProperties": false
+    },
+    "attest_result": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "issuer_class": {
+          "anyOf": [
+            {
+              "enum": [
+                "supplier-erp",
+                "supplier-bank",
+                "registry"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iss": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disclosed": {
+          "type": "object"
+        },
+        "vc_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "ok",
+        "issuer_class",
+        "iss",
+        "error",
+        "disclosed",
+        "vc_sha256"
+      ],
+      "additionalProperties": false
+    },
     "change": {
       "type": "object",
       "properties": {
@@ -656,19 +1012,14 @@
         },
         "state": {
           "enum": [
-            "REQUESTED",
-            "FACTS_DONE",
-            "ATTESTATION_CHECK",
-            "TRIPWIRE_SENT",
+            "PENDING_ATTEST",
             "CALLBACK_PENDING",
-            "CALLBACK_CONFIRMED",
-            "CALLBACK_DENIED",
             "COOLING",
             "SIG_CLERK",
             "SIG_TREASURY",
             "ACTIVE",
-            "EXPIRED",
-            "REJECTED"
+            "REJECTED",
+            "EXPIRED"
           ]
         },
         "vendor_id": {
@@ -684,6 +1035,10 @@
         "old_iban": {
           "type": "string",
           "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
+        },
+        "old_since": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
         },
         "new_iban": {
           "type": "string",
@@ -702,11 +1057,32 @@
         "in_network": {
           "type": "boolean"
         },
+        "break_glass": {
+          "type": "boolean"
+        },
+        "change_nonce": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "aud": {
+          "type": "string",
+          "pattern": "^AG1/[A-Z0-9]{1,5}/changes/chg_[0-9]+$"
+        },
         "facts": {
           "type": "array",
           "items": {
             "$ref": "common.json#/$defs/fact"
           }
+        },
+        "attestations": {
+          "type": "array",
+          "items": {
+            "$ref": "common.json#/$defs/attest_summary"
+          }
+        },
+        "attest_count": {
+          "type": "integer",
+          "minimum": 0
         },
         "not_before": {
           "anyOf": [
@@ -744,13 +1120,30 @@
                   "type": "null"
                 }
               ]
+            },
+            "attempts": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
             }
           },
           "required": [
             "status",
-            "code_exp"
+            "code_exp",
+            "attempts"
           ],
           "additionalProperties": false
+        },
+        "tripwire_sent_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "signatures": {
           "type": "array",
@@ -772,7 +1165,7 @@
               },
               "nonce": {
                 "type": "string",
-                "pattern": "^[0-9A-F]{6}$"
+                "pattern": "^[0-9A-F]{8}$"
               },
               "signed_at": {
                 "type": "string",
@@ -807,19 +1200,14 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "REQUESTED",
-                      "FACTS_DONE",
-                      "ATTESTATION_CHECK",
-                      "TRIPWIRE_SENT",
+                      "PENDING_ATTEST",
                       "CALLBACK_PENDING",
-                      "CALLBACK_CONFIRMED",
-                      "CALLBACK_DENIED",
                       "COOLING",
                       "SIG_CLERK",
                       "SIG_TREASURY",
                       "ACTIVE",
-                      "EXPIRED",
-                      "REJECTED"
+                      "REJECTED",
+                      "EXPIRED"
                     ]
                   },
                   {
@@ -829,19 +1217,14 @@
               },
               "to": {
                 "enum": [
-                  "REQUESTED",
-                  "FACTS_DONE",
-                  "ATTESTATION_CHECK",
-                  "TRIPWIRE_SENT",
+                  "PENDING_ATTEST",
                   "CALLBACK_PENDING",
-                  "CALLBACK_CONFIRMED",
-                  "CALLBACK_DENIED",
                   "COOLING",
                   "SIG_CLERK",
                   "SIG_TREASURY",
                   "ACTIVE",
-                  "EXPIRED",
-                  "REJECTED"
+                  "REJECTED",
+                  "EXPIRED"
                 ]
               },
               "at": {
@@ -850,13 +1233,30 @@
               },
               "reason": {
                 "type": "string"
+              },
+              "actor": {
+                "enum": [
+                  "executor",
+                  "agent",
+                  "host",
+                  "vendor_portal",
+                  "ingest",
+                  "witness",
+                  "tools",
+                  "issuer",
+                  "checkpointer",
+                  "rail",
+                  "scheduler",
+                  "auditor"
+                ]
               }
             },
             "required": [
               "from",
               "to",
               "at",
-              "reason"
+              "reason",
+              "actor"
             ],
             "additionalProperties": false
           }
@@ -874,17 +1274,53 @@
         "vendor_ico",
         "vendor_name",
         "old_iban",
+        "old_since",
         "new_iban",
         "email_id",
         "in_network",
+        "break_glass",
+        "change_nonce",
+        "aud",
         "facts",
+        "attestations",
+        "attest_count",
         "not_before",
         "expires_at",
         "callback",
+        "tripwire_sent_at",
         "signatures",
         "pending_challenge",
         "history",
         "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "issuer_pin": {
+      "type": "object",
+      "properties": {
+        "issuer_class": {
+          "enum": [
+            "supplier-erp",
+            "supplier-bank",
+            "registry"
+          ]
+        },
+        "iss": {
+          "type": "string"
+        },
+        "jwk_thumbprint": {
+          "type": "string"
+        },
+        "pinned_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+        }
+      },
+      "required": [
+        "issuer_class",
+        "iss",
+        "jwk_thumbprint",
+        "pinned_at"
       ],
       "additionalProperties": false
     },
@@ -928,6 +1364,12 @@
         },
         "in_network": {
           "type": "boolean"
+        },
+        "issuer_pins": {
+          "type": "array",
+          "items": {
+            "$ref": "common.json#/$defs/issuer_pin"
+          }
         },
         "iban_history": {
           "type": "array",
@@ -985,6 +1427,7 @@
         "contact_email",
         "registered_since",
         "in_network",
+        "issuer_pins",
         "iban_history"
       ],
       "additionalProperties": false
@@ -1006,7 +1449,10 @@
           ]
         },
         "role_basis": {
-          "type": "string"
+          "enum": [
+            "OR",
+            "POA"
+          ]
         }
       },
       "required": [
@@ -1100,6 +1546,9 @@
             }
           ]
         },
+        "change_id": {
+          "type": "string"
+        },
         "policy": {
           "type": "object",
           "properties": {
@@ -1122,23 +1571,6 @@
             "signers",
             "threshold",
             "policy_v"
-          ],
-          "additionalProperties": false
-        },
-        "proofs": {
-          "type": "object",
-          "properties": {
-            "or_extract_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            },
-            "penny_nonce": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "or_extract_sha256",
-            "penny_nonce"
           ],
           "additionalProperties": false
         },
@@ -1166,7 +1598,7 @@
               },
               "nonce": {
                 "type": "string",
-                "pattern": "^[0-9A-F]{6}$"
+                "pattern": "^[0-9A-F]{8}$"
               }
             },
             "required": [
@@ -1224,8 +1656,8 @@
         "iban",
         "valid_from",
         "supersedes",
+        "change_id",
         "policy",
-        "proofs",
         "sigs",
         "status",
         "commitment",
@@ -1235,64 +1667,9 @@
       ],
       "additionalProperties": false
     },
-    "sth_body": {
-      "type": "object",
-      "properties": {
-        "log_id": {
-          "enum": [
-            "audit",
-            "attest"
-          ]
-        },
-        "tree_size": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "root_hash": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "timestamp": {
-          "type": "integer",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "log_id",
-        "tree_size",
-        "root_hash",
-        "timestamp"
-      ],
-      "additionalProperties": false
-    },
-    "sth_signed": {
-      "type": "object",
-      "properties": {
-        "body": {
-          "$ref": "common.json#/$defs/sth_body"
-        },
-        "executor_sig": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9+/=]+$"
-        },
-        "witness_sig": {
-          "anyOf": [
-            {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9+/=]+$"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "body",
-        "executor_sig",
-        "witness_sig"
-      ],
-      "additionalProperties": false
+    "checkpoint_note": {
+      "type": "string",
+      "pattern": "^[^\\n]+\\n[0-9]+\\n[A-Za-z0-9+/=]+\\n(.*\\n)*\\n(— [^ \\n]+ [A-Za-z0-9+/=]+\\n)+$"
     },
     "inclusion_proof": {
       "type": "object",
@@ -1322,8 +1699,9 @@
             "pattern": "^[0-9a-f]{64}$"
           }
         },
-        "sth": {
-          "$ref": "common.json#/$defs/sth_signed"
+        "checkpoint_note": {
+          "type": "string",
+          "pattern": "^[^\\n]+\\n[0-9]+\\n[A-Za-z0-9+/=]+\\n(.*\\n)*\\n(— [^ \\n]+ [A-Za-z0-9+/=]+\\n)+$"
         }
       },
       "required": [
@@ -1332,7 +1710,7 @@
         "tree_size",
         "leaf_hash",
         "audit_path",
-        "sth"
+        "checkpoint_note"
       ],
       "additionalProperties": false
     },
@@ -1340,7 +1718,7 @@
       "type": "object",
       "properties": {
         "v": {
-          "const": 1
+          "const": 2
         },
         "log_id": {
           "enum": [
@@ -1366,10 +1744,17 @@
             "facts",
             "decision",
             "state_transition",
+            "change_event",
             "signature",
             "attestation",
             "egress_block",
             "execution",
+            "rail_submitted",
+            "tool_call",
+            "iam_deny_mirror",
+            "attack_simulated",
+            "witness_refusal",
+            "checkpoint",
             "anchor"
           ]
         },
@@ -1381,7 +1766,12 @@
             "vendor_portal",
             "ingest",
             "witness",
-            "tool"
+            "tools",
+            "issuer",
+            "checkpointer",
+            "rail",
+            "scheduler",
+            "auditor"
           ]
         },
         "subject_id": {
@@ -1396,6 +1786,50 @@
         },
         "data": {
           "type": "object"
+        },
+        "policy_hash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputs_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "facts_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hints_digest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1406,7 +1840,11 @@
         "type",
         "actor",
         "subject_id",
-        "data"
+        "data",
+        "policy_hash",
+        "inputs_digest",
+        "facts_digest",
+        "hints_digest"
       ],
       "additionalProperties": false,
       "allOf": [
@@ -1424,9 +1862,23 @@
                 "required": [
                   "address",
                   "role",
+                  "label",
                   "device",
-                  "label"
-                ]
+                  "device_model",
+                  "firmware_version",
+                  "cert_chain_sha256",
+                  "fw_hash",
+                  "derivation_path",
+                  "enroll_sig"
+                ],
+                "properties": {
+                  "device": {
+                    "enum": [
+                      "GENUINE",
+                      "EMULATOR"
+                    ]
+                  }
+                }
               }
             }
           }
@@ -1446,8 +1898,10 @@
                   "email_id",
                   "sha256",
                   "from_domain",
-                  "received_at"
-                ]
+                  "received_at",
+                  "dkim"
+                ],
+                "properties": {}
               }
             }
           }
@@ -1465,12 +1919,17 @@
               "data": {
                 "required": [
                   "nonce",
+                  "nonce_secret_sha256",
                   "purpose",
                   "role",
                   "subject_id",
+                  "deployment",
+                  "profile",
                   "text_sha256",
+                  "subject_hash",
                   "exp"
-                ]
+                ],
+                "properties": {}
               }
             }
           }
@@ -1489,11 +1948,15 @@
                 "required": [
                   "mandate_id",
                   "mandate_no",
-                  "policy_hash",
                   "signer_address",
+                  "role",
                   "nonce",
+                  "sig_index",
+                  "sig_total",
+                  "status",
                   "fields"
-                ]
+                ],
+                "properties": {}
               }
             }
           }
@@ -1513,7 +1976,8 @@
                   "proposal_id",
                   "invoice",
                   "hints"
-                ]
+                ],
+                "properties": {}
               }
             }
           }
@@ -1531,8 +1995,10 @@
               "data": {
                 "required": [
                   "subject_id",
-                  "facts"
-                ]
+                  "facts",
+                  "snapshots"
+                ],
+                "properties": {}
               }
             }
           }
@@ -1552,9 +2018,9 @@
                   "subject_id",
                   "decision",
                   "rule_ids",
-                  "mandate_id",
-                  "policy_hash"
-                ]
+                  "mandate_id"
+                ],
+                "properties": {}
               }
             }
           }
@@ -1574,8 +2040,63 @@
                   "change_id",
                   "from",
                   "to",
+                  "event",
                   "reason"
-                ]
+                ],
+                "properties": {
+                  "event": {
+                    "enum": [
+                      "CREATE",
+                      "VC_RECEIVED",
+                      "BREAK_GLASS",
+                      "CALLBACK_CONFIRM",
+                      "CALLBACK_DENY",
+                      "CALLBACK_ATTEMPTS_EXCEEDED",
+                      "COOLING_ELAPSED",
+                      "CLERK_SIGNED",
+                      "TREASURY_SIGNED",
+                      "TRIPWIRE_NOT_US",
+                      "VC_REVOKED",
+                      "CLERK_REJECT_SIGNED",
+                      "EXPIRE"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "change_event"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "change_id",
+                  "event",
+                  "detail"
+                ],
+                "properties": {
+                  "event": {
+                    "enum": [
+                      "facts_computed",
+                      "tripwire_sent",
+                      "callback_issued",
+                      "callback_confirmed",
+                      "callback_denied",
+                      "vc_received",
+                      "vc_rejected",
+                      "break_glass",
+                      "cooling_scheduled"
+                    ]
+                  }
+                }
               }
             }
           }
@@ -1600,7 +2121,8 @@
                   "sig",
                   "accepted",
                   "error"
-                ]
+                ],
+                "properties": {}
               }
             }
           }
@@ -1617,13 +2139,14 @@
             "properties": {
               "data": {
                 "required": [
-                  "ico",
-                  "v",
-                  "action",
-                  "status",
+                  "change_id",
+                  "issuer_class",
+                  "iss",
+                  "verified",
                   "commitment",
-                  "attest_leaf_index"
-                ]
+                  "error"
+                ],
+                "properties": {}
               }
             }
           }
@@ -1645,7 +2168,8 @@
                   "rule_ids",
                   "findings",
                   "content_sha256"
-                ]
+                ],
+                "properties": {}
               }
             }
           }
@@ -1669,7 +2193,182 @@
                   "amount_minor",
                   "currency",
                   "authorization"
-                ]
+                ],
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rail_submitted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "tx_id",
+                  "format",
+                  "msg_id",
+                  "xml_c14n_sha256",
+                  "status"
+                ],
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "tool_call"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "session_id",
+                  "step",
+                  "tool",
+                  "args_sha256",
+                  "result",
+                  "rule_ids",
+                  "untrusted_read"
+                ],
+                "properties": {
+                  "result": {
+                    "enum": [
+                      "ok",
+                      "forbidden",
+                      "error"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "iam_deny_mirror"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "principal",
+                  "action",
+                  "resource",
+                  "source",
+                  "decision"
+                ],
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "simulate",
+                      "boto3",
+                      "cloudtrail"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "attack_simulated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "level",
+                  "scenario",
+                  "label"
+                ],
+                "properties": {
+                  "level": {
+                    "enum": [
+                      "H0",
+                      "H1",
+                      "H2",
+                      "H3",
+                      "H4",
+                      "H5",
+                      "H6"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "witness_refusal"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "witness",
+                  "status",
+                  "old_size",
+                  "size"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": [
+                      403,
+                      404,
+                      409,
+                      422
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "checkpoint"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "required": [
+                  "origin",
+                  "size",
+                  "root_hash",
+                  "note_sha256",
+                  "cosigners"
+                ],
+                "properties": {}
               }
             }
           }
@@ -1689,9 +2388,47 @@
                   "log_id",
                   "tree_size",
                   "root_hash",
-                  "s3_key",
-                  "tsa_token_sha256"
+                  "s3_key"
+                ],
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "challenge",
+                  "change_event",
+                  "decision",
+                  "execution",
+                  "facts",
+                  "proposal",
+                  "signature",
+                  "state_transition"
                 ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "policy_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "inputs_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "facts_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "hints_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
               }
             }
           }

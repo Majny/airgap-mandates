@@ -1,0 +1,215 @@
+{
+  "endpoint": "POST /proposals",
+  "status": 201,
+  "request": {
+    "invoice": {
+      "vendor_id": "ven_12345678",
+      "invoice_no": "FV-2026-0499",
+      "invoice_ref": "doc_9d709a05ea3ef8e4",
+      "issue_date": "2026-10-15",
+      "due_date": "2026-10-29",
+      "amount_minor": 1450000,
+      "currency": "CZK",
+      "vs": "20260412",
+      "reason_code": "DUE",
+      "email_id": "eml_a1b2c3d4e5f60718"
+    }
+  },
+  "response": {
+    "proposal": {
+      "proposal_id": "prp_44",
+      "proposal_no": 44,
+      "status": "DENIED",
+      "vendor_id": "ven_12345678",
+      "invoice": {
+        "vendor_id": "ven_12345678",
+        "invoice_no": "FV-2026-0499",
+        "invoice_ref": "doc_9d709a05ea3ef8e4",
+        "issue_date": "2026-10-15",
+        "due_date": "2026-10-29",
+        "amount_minor": 1450000,
+        "currency": "CZK",
+        "vs": "20260412",
+        "reason_code": "DUE",
+        "email_id": "eml_a1b2c3d4e5f60718"
+      },
+      "hints": [],
+      "facts": [
+        {
+          "id": "F-WARNLIST",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Regulator warning lists",
+          "display_line": "WARNLIST HIT",
+          "evidence": {
+            "hit": true,
+            "list": "regulator-warnings",
+            "matched_name": "ACME-CZ TRADING"
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-SANCTION",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "EU sanctions (entities)",
+          "display_line": "SANCTIONS CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Verification of Payee",
+          "display_line": "VOP MTCH",
+          "evidence": {
+            "code": "MTCH"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+        },
+        {
+          "id": "F-PSP",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+          "display_line": "PSP UNKNOWN",
+          "evidence": {
+            "bank_code": "39990",
+            "country": "LT",
+            "found": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        }
+      ],
+      "decision": {
+        "decision": "deny",
+        "rule_ids": [
+          "F-PSP",
+          "F-WARNLIST",
+          "I-BLOCK"
+        ],
+        "facts": [
+          {
+            "id": "F-WARNLIST",
+            "kind": "F",
+            "severity": "BLOCK",
+            "label": "Regulator warning lists",
+            "display_line": "WARNLIST HIT",
+            "evidence": {
+              "hit": true,
+              "list": "regulator-warnings",
+              "matched_name": "ACME-CZ TRADING"
+            },
+            "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+          },
+          {
+            "id": "F-SANCTION",
+            "kind": "F",
+            "severity": "INFO",
+            "label": "EU sanctions (entities)",
+            "display_line": "SANCTIONS CLEAR",
+            "evidence": {
+              "hit": false
+            },
+            "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+          },
+          {
+            "id": "F-VOP",
+            "kind": "F",
+            "severity": "INFO",
+            "label": "Verification of Payee",
+            "display_line": "VOP MTCH",
+            "evidence": {
+              "code": "MTCH"
+            },
+            "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+          },
+          {
+            "id": "F-PSP",
+            "kind": "F",
+            "severity": "WARN",
+            "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+            "display_line": "PSP UNKNOWN",
+            "evidence": {
+              "bank_code": "39990",
+              "country": "LT",
+              "found": false
+            },
+            "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+          }
+        ],
+        "facts_digest": "8dbf11bb4092df22712ce8309fa7df424f34d5a2dd16c8732805512bdb9e2f5f",
+        "mandate_id": "mnd_3",
+        "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
+      },
+      "challenge_nonce": null,
+      "tx_id": null,
+      "created_at": "2026-10-19T12:02:00Z"
+    },
+    "decision": {
+      "decision": "deny",
+      "rule_ids": [
+        "F-PSP",
+        "F-WARNLIST",
+        "I-BLOCK"
+      ],
+      "facts": [
+        {
+          "id": "F-WARNLIST",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Regulator warning lists",
+          "display_line": "WARNLIST HIT",
+          "evidence": {
+            "hit": true,
+            "list": "regulator-warnings",
+            "matched_name": "ACME-CZ TRADING"
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-SANCTION",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "EU sanctions (entities)",
+          "display_line": "SANCTIONS CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Verification of Payee",
+          "display_line": "VOP MTCH",
+          "evidence": {
+            "code": "MTCH"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+        },
+        {
+          "id": "F-PSP",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+          "display_line": "PSP UNKNOWN",
+          "evidence": {
+            "bank_code": "39990",
+            "country": "LT",
+            "found": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        }
+      ],
+      "facts_digest": "8dbf11bb4092df22712ce8309fa7df424f34d5a2dd16c8732805512bdb9e2f5f",
+      "mandate_id": "mnd_3",
+      "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
+    },
+    "tx": null
+  }
+}

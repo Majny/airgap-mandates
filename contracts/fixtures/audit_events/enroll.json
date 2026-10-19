@@ -1,0 +1,25 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 0,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "enroll",
+  "actor": "executor",
+  "subject_id": "signer#0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+  "data": {
+    "address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+    "role": "clerk",
+    "label": "Clerk (Trezor Safe 5)",
+    "device": "GENUINE",
+    "device_model": "T3T1",
+    "firmware_version": "2.12.5",
+    "cert_chain_sha256": "f4f1077459261f090062305571633dd1977ec3ac05d91d749a80baa2e672a87c",
+    "fw_hash": "42161fa71561ae06de2995955cc6bb81d057b123756f41955befde539cbfc85a",
+    "derivation_path": "m/44'/60'/0'/0/0",
+    "enroll_sig": "0x53bcbb91525547bf679e9d4f85ea97148fa49ff2b46ef7af8fd4b4a1ec5af13b53bcbb91525547bf679e9d4f85ea97148fa49ff2b46ef7af8fd4b4a1ec5af13b1b"
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

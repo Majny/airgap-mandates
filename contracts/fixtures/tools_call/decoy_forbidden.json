@@ -1,0 +1,22 @@
+{
+  "endpoint": "POST /tools/{name}",
+  "status": 403,
+  "request": {
+    "session_id": "ses_01",
+    "step": 4,
+    "manifest_sha256": "05b3abf2579a5eb66403cd78be557fd860633a1fe2103c7642030defe32c657f",
+    "args": {
+      "max_total_minor": 1000000000
+    }
+  },
+  "response": {
+    "error": "caller_not_allowed",
+    "message": "tool mandate.write forbidden for Agent",
+    "details": {
+      "rule_ids": [
+        "T-DECOY"
+      ],
+      "seq": 66
+    }
+  }
+}

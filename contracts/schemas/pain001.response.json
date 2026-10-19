@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/pain001.response.json",
+  "title": "pain001.response",
+  "type": "object",
+  "properties": {
+    "tx_id": {
+      "type": "string",
+      "pattern": "^tx_[0-9a-f]{16}$"
+    },
+    "msg_id": {
+      "type": "string"
+    },
+    "xml": {
+      "type": "string",
+      "pattern": "^<\\?xml"
+    },
+    "xml_c14n_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "tx_id",
+    "msg_id",
+    "xml",
+    "xml_c14n_sha256"
+  ],
+  "additionalProperties": false
+}

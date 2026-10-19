@@ -1,5 +1,5 @@
 {
-  "v": 1,
+  "v": 2,
   "log_id": "audit",
   "seq": 35,
   "ts": "2026-10-19T12:02:03.120Z",
@@ -10,26 +10,85 @@
     "subject_id": "prp_38",
     "facts": [
       {
+        "id": "F-WARNLIST",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Regulator warning lists",
+        "display_line": "WARNLIST CLEAR",
+        "evidence": {
+          "hit": false
+        },
+        "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+      },
+      {
+        "id": "F-SANCTION",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "EU sanctions (entities)",
+        "display_line": "SANCTIONS CLEAR",
+        "evidence": {
+          "hit": false
+        },
+        "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+      },
+      {
+        "id": "F-VOP",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Verification of Payee",
+        "display_line": "VOP MTCH",
+        "evidence": {
+          "code": "MTCH"
+        },
+        "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+      },
+      {
+        "id": "F-PSP",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+        "display_line": "PSP INST VOP OK",
+        "evidence": {
+          "bank_code": "0800",
+          "in_sct_inst": true,
+          "in_vop": true,
+          "licensed": true
+        },
+        "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+      },
+      {
         "id": "F-VAT",
         "kind": "F",
         "severity": "INFO",
         "label": "Account published in VAT registry",
-        "display_line": "VAT acct: YES",
+        "display_line": "ADIS ACCT YES",
         "evidence": {
           "account_published": true
-        }
+        },
+        "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
       },
       {
         "id": "F-BANK",
         "kind": "F",
         "severity": "INFO",
         "label": "Bank from IBAN",
-        "display_line": "bank: Ceska sporitelna",
+        "display_line": "BANK DOMESTIC",
         "evidence": {
           "country": "CZ",
           "bank_code": "0800"
-        }
+        },
+        "prov": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
       }
-    ]
-  }
+    ],
+    "snapshots": {
+      "adis": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333",
+      "vop": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0",
+      "mostlyright": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d",
+      "bank_codes": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
+    }
+  },
+  "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+  "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+  "facts_digest": "8b1b3eb53567a2770fe91b58d21f597e66bd0ace93b0f3a961fa1affa0087a09",
+  "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 }

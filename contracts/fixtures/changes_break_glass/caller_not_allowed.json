@@ -1,0 +1,12 @@
+{
+  "endpoint": "POST /changes/{change_id}/break-glass",
+  "status": 403,
+  "request": {
+    "reason": "x",
+    "declared_by": "x"
+  },
+  "response": {
+    "error": "caller_not_allowed",
+    "message": "break-glass is vendor-portal only"
+  }
+}

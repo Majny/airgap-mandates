@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/vc_submit.request.json",
+  "title": "vc_submit.request",
+  "type": "object",
+  "properties": {
+    "vc": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_\\-.~]+$"
+    },
+    "issuer_class": {
+      "enum": [
+        "supplier-erp",
+        "supplier-bank",
+        "registry"
+      ]
+    }
+  },
+  "required": [
+    "vc"
+  ],
+  "additionalProperties": false
+}

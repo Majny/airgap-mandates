@@ -1,0 +1,13 @@
+{
+  "endpoint": "POST /signatures",
+  "status": 403,
+  "request": {
+    "nonce": "7C11A0E2",
+    "role": "treasury",
+    "sig": "0xfdc6980872d3cb1b89bd0c5b2686cc09a532ed2877ec16bec901d4580cbeb86bfdc6980872d3cb1b89bd0c5b2686cc09a532ed2877ec16bec901d4580cbeb86b1b"
+  },
+  "response": {
+    "error": "emulator_not_allowed",
+    "message": "profile prod requires a GENUINE treasury device"
+  }
+}

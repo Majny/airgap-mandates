@@ -1,10 +1,10 @@
 {
-  "v": 1,
+  "v": 2,
   "log_id": "audit",
   "seq": 71,
   "ts": "2026-10-19T12:02:03.120Z",
   "type": "egress_block",
-  "actor": "agent",
+  "actor": "tools",
   "subject_id": null,
   "data": {
     "tool": "send_email",
@@ -21,5 +21,9 @@
       }
     ],
     "content_sha256": "326f98388eaddbc741e00d76d9b27302c2d42c2f5ffda33df901895db03a23c7"
-  }
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
 }

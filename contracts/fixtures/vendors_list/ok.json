@@ -16,10 +16,30 @@
         "contact_email": "accounting@acme.cz",
         "registered_since": "2023-02-01",
         "in_network": true,
+        "issuer_pins": [
+          {
+            "issuer_class": "supplier-erp",
+            "iss": "https://issuer.acme.example/erp",
+            "jwk_thumbprint": "4612e31a635fd003a0c1e403626016b403da86645c2",
+            "pinned_at": "2023-02-01T09:00:00Z"
+          },
+          {
+            "issuer_class": "supplier-bank",
+            "iss": "https://issuer.bank-a.example/vc",
+            "jwk_thumbprint": "b8c30a0c24c42ef21510c6cb02559463971578a8432",
+            "pinned_at": "2023-02-01T09:00:00Z"
+          },
+          {
+            "issuer_class": "registry",
+            "iss": "https://registry-witness.airgap.example",
+            "jwk_thumbprint": "658a63c8a2303bf700283086a79ea8c4e04bca74c3a",
+            "pinned_at": "2023-02-01T09:00:00Z"
+          }
+        ],
         "iban_history": [
           {
             "iban": "CZ6508000000192000145399",
-            "from": "2023-02-01",
+            "from": "2024-03-01",
             "to": null,
             "change_id": null
           }
@@ -36,6 +56,7 @@
         "contact_email": "fakturace@betaservis.cz",
         "registered_since": "2022-06-15",
         "in_network": false,
+        "issuer_pins": [],
         "iban_history": [
           {
             "iban": "CZ6203000000000123456789",

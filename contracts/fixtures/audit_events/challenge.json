@@ -1,0 +1,25 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 45,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "challenge",
+  "actor": "executor",
+  "subject_id": "prp_42",
+  "data": {
+    "nonce": "0C55A1E7",
+    "nonce_secret_sha256": "4951bbc9fb83303b7c8f4343523980365b72b3d81bd4db697f2b045b5edbb542",
+    "purpose": "PAY",
+    "role": "clerk",
+    "subject_id": "prp_42",
+    "deployment": "DEMO",
+    "profile": "safe5-mono-18x7",
+    "text_sha256": "902496cc954dd5c8bb524a00d09947be8d8d7dddb8aa432c899fc5bd295ac4d5",
+    "subject_hash": "1915c82d5296eda7e3bae1c5813ae7880f2b7ef8c143b7de6cce73811bbbfcfd",
+    "exp": "2026-10-19T13:20:00Z"
+  },
+  "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+  "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+  "facts_digest": "0da790fa73baeff7c0833b6d38ab00fd032eea6872603523951357c7960a2972",
+  "hints_digest": "3b2a1ba53c2d3a98b3890c90437062afa70e1cbc5fbc028aa41427aa24718add"
+}

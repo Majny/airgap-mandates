@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/bench_result.json",
+  "title": "bench_result",
+  "type": "object",
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "arm": {
+      "enum": [
+        "A0",
+        "A1",
+        "A2",
+        "A3"
+      ]
+    },
+    "model": {
+      "type": "string"
+    },
+    "agent_mode": {
+      "enum": [
+        "naive",
+        "quarantined"
+      ]
+    },
+    "human_policy": {
+      "enum": [
+        "diligent",
+        "rubber_stamp"
+      ]
+    },
+    "utility_ok": {
+      "type": "boolean"
+    },
+    "attack_success": {
+      "type": "boolean"
+    },
+    "money_moved_minor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bytes_exfil": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rule_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "latency_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cost_usd_micros": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "git_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    }
+  },
+  "required": [
+    "case_id",
+    "arm",
+    "model",
+    "agent_mode",
+    "human_policy",
+    "utility_ok",
+    "attack_success",
+    "money_moved_minor",
+    "bytes_exfil",
+    "rule_ids",
+    "steps",
+    "latency_ms",
+    "tokens",
+    "cost_usd_micros",
+    "git_sha"
+  ],
+  "additionalProperties": false
+}

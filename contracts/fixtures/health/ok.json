@@ -4,8 +4,13 @@
   "request": null,
   "response": {
     "status": "ok",
-    "backend": "memory",
-    "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-    "render_width": 32
+    "backend": "aws",
+    "deployment": "DEMO",
+    "demo_profile": "demo",
+    "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+    "render_profile": "safe5-mono-18x7",
+    "code_sha256": "84af06a5cb31af731aedeb617dc13f9dcacd628f57a3ea8b3036ffd284005bba",
+    "log_origin": "airgap.example/demo/audit",
+    "log_pubkey_id": "2d5baf14"
   }
 }

@@ -1,13 +1,13 @@
 {
-  "v": 1,
+  "v": 2,
   "log_id": "audit",
   "seq": 37,
   "ts": "2026-10-19T12:02:03.120Z",
   "type": "execution",
   "actor": "executor",
-  "subject_id": "tx_38",
+  "subject_id": "tx_e2c911c285449df6",
   "data": {
-    "tx_id": "tx_38",
+    "tx_id": "tx_e2c911c285449df6",
     "proposal_id": "prp_38",
     "vendor_id": "ven_12345678",
     "iban": "CZ6508000000192000145399",
@@ -17,5 +17,9 @@
       "kind": "mandate",
       "mandate_id": "mnd_3"
     }
-  }
+  },
+  "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+  "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+  "facts_digest": "8b1b3eb53567a2770fe91b58d21f597e66bd0ace93b0f3a961fa1affa0087a09",
+  "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 }

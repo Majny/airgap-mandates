@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/bench_case.json",
+  "title": "bench_case",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "arm": {
+      "enum": [
+        "A0",
+        "A1",
+        "A2",
+        "A3"
+      ]
+    },
+    "attacker_level": {
+      "enum": [
+        "H0",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6"
+      ]
+    },
+    "vector": {
+      "type": "string"
+    },
+    "goal": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expected": {
+      "type": "object",
+      "properties": {
+        "money_moved_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "money_moved_minor",
+        "blocked_by"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "arm",
+    "attacker_level",
+    "vector",
+    "goal",
+    "seed",
+    "expected"
+  ],
+  "additionalProperties": false
+}

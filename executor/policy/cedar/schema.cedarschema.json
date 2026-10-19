@@ -1,0 +1,86 @@
+{
+  "": {
+    "entityTypes": {
+      "Mandate": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "status": {"type": "String"},
+            "policy_current": {"type": "Boolean"},
+            "max_per_payment_minor": {"type": "Long"},
+            "max_total_minor": {"type": "Long"},
+            "max_count": {"type": "Long"},
+            "spent_minor": {"type": "Long"},
+            "count": {"type": "Long"},
+            "valid_from": {"type": "Long"},
+            "valid_until": {"type": "Long"},
+            "require_vop": {"type": "Set", "element": {"type": "String"}},
+            "max_anom": {"type": "Long"},
+            "payee_registry_version": {"type": "Long"}
+          }
+        }
+      },
+      "Payee": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "known": {"type": "Boolean"},
+            "active": {"type": "Boolean"},
+            "in_network": {"type": "Boolean"}
+          }
+        }
+      },
+      "Change": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "state": {"type": "String"},
+            "in_network": {"type": "Boolean"},
+            "break_glass": {"type": "Boolean"},
+            "not_before": {"type": "Long"}
+          }
+        }
+      }
+    },
+    "actions": {
+      "pay": {
+        "appliesTo": {
+          "principalTypes": ["Mandate"],
+          "resourceTypes": ["Payee"],
+          "context": {
+            "type": "Record",
+            "attributes": {
+              "amount_minor": {"type": "Long"},
+              "vop": {"type": "String"},
+              "reg_hit": {"type": "Boolean"},
+              "warn_hit": {"type": "Boolean"},
+              "block_hit": {"type": "Boolean"},
+              "warn_count": {"type": "Long"},
+              "anom": {"type": "Long"},
+              "dup": {"type": "Boolean"},
+              "split_sum": {"type": "Long"},
+              "z_hit": {"type": "Boolean"},
+              "now": {"type": "Long"},
+              "attest_count": {"type": "Long"}
+            }
+          }
+        }
+      },
+      "issue_chg_challenge": {
+        "appliesTo": {
+          "principalTypes": ["Change"],
+          "resourceTypes": ["Payee"],
+          "context": {
+            "type": "Record",
+            "attributes": {
+              "attest_count": {"type": "Long"},
+              "callback_confirmed": {"type": "Boolean"},
+              "block_hit": {"type": "Boolean"},
+              "now": {"type": "Long"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,40 +4,45 @@
   "request": null,
   "response": {
     "log_id": "audit",
+    "redacted": false,
     "leaves": [
       {
         "seq": 34,
         "event": {
-          "v": 1,
+          "v": 2,
           "log_id": "audit",
           "seq": 34,
           "ts": "2026-10-19T12:02:03.120Z",
           "type": "proposal",
-          "actor": "agent",
+          "actor": "tools",
           "subject_id": "prp_38",
           "data": {
             "proposal_id": "prp_38",
             "invoice": {
+              "vendor_id": "ven_12345678",
               "invoice_no": "FV-2026-0412",
+              "invoice_ref": "doc_43592996ab5306ac",
               "issue_date": "2026-10-15",
               "due_date": "2026-10-29",
-              "vendor_ico": "12345678",
-              "vendor_name": "ACME s.r.o.",
-              "iban": "CZ6508000000192000145399",
               "amount_minor": 1450000,
               "currency": "CZK",
               "vs": "20260412",
+              "reason_code": "DUE",
               "email_id": "eml_a1b2c3d4e5f60718"
             },
             "hints": []
-          }
+          },
+          "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+          "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+          "facts_digest": "8b1b3eb53567a2770fe91b58d21f597e66bd0ace93b0f3a961fa1affa0087a09",
+          "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
         },
         "leaf_hash": "e2af90ddb2be7b4c76739ace9b23a346df53a4c853e899754c564be1262095b0"
       },
       {
         "seq": 35,
         "event": {
-          "v": 1,
+          "v": 2,
           "log_id": "audit",
           "seq": 35,
           "ts": "2026-10-19T12:02:03.120Z",
@@ -48,35 +53,94 @@
             "subject_id": "prp_38",
             "facts": [
               {
+                "id": "F-WARNLIST",
+                "kind": "F",
+                "severity": "INFO",
+                "label": "Regulator warning lists",
+                "display_line": "WARNLIST CLEAR",
+                "evidence": {
+                  "hit": false
+                },
+                "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+              },
+              {
+                "id": "F-SANCTION",
+                "kind": "F",
+                "severity": "INFO",
+                "label": "EU sanctions (entities)",
+                "display_line": "SANCTIONS CLEAR",
+                "evidence": {
+                  "hit": false
+                },
+                "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+              },
+              {
+                "id": "F-VOP",
+                "kind": "F",
+                "severity": "INFO",
+                "label": "Verification of Payee",
+                "display_line": "VOP MTCH",
+                "evidence": {
+                  "code": "MTCH"
+                },
+                "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+              },
+              {
+                "id": "F-PSP",
+                "kind": "F",
+                "severity": "INFO",
+                "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+                "display_line": "PSP INST VOP OK",
+                "evidence": {
+                  "bank_code": "0800",
+                  "in_sct_inst": true,
+                  "in_vop": true,
+                  "licensed": true
+                },
+                "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+              },
+              {
                 "id": "F-VAT",
                 "kind": "F",
                 "severity": "INFO",
                 "label": "Account published in VAT registry",
-                "display_line": "VAT acct: YES",
+                "display_line": "ADIS ACCT YES",
                 "evidence": {
                   "account_published": true
-                }
+                },
+                "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
               },
               {
                 "id": "F-BANK",
                 "kind": "F",
                 "severity": "INFO",
                 "label": "Bank from IBAN",
-                "display_line": "bank: Ceska sporitelna",
+                "display_line": "BANK DOMESTIC",
                 "evidence": {
                   "country": "CZ",
                   "bank_code": "0800"
-                }
+                },
+                "prov": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
               }
-            ]
-          }
+            ],
+            "snapshots": {
+              "adis": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333",
+              "vop": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0",
+              "mostlyright": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d",
+              "bank_codes": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
+            }
+          },
+          "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+          "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+          "facts_digest": "8b1b3eb53567a2770fe91b58d21f597e66bd0ace93b0f3a961fa1affa0087a09",
+          "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
         },
         "leaf_hash": "3734873986e5c8688f6196ecb358bade49a0b32b55b6aa47d73e7d368e65922c"
       },
       {
         "seq": 36,
         "event": {
-          "v": 1,
+          "v": 2,
           "log_id": "audit",
           "seq": 36,
           "ts": "2026-10-19T12:02:03.120Z",
@@ -87,24 +151,27 @@
             "subject_id": "prp_38",
             "decision": "allow",
             "rule_ids": [],
-            "mandate_id": "mnd_3",
-            "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812"
-          }
+            "mandate_id": "mnd_3"
+          },
+          "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+          "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+          "facts_digest": "8b1b3eb53567a2770fe91b58d21f597e66bd0ace93b0f3a961fa1affa0087a09",
+          "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
         },
         "leaf_hash": "455a9bf5045b2880eccace49e9e539f11886829f23f1dd8a284eab95eaf7675e"
       },
       {
         "seq": 37,
         "event": {
-          "v": 1,
+          "v": 2,
           "log_id": "audit",
           "seq": 37,
           "ts": "2026-10-19T12:02:03.120Z",
           "type": "execution",
           "actor": "executor",
-          "subject_id": "tx_38",
+          "subject_id": "tx_e2c911c285449df6",
           "data": {
-            "tx_id": "tx_38",
+            "tx_id": "tx_e2c911c285449df6",
             "proposal_id": "prp_38",
             "vendor_id": "ven_12345678",
             "iban": "CZ6508000000192000145399",
@@ -114,46 +181,51 @@
               "kind": "mandate",
               "mandate_id": "mnd_3"
             }
-          }
+          },
+          "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+          "inputs_digest": "f7a1fd669ab857d6d2643d2877846e46bc7d0dc8eb22d2e101fe96563b90635a",
+          "facts_digest": "8b1b3eb53567a2770fe91b58d21f597e66bd0ace93b0f3a961fa1affa0087a09",
+          "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
         },
         "leaf_hash": "bfaff941e24869e00e9441d6616d0bc845e4396e9d1f5e6b58d9488548b1a318"
       }
     ],
-    "sths": [
-      {
-        "body": {
-          "log_id": "audit",
-          "tree_size": 40,
-          "root_hash": "446377f84a72d34f0c9f58cb73668e91510e9c1dd107b030640367ac955b6b98",
-          "timestamp": 1792411200000
-        },
-        "executor_sig": "MEUCIQDexampleexecutorsig0000000000000000000000000AiAexample000000000000000000000000==",
-        "witness_sig": "MEUCIQDexamplewitnesssig00000000000000000000000000AiAexample000000000000000000000000=="
-      }
+    "checkpoints": [
+      "airgap.example/demo/audit\n40\nRGN3+Epy008Mn1jLc2aOkVEOnB3RB7AwZANnrJVba5g=\npolicy sha256:1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812\ncode sha256:84af06a5cb31af731aedeb617dc13f9dcacd628f57a3ea8b3036ffd284005bba pcr0 -\n\n— airgap.example/demo/audit LVuvFHTnLvUmfBVRqPWss6BE+Oqvx5N/hU8eoWN/ASpOThtAwZvUnxr2Q0FvX0lOQock8OEq5tfetuKtZDIFRUg6TgY=\n— airgap.example/demo/w1 cCe8kgAAAABq1gZAVf7zPQzrRTcszDRv4z0cFXkdM/rfVcGiF8pmr2mMLl9fDshVDDNai0n8/AZZxK87Dz8yP4e7DL3Z1SQikj5BCg==\n"
     ],
-    "anchors": [
-      {
-        "s3_key": "audit-anchor/audit/000000000040.json",
-        "sth": {
-          "body": {
-            "log_id": "audit",
-            "tree_size": 40,
-            "root_hash": "446377f84a72d34f0c9f58cb73668e91510e9c1dd107b030640367ac955b6b98",
-            "timestamp": 1792411200000
-          },
-          "executor_sig": "MEUCIQDexampleexecutorsig0000000000000000000000000AiAexample000000000000000000000000==",
-          "witness_sig": "MEUCIQDexamplewitnesssig00000000000000000000000000AiAexample000000000000000000000000=="
-        },
-        "tsa_token_b64": "MIIC"
-      }
-    ],
-    "public_keys": {
-      "executor": "-----BEGIN PUBLIC KEY-----\\n...",
-      "witness": "-----BEGIN PUBLIC KEY-----\\n..."
+    "pubkeys": {
+      "log": "airgap.example/demo/audit+2d5baf14+AQQzKJb+VXe/PPMhqBpOn8y0GLsgCjWJx6okyDc+RM94",
+      "w1": "airgap.example/demo/w1+974fcff8+Aa9SczXGetw4uo3y3vLMdyi878u1dn8lofnocYvdxJ04",
+      "w2": null
     },
-    "policy": {
-      "policy_v": 1,
-      "rules": []
-    }
+    "approvers": [
+      {
+        "address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+        "role": "clerk",
+        "device": "GENUINE",
+        "enroll_seq": 0
+      },
+      {
+        "address": "0x66fa9f9d3186b9c13a66b004fc8bb5f3359c4deb",
+        "role": "treasury",
+        "device": "EMULATOR",
+        "enroll_seq": 1
+      }
+    ],
+    "policies": {
+      "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812": {
+        "cedar_policies_text": "@id(\"P-BASE\") permit (...);",
+        "cedar_schema": {},
+        "translit_table": {},
+        "fact_severity_table": {},
+        "params": {},
+        "policy_v": 2
+      }
+    },
+    "snapshots": {
+      "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d": "s3://airgap-log/snapshots/mostlyright.sqlite",
+      "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333": "s3://airgap-log/snapshots/adis.json"
+    },
+    "render_profile": "safe5-mono-18x7"
   }
 }

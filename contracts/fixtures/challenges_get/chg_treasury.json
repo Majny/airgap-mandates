@@ -1,0 +1,23 @@
+{
+  "endpoint": "GET /challenges/{nonce}",
+  "status": 200,
+  "request": null,
+  "response": {
+    "nonce": "7C11A0E2",
+    "purpose": "CHG",
+    "role": "treasury",
+    "subject_id": "chg_8",
+    "deployment": "DEMO",
+    "profile": "safe5-mono-18x7",
+    "exp": "2026-10-19T12:11:00Z",
+    "text": "AG1/DEMO CHG 8\nACME S.R.O.\nICO 12345678\nOLD ..5399 2024-03\nNEW CZ86 0100 0000\n    0000 9988 7766\nBANK 0100 CZ\n0 BLOCK 1 WARN\nVOP CMTC\n+7 MORE 0 BLOCK\nCOOLOFF DONE\nROLE TREASURY 2/2\nN 7C11A0E2\nH 5f7b4b03e6d39aa5",
+    "text_sha256": "83b9df4f4a75a44e4a4ecd2c5e36d3a5791e8a755180b2086799f0cee81586eb",
+    "subject_hash": "5f7b4b03e6d39aa597dd314b8d8722e5287163785698a1102d57e494c54aec30",
+    "width": 18,
+    "lines_per_page": 7,
+    "pages": 2,
+    "line_count": 14,
+    "used": false,
+    "created_at": "2026-10-19T12:00:00Z"
+  }
+}

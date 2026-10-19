@@ -1,0 +1,15 @@
+{
+  "schema": "attest_result",
+  "instance": {
+    "ok": true,
+    "issuer_class": "supplier-bank",
+    "iss": "https://issuer.bank-a.example/vc",
+    "error": null,
+    "disclosed": {
+      "legal_name": "ACME s.r.o.",
+      "iban": "CZ8601000000000099887766",
+      "ico": "12345678"
+    },
+    "vc_sha256": "247ade34a032f2a71b60b04978b50f96136649154996daa6d4aeb606dd3af984"
+  }
+}

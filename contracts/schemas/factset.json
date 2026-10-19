@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/factset.json",
+  "title": "factset",
+  "$ref": "common.json#/$defs/factset"
+}

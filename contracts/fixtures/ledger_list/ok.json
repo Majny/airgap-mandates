@@ -5,7 +5,7 @@
   "response": {
     "txs": [
       {
-        "tx_id": "tx_38",
+        "tx_id": "tx_e2c911c285449df6",
         "proposal_id": "prp_38",
         "vendor_id": "ven_12345678",
         "iban": "CZ6508000000192000145399",
@@ -16,8 +16,32 @@
           "kind": "mandate",
           "mandate_id": "mnd_3"
         },
-        "leaf_index": 37,
-        "executed_at": "2026-10-19T12:02:03Z"
+        "seq": 37,
+        "executed_at": "2026-10-19T12:02:03Z",
+        "rail": {
+          "status": "ACTC",
+          "xml_c14n_sha256": "03419efa505d59401be0f2b6db60cd0e4ce222907597b30a7f35bb5db7fecd24"
+        }
+      },
+      {
+        "tx_id": "tx_2d204289e1646594",
+        "proposal_id": "prp_42",
+        "vendor_id": "ven_87654321",
+        "iban": "CZ6203000000000123456789",
+        "amount_minor": 1250050,
+        "currency": "CZK",
+        "vs": "2026101901",
+        "authorization": {
+          "kind": "stepup",
+          "nonce": "0C55A1E7",
+          "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b"
+        },
+        "seq": 48,
+        "executed_at": "2026-10-19T13:16:10Z",
+        "rail": {
+          "status": "PENDING",
+          "xml_c14n_sha256": null
+        }
       }
     ]
   }

@@ -1,0 +1,25 @@
+{
+  "": {
+    "entityTypes": {
+      "Agent": {"shape": {"type": "Record", "attributes": {"mode": {"type": "String"}}}},
+      "Tool": {"shape": {"type": "Record", "attributes": {"effect": {"type": "String"}}}}
+    },
+    "actions": {
+      "call": {
+        "appliesTo": {
+          "principalTypes": ["Agent"],
+          "resourceTypes": ["Tool"],
+          "context": {
+            "type": "Record",
+            "attributes": {
+              "to_allowlisted": {"type": "Boolean"},
+              "vars_match_iban": {"type": "Boolean"},
+              "lookup_count": {"type": "Long"},
+              "untrusted_read_recent": {"type": "Boolean"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

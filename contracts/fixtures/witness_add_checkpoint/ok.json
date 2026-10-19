@@ -1,0 +1,6 @@
+{
+  "endpoint": "POST /witness/add-checkpoint",
+  "status": 200,
+  "request": "old 36\n0PYxyh3bqNs7z8ueBXzcmNA3nxvuAOdaVFFHon2t2YI=\nnAq+UcbmZV2B3i0ETU+xlJMfBYwEJsZ8coXY9WV+1ko=\n\nairgap.example/demo/audit\n40\nRGN3+Epy008Mn1jLc2aOkVEOnB3RB7AwZANnrJVba5g=\npolicy sha256:1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812\ncode sha256:84af06a5cb31af731aedeb617dc13f9dcacd628f57a3ea8b3036ffd284005bba pcr0 -\n\n— airgap.example/demo/audit LVuvFHTnLvUmfBVRqPWss6BE+Oqvx5N/hU8eoWN/ASpOThtAwZvUnxr2Q0FvX0lOQock8OEq5tfetuKtZDIFRUg6TgY=\n",
+  "response": "— airgap.example/demo/w1 cCe8kgAAAABq1gZAVf7zPQzrRTcszDRv4z0cFXkdM/rfVcGiF8pmr2mMLl9fDshVDDNai0n8/AZZxK87Dz8yP4e7DL3Z1SQikj5BCg==\n"
+}

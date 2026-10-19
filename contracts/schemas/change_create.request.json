@@ -4,9 +4,9 @@
   "title": "change_create.request",
   "type": "object",
   "properties": {
-    "vendor_ico": {
+    "vendor_id": {
       "type": "string",
-      "pattern": "^[0-9]{8}$"
+      "pattern": "^ven_[0-9]{8}$"
     },
     "new_iban": {
       "type": "string",
@@ -14,6 +14,12 @@
     },
     "email_id": {
       "type": "string"
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "hints": {
       "type": "array",
@@ -23,7 +29,7 @@
     }
   },
   "required": [
-    "vendor_ico",
+    "vendor_id",
     "new_iban"
   ],
   "additionalProperties": false

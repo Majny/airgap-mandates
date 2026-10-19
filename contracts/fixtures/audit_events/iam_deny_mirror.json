@@ -1,0 +1,20 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 72,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "iam_deny_mirror",
+  "actor": "auditor",
+  "subject_id": null,
+  "data": {
+    "principal": "arn:aws:iam::000000000000:role/airgap-agent",
+    "action": "dynamodb:PutItem",
+    "resource": "arn:aws:dynamodb:eu-central-1:000000000000:table/airgap-ledger",
+    "source": "simulate",
+    "decision": "explicitDeny"
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

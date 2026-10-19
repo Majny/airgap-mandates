@@ -9,7 +9,6 @@
     },
     "rule_ids": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "enum": [
           "E-ALLOWLIST",
@@ -19,9 +18,13 @@
           "E-DLP-CARD",
           "E-DLP-COUNT",
           "E-ENCODED",
-          "E-URLDATA"
+          "E-URLDATA",
+          "E-GUARDRAILS",
+          "E-SIZE",
+          "E-RATE"
         ]
-      }
+      },
+      "minItems": 1
     },
     "findings": {
       "type": "array",
@@ -37,7 +40,10 @@
               "E-DLP-CARD",
               "E-DLP-COUNT",
               "E-ENCODED",
-              "E-URLDATA"
+              "E-URLDATA",
+              "E-GUARDRAILS",
+              "E-SIZE",
+              "E-RATE"
             ]
           },
           "detail": {

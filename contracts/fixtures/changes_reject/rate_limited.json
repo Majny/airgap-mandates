@@ -1,0 +1,14 @@
+{
+  "endpoint": "POST /changes/{change_id}/reject",
+  "status": 429,
+  "request": {
+    "reason": "x"
+  },
+  "response": {
+    "error": "rate_limited",
+    "message": "5 reject requests per change per 10 min",
+    "details": {
+      "retry_after_seconds": 420
+    }
+  }
+}

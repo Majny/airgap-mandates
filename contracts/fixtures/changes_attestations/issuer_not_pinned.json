@@ -1,0 +1,11 @@
+{
+  "endpoint": "POST /changes/{change_id}/attestations",
+  "status": 403,
+  "request": {
+    "vc": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCJ9.eyJ2Y3QiOiJ1cm46YWlyZ2FwOnBheWVlLWJpbmRpbmc6djEifQ.c2ln~WyJzYWx0IiwiaWJhbiIsIkNaODYwMTAwMDAwMDAwMDA5OTg4Nzc2NiJd~eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9.e30.a2I"
+  },
+  "response": {
+    "error": "issuer_not_pinned",
+    "message": "issuer key not in the pinned trust list for ven_12345678"
+  }
+}

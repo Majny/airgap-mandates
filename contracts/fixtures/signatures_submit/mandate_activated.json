@@ -2,18 +2,18 @@
   "endpoint": "POST /signatures",
   "status": 200,
   "request": {
-    "nonce": "91BC02",
-    "role": "clerk",
-    "sig": "0x153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde1b",
-    "displayed_text": "AIRGAP MANDATE m:3 n:91BC02\nmax/payment 80000 CZK\nmax/total 250000 CZK\nmax 20 payments\nexisting payees only\nvalid until 2026-10-20 18:00\npolicy 1f3a9c0e"
+    "nonce": "91BC02E2",
+    "role": "treasury",
+    "sig": "0x2855e57b8c0990e517b583e04416fe34643ede92fc3ac7465483f566c6c9e49a2855e57b8c0990e517b583e04416fe34643ede92fc3ac7465483f566c6c9e49a1b"
   },
   "response": {
-    "nonce": "91BC02",
+    "nonce": "91BC02E2",
     "purpose": "MANDATE",
     "subject_id": "mnd_3",
-    "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+    "signer_address": "0x66fa9f9d3186b9c13a66b004fc8bb5f3359c4deb",
     "effect": {
-      "type": "mandate_activated"
+      "type": "mandate_activated",
+      "state": "ACTIVE"
     },
     "mandate": {
       "mandate_id": "mnd_3",
@@ -23,15 +23,36 @@
       "max_total_minor": 25000000,
       "max_count": 20,
       "payee_scope": "existing_only",
+      "valid_from": "2026-10-19T10:00:00Z",
       "valid_until": "2026-10-20T16:00:00Z",
       "currency": "CZK",
-      "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-      "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+      "require_vop": [
+        "MTCH"
+      ],
+      "max_anom": 40,
+      "payee_registry_version": 31,
+      "payee_registry_hash": "54294c749c0715b2bf15e4e85413584e0b2fd8c2c3bd1f6c5541994fe7595f19",
+      "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+      "sig_required": 2,
+      "signers": [
+        {
+          "role": "clerk",
+          "address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+          "nonce": "91BC02E1",
+          "signed_at": "2026-10-19T12:01:00Z"
+        },
+        {
+          "role": "treasury",
+          "address": "0x66fa9f9d3186b9c13a66b004fc8bb5f3359c4deb",
+          "nonce": "91BC02E2",
+          "signed_at": "2026-10-19T12:01:40Z"
+        }
+      ],
       "spent_minor": 0,
       "count": 0,
-      "challenge_nonce": "91BC02",
+      "challenge_nonce": "91BC02E2",
       "created_at": "2026-10-19T12:00:00Z",
-      "activated_at": "2026-10-19T12:01:10Z"
+      "activated_at": "2026-10-19T12:01:40Z"
     }
   }
 }

@@ -1,0 +1,23 @@
+{
+  "endpoint": "GET /challenges/{nonce}",
+  "status": 200,
+  "request": null,
+  "response": {
+    "nonce": "1A2B3C4D",
+    "purpose": "CHG_REJECT",
+    "role": "clerk",
+    "subject_id": "chg_8",
+    "deployment": "DEMO",
+    "profile": "safe5-mono-18x7",
+    "exp": "2026-10-19T12:12:00Z",
+    "text": "AG1/DEMO REJECT 8\nACME S.R.O.\nICO 12345678\nNEW ..7766\nROLE CLERK\nN 1A2B3C4D\nH 4111fcb2fcfb91a5",
+    "text_sha256": "b7a045ddec2075238745b4e5acbd3d9dd54256b84a1bedfa7b9fb68e31475a1f",
+    "subject_hash": "4111fcb2fcfb91a58fdc48c963e5d7f948d2bf6adbcf47d9b2c85a4df197f19d",
+    "width": 18,
+    "lines_per_page": 7,
+    "pages": 1,
+    "line_count": 7,
+    "used": false,
+    "created_at": "2026-10-19T12:00:00Z"
+  }
+}

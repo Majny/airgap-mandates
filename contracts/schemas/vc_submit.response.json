@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/vc_submit.response.json",
+  "title": "vc_submit.response",
+  "type": "object",
+  "properties": {
+    "change": {
+      "$ref": "common.json#/$defs/change"
+    },
+    "attest": {
+      "$ref": "common.json#/$defs/attest_result"
+    }
+  },
+  "required": [
+    "change",
+    "attest"
+  ],
+  "additionalProperties": false
+}

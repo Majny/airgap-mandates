@@ -10,14 +10,35 @@
     "max_total_minor": 25000000,
     "max_count": 20,
     "payee_scope": "existing_only",
+    "valid_from": "2026-10-19T10:00:00Z",
     "valid_until": "2026-10-20T16:00:00Z",
     "currency": "CZK",
-    "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-    "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+    "require_vop": [
+      "MTCH"
+    ],
+    "max_anom": 40,
+    "payee_registry_version": 31,
+    "payee_registry_hash": "54294c749c0715b2bf15e4e85413584e0b2fd8c2c3bd1f6c5541994fe7595f19",
+    "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+    "sig_required": 2,
+    "signers": [
+      {
+        "role": "clerk",
+        "address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+        "nonce": "91BC02E1",
+        "signed_at": "2026-10-19T12:01:00Z"
+      },
+      {
+        "role": "treasury",
+        "address": "0x66fa9f9d3186b9c13a66b004fc8bb5f3359c4deb",
+        "nonce": "91BC02E2",
+        "signed_at": "2026-10-19T12:01:40Z"
+      }
+    ],
     "spent_minor": 4200000,
     "count": 3,
-    "challenge_nonce": "91BC02",
+    "challenge_nonce": "91BC02E2",
     "created_at": "2026-10-19T12:00:00Z",
-    "activated_at": "2026-10-19T12:01:10Z"
+    "activated_at": "2026-10-19T12:01:40Z"
   }
 }

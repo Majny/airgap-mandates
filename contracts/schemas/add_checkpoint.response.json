@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/add_checkpoint.response.json",
+  "title": "add_checkpoint.response",
+  "type": "string",
+  "pattern": "^(— [^ \\n]+ [A-Za-z0-9+/=]+\\n)+$"
+}

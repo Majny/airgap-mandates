@@ -2,126 +2,181 @@
   "POST /mandates": {
     "request": "mandate_create.request",
     "response": "mandate_create.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /mandates/active": {
     "request": null,
     "response": "mandate",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /mandates/{mandate_id}": {
     "request": null,
     "response": "mandate",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /proposals": {
     "request": "proposal_create.request",
     "response": "proposal_create.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /proposals": {
     "request": null,
     "response": "proposal_list.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /proposals/{proposal_id}": {
     "request": null,
     "response": "proposal",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /changes": {
     "request": "change_create.request",
     "response": "change_create.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /changes": {
     "request": null,
     "response": "change_list.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /changes/{change_id}": {
     "request": null,
     "response": "change",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /changes/{change_id}/reject": {
     "request": "change_reject.request",
-    "response": "change",
-    "error": "error"
+    "response": "change_reject.response",
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /challenges/{nonce}": {
     "request": null,
     "response": "challenge",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /signatures": {
     "request": "signature_submit.request",
     "response": "signature_submit.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /callbacks/{change_id}": {
     "request": "callback_submit.request",
     "response": "change",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
-  "GET /portal/notifications": {
-    "request": null,
-    "response": "notifications.response",
-    "error": "error"
+  "POST /changes/{change_id}/attestations": {
+    "request": "vc_submit.request",
+    "response": "vc_submit.response",
+    "error": "error",
+    "content_type": "application/json"
+  },
+  "POST /changes/{change_id}/break-glass": {
+    "request": "break_glass.request",
+    "response": "change",
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /attestations": {
     "request": "attestation_create.request",
     "response": "attestation_create.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /attestations/{ico}": {
     "request": null,
     "response": "attestation_get.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /egress": {
     "request": "egress.request",
     "response": "egress.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
+  },
+  "POST /tools/{name}": {
+    "request": "tool_call.request",
+    "response": "tool_call.response",
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /audit/export": {
     "request": null,
     "response": "audit_export.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /receipts/{tx_id}": {
     "request": null,
     "response": "receipt",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
+  },
+  "GET /checkpoint": {
+    "request": null,
+    "response": "checkpoint_note",
+    "error": "error",
+    "content_type": "text/plain"
+  },
+  "POST /witness/add-checkpoint": {
+    "request": "add_checkpoint.request",
+    "response": "add_checkpoint.response",
+    "error": "witness_error",
+    "content_type": "text/plain"
+  },
+  "GET /export/pain001/{tx_id}": {
+    "request": null,
+    "response": "pain001.response",
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /vendors": {
     "request": null,
     "response": "vendor_list.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /vendors/{vendor_id}": {
     "request": null,
     "response": "vendor",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /ledger": {
     "request": null,
     "response": "ledger_list.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "POST /ingest": {
     "request": "ingest.request",
     "response": "ingest.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /inbox": {
     "request": null,
     "response": "inbox_list.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   },
   "GET /health": {
     "request": null,
     "response": "health.response",
-    "error": "error"
+    "error": "error",
+    "content_type": "application/json"
   }
 }

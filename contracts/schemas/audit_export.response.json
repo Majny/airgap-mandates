@@ -10,6 +10,9 @@
         "attest"
       ]
     },
+    "redacted": {
+      "type": "boolean"
+    },
     "leaves": {
       "type": "array",
       "items": {
@@ -35,70 +38,137 @@
         "additionalProperties": false
       }
     },
-    "sths": {
+    "checkpoints": {
       "type": "array",
       "items": {
-        "$ref": "common.json#/$defs/sth_signed"
+        "type": "string",
+        "pattern": "^[^\\n]+\\n[0-9]+\\n[A-Za-z0-9+/=]+\\n(.*\\n)*\\n(— [^ \\n]+ [A-Za-z0-9+/=]+\\n)+$"
       }
     },
-    "anchors": {
+    "pubkeys": {
+      "type": "object",
+      "properties": {
+        "log": {
+          "type": "string"
+        },
+        "w1": {
+          "type": "string"
+        },
+        "w2": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "log",
+        "w1",
+        "w2"
+      ],
+      "additionalProperties": false
+    },
+    "approvers": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "s3_key": {
-            "type": "string"
+          "address": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]{40}$"
           },
-          "sth": {
-            "$ref": "common.json#/$defs/sth_signed"
-          },
-          "tsa_token_b64": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9+/=]+$"
-              },
-              {
-                "type": "null"
-              }
+          "role": {
+            "enum": [
+              "clerk",
+              "treasury"
             ]
+          },
+          "device": {
+            "enum": [
+              "GENUINE",
+              "EMULATOR"
+            ]
+          },
+          "enroll_seq": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
-          "s3_key",
-          "sth",
-          "tsa_token_b64"
+          "address",
+          "role",
+          "device",
+          "enroll_seq"
         ],
         "additionalProperties": false
       }
     },
-    "public_keys": {
+    "policies": {
       "type": "object",
-      "properties": {
-        "executor": {
-          "type": "string"
-        },
-        "witness": {
-          "type": "string"
-        }
+      "propertyNames": {
+        "pattern": "^[0-9a-f]{64}$"
       },
-      "required": [
-        "executor",
-        "witness"
-      ],
-      "additionalProperties": false
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "cedar_policies_text": {
+            "type": "string"
+          },
+          "cedar_schema": {
+            "type": "object"
+          },
+          "translit_table": {
+            "type": "object"
+          },
+          "fact_severity_table": {
+            "type": "object"
+          },
+          "params": {
+            "type": "object"
+          },
+          "policy_v": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "cedar_policies_text",
+          "cedar_schema",
+          "translit_table",
+          "fact_severity_table",
+          "params",
+          "policy_v"
+        ],
+        "additionalProperties": false
+      }
     },
-    "policy": {
-      "type": "object"
+    "snapshots": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "render_profile": {
+      "const": "safe5-mono-18x7"
     }
   },
   "required": [
     "log_id",
+    "redacted",
     "leaves",
-    "sths",
-    "anchors",
-    "public_keys",
-    "policy"
+    "checkpoints",
+    "pubkeys",
+    "approvers",
+    "policies",
+    "snapshots",
+    "render_profile"
   ],
   "additionalProperties": false
 }

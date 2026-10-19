@@ -1,19 +1,23 @@
 {
-  "v": 1,
+  "v": 2,
   "log_id": "audit",
   "seq": 52,
   "ts": "2026-10-19T12:02:03.120Z",
   "type": "signature",
   "actor": "host",
-  "subject_id": "chg_7",
+  "subject_id": "chg_8",
   "data": {
-    "nonce": "4F2A9C",
+    "nonce": "7C11A0E0",
     "purpose": "CHG",
     "role": "clerk",
     "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
-    "text_sha256": "49fcbf7ed00af62347540e4a5c8c2822e2ad1d701554b9db2b244e929844b067",
-    "sig": "0x6b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e36b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e31b",
+    "text_sha256": "9f7d74177c591c6c160d71015667c0165c7c7121333f9ad89346f2650d6de84c",
+    "sig": "0x8579a2e05d754cd5b95a2b7a390ae1463cb0e3fc2cad54c184b2a08fc10e3dc18579a2e05d754cd5b95a2b7a390ae1463cb0e3fc2cad54c184b2a08fc10e3dc11b",
     "accepted": false,
-    "error": "vendor_attestation_missing"
-  }
+    "error": "attestation_insufficient"
+  },
+  "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+  "inputs_digest": "d0b9c307dd48c939c131b35918544d8eca33a7f15fbd6a6da0ffe202bb807418",
+  "facts_digest": "97c7f2ad1cbe116d5d49977c8a8f2cbebc7473025b34296e5cce57abae97255c",
+  "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 }

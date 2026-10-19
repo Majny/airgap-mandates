@@ -1,15 +1,20 @@
 {
-  "v": 1,
+  "v": 2,
   "log_id": "audit",
   "seq": 60,
   "ts": "2026-10-19T12:02:03.120Z",
   "type": "state_transition",
-  "actor": "executor",
+  "actor": "scheduler",
   "subject_id": "chg_8",
   "data": {
     "change_id": "chg_8",
     "from": "COOLING",
     "to": "SIG_CLERK",
-    "reason": "cooling elapsed"
-  }
+    "event": "COOLING_ELAPSED",
+    "reason": "now >= not_before"
+  },
+  "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
+  "inputs_digest": "d0b9c307dd48c939c131b35918544d8eca33a7f15fbd6a6da0ffe202bb807418",
+  "facts_digest": "97c7f2ad1cbe116d5d49977c8a8f2cbebc7473025b34296e5cce57abae97255c",
+  "hints_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 }

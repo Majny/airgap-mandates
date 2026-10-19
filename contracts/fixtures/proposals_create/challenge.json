@@ -3,42 +3,42 @@
   "status": 201,
   "request": {
     "invoice": {
-      "invoice_no": "2026104",
+      "vendor_id": "ven_87654321",
+      "invoice_no": "2026101901",
+      "invoice_ref": "doc_f44e64e75f3948e9",
       "issue_date": "2026-10-16",
-      "vendor_ico": "87654321",
-      "vendor_name": "Beta Servis a.s.",
-      "iban": "CZ6203000000000123456789",
-      "amount_minor": 12500000,
+      "amount_minor": 1250050,
       "currency": "CZK",
-      "vs": "2026104"
+      "vs": "2026101901",
+      "reason_code": "DUE"
     },
     "hints": [
       {
         "source": "agent",
-        "text": "service contract Q4"
+        "text": "service contract Q4, CFO approved"
       }
     ]
   },
   "response": {
     "proposal": {
-      "proposal_id": "prp_41",
-      "proposal_no": 41,
+      "proposal_id": "prp_42",
+      "proposal_no": 42,
       "status": "PENDING_SIG",
       "vendor_id": "ven_87654321",
       "invoice": {
-        "invoice_no": "2026104",
+        "vendor_id": "ven_87654321",
+        "invoice_no": "2026101901",
+        "invoice_ref": "doc_f44e64e75f3948e9",
         "issue_date": "2026-10-16",
-        "vendor_ico": "87654321",
-        "vendor_name": "Beta Servis a.s.",
-        "iban": "CZ6203000000000123456789",
-        "amount_minor": 12500000,
+        "amount_minor": 1250050,
         "currency": "CZK",
-        "vs": "2026104"
+        "vs": "2026101901",
+        "reason_code": "DUE"
       },
       "hints": [
         {
           "source": "agent",
-          "text": "service contract Q4"
+          "text": "service contract Q4, CFO approved"
         }
       ],
       "facts": [
@@ -47,28 +47,50 @@
           "kind": "F",
           "severity": "WARN",
           "label": "Above mandate limit",
-          "display_line": "above mandate (max 80000)",
+          "display_line": "OVER MANDATE CAP",
           "evidence": {
-            "amount_minor": 12500000,
-            "max_per_payment_minor": 8000000
+            "amount_minor": 1250050,
+            "max_per_payment_minor": 8000000,
+            "spent_minor": 24000000,
+            "max_total_minor": 25000000
           }
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Verification of Payee",
+          "display_line": "VOP MTCH",
+          "evidence": {
+            "code": "MTCH"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
         },
         {
           "id": "F-VAT",
           "kind": "F",
           "severity": "INFO",
           "label": "Account published in VAT registry",
-          "display_line": "VAT acct: YES",
+          "display_line": "ADIS ACCT YES",
           "evidence": {
             "account_published": true
-          }
+          },
+          "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
+        },
+        {
+          "id": "H-AGENT",
+          "kind": "H",
+          "severity": "INFO",
+          "label": "Agent stated reason",
+          "display_line": "service contract Q4, CFO approved"
         }
       ],
       "decision": {
         "decision": "challenge",
         "rule_ids": [
           "F-MANDATE",
-          "I-PER"
+          "I-BUDGET",
+          "I-WARN"
         ],
         "facts": [
           {
@@ -76,38 +98,65 @@
             "kind": "F",
             "severity": "WARN",
             "label": "Above mandate limit",
-            "display_line": "above mandate (max 80000)",
+            "display_line": "OVER MANDATE CAP",
             "evidence": {
-              "amount_minor": 12500000,
-              "max_per_payment_minor": 8000000
+              "amount_minor": 1250050,
+              "max_per_payment_minor": 8000000,
+              "spent_minor": 24000000,
+              "max_total_minor": 25000000
             }
+          },
+          {
+            "id": "F-VOP",
+            "kind": "F",
+            "severity": "INFO",
+            "label": "Verification of Payee",
+            "display_line": "VOP MTCH",
+            "evidence": {
+              "code": "MTCH"
+            },
+            "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
           },
           {
             "id": "F-VAT",
             "kind": "F",
             "severity": "INFO",
             "label": "Account published in VAT registry",
-            "display_line": "VAT acct: YES",
+            "display_line": "ADIS ACCT YES",
             "evidence": {
               "account_published": true
-            }
+            },
+            "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
+          },
+          {
+            "id": "H-AGENT",
+            "kind": "H",
+            "severity": "INFO",
+            "label": "Agent stated reason",
+            "display_line": "service contract Q4, CFO approved"
           }
         ],
+        "facts_digest": "0da790fa73baeff7c0833b6d38ab00fd032eea6872603523951357c7960a2972",
         "mandate_id": "mnd_3",
-        "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
+        "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
         "challenge": {
-          "nonce": "0C55A1",
+          "nonce": "0C55A1E7",
           "purpose": "PAY",
           "role": "clerk",
-          "subject_id": "prp_41",
+          "subject_id": "prp_42",
+          "deployment": "DEMO",
+          "profile": "safe5-mono-18x7",
           "exp": "2026-10-19T13:20:00Z",
-          "text": "AIRGAP PAY #41 n:0C55A1\nBeta Servis a.s.\nCZ62 0300 0000 0001 2345 6789\n125000 CZK VS 2026104\n[F] above mandate (max 80000)\n[F] VAT acct: YES\nexp 15:20",
-          "text_sha256": "4755549e05d06edd452b6772552f63a5cd097d84db9e810c54bc23cc3d2c8211",
-          "width": 32,
-          "line_count": 7
+          "text": "AG1/DEMO PAY 42\n12500.50 CZK\nCZ62 0300 0000\n0001 2345 6789\nBETA SERVIS A.S.\nVS 2026101901\nEXP 10-19 15:20\n0 BLOCK 1 WARN\nOVER MANDATE CAP\nVOP MTCH\nADIS ACCT YES\nROLE CLERK 1/1\nN 0C55A1E7\nH 1915c82d5296eda7",
+          "text_sha256": "902496cc954dd5c8bb524a00d09947be8d8d7dddb8aa432c899fc5bd295ac4d5",
+          "subject_hash": "1915c82d5296eda7e3bae1c5813ae7880f2b7ef8c143b7de6cce73811bbbfcfd",
+          "width": 18,
+          "lines_per_page": 7,
+          "pages": 2,
+          "line_count": 14
         }
       },
-      "challenge_nonce": "0C55A1",
+      "challenge_nonce": "0C55A1E7",
       "tx_id": null,
       "created_at": "2026-10-19T12:02:00Z"
     },
@@ -115,7 +164,8 @@
       "decision": "challenge",
       "rule_ids": [
         "F-MANDATE",
-        "I-PER"
+        "I-BUDGET",
+        "I-WARN"
       ],
       "facts": [
         {
@@ -123,35 +173,62 @@
           "kind": "F",
           "severity": "WARN",
           "label": "Above mandate limit",
-          "display_line": "above mandate (max 80000)",
+          "display_line": "OVER MANDATE CAP",
           "evidence": {
-            "amount_minor": 12500000,
-            "max_per_payment_minor": 8000000
+            "amount_minor": 1250050,
+            "max_per_payment_minor": 8000000,
+            "spent_minor": 24000000,
+            "max_total_minor": 25000000
           }
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Verification of Payee",
+          "display_line": "VOP MTCH",
+          "evidence": {
+            "code": "MTCH"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
         },
         {
           "id": "F-VAT",
           "kind": "F",
           "severity": "INFO",
           "label": "Account published in VAT registry",
-          "display_line": "VAT acct: YES",
+          "display_line": "ADIS ACCT YES",
           "evidence": {
             "account_published": true
-          }
+          },
+          "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
+        },
+        {
+          "id": "H-AGENT",
+          "kind": "H",
+          "severity": "INFO",
+          "label": "Agent stated reason",
+          "display_line": "service contract Q4, CFO approved"
         }
       ],
+      "facts_digest": "0da790fa73baeff7c0833b6d38ab00fd032eea6872603523951357c7960a2972",
       "mandate_id": "mnd_3",
-      "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
+      "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812",
       "challenge": {
-        "nonce": "0C55A1",
+        "nonce": "0C55A1E7",
         "purpose": "PAY",
         "role": "clerk",
-        "subject_id": "prp_41",
+        "subject_id": "prp_42",
+        "deployment": "DEMO",
+        "profile": "safe5-mono-18x7",
         "exp": "2026-10-19T13:20:00Z",
-        "text": "AIRGAP PAY #41 n:0C55A1\nBeta Servis a.s.\nCZ62 0300 0000 0001 2345 6789\n125000 CZK VS 2026104\n[F] above mandate (max 80000)\n[F] VAT acct: YES\nexp 15:20",
-        "text_sha256": "4755549e05d06edd452b6772552f63a5cd097d84db9e810c54bc23cc3d2c8211",
-        "width": 32,
-        "line_count": 7
+        "text": "AG1/DEMO PAY 42\n12500.50 CZK\nCZ62 0300 0000\n0001 2345 6789\nBETA SERVIS A.S.\nVS 2026101901\nEXP 10-19 15:20\n0 BLOCK 1 WARN\nOVER MANDATE CAP\nVOP MTCH\nADIS ACCT YES\nROLE CLERK 1/1\nN 0C55A1E7\nH 1915c82d5296eda7",
+        "text_sha256": "902496cc954dd5c8bb524a00d09947be8d8d7dddb8aa432c899fc5bd295ac4d5",
+        "subject_hash": "1915c82d5296eda7e3bae1c5813ae7880f2b7ef8c143b7de6cce73811bbbfcfd",
+        "width": 18,
+        "lines_per_page": 7,
+        "pages": 2,
+        "line_count": 14
       }
     },
     "tx": null

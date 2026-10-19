@@ -1,0 +1,23 @@
+{
+  "endpoint": "GET /challenges/{nonce}",
+  "status": 200,
+  "request": null,
+  "response": {
+    "nonce": "0E1A2B3C",
+    "purpose": "ENROLL",
+    "role": "clerk",
+    "subject_id": "signer#0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
+    "deployment": "DEMO",
+    "profile": "safe5-mono-18x7",
+    "exp": "2026-10-19T12:20:00Z",
+    "text": "AG1/DEMO ENROLL\nROLE CLERK\nN 0E1A2B3C",
+    "text_sha256": "e1c2de1e6d58996aa1cc33b4762bfa51099d096d46bdc6d30552fe8d469599c8",
+    "subject_hash": "9bc5d02846b5282c7654a1fbfc6226c09fabc87db6f79e0c4dec2d2555cb6b6a",
+    "width": 18,
+    "lines_per_page": 7,
+    "pages": 1,
+    "line_count": 3,
+    "used": false,
+    "created_at": "2026-10-19T12:00:00Z"
+  }
+}

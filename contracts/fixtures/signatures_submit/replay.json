@@ -2,12 +2,12 @@
   "endpoint": "POST /signatures",
   "status": 403,
   "request": {
-    "nonce": "91BC02",
+    "nonce": "91BC02E1",
     "role": "clerk",
-    "sig": "0x153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde1b"
+    "sig": "0x74ca3711f87a29690b82abeced5eae31c7a87a561dcde86aa6eb8c0a7e967cd774ca3711f87a29690b82abeced5eae31c7a87a561dcde86aa6eb8c0a7e967cd71b"
   },
   "response": {
     "error": "nonce_reused",
-    "message": "challenge 91BC02 already used"
+    "message": "challenge 91BC02E1 already used"
   }
 }

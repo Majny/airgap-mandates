@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/tool_call.response.json",
+  "title": "tool_call.response",
+  "type": "object",
+  "properties": {
+    "result": {
+      "type": "object"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "result",
+    "seq"
+  ],
+  "additionalProperties": false
+}

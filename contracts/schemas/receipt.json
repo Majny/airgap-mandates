@@ -7,22 +7,81 @@
     "tx": {
       "$ref": "common.json#/$defs/ledger_tx"
     },
-    "inclusion_proof": {
-      "$ref": "common.json#/$defs/inclusion_proof"
+    "entry": {
+      "$ref": "common.json#/$defs/audit_event"
     },
-    "receipt_sig": {
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "leaf_hash": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9+/=]+$"
+      "pattern": "^[0-9a-f]{64}$"
     },
-    "key_id": {
-      "type": "string"
+    "tree_size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "inclusion_proof": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "checkpoint_note": {
+      "type": "string",
+      "pattern": "^[^\\n]+\\n[0-9]+\\n[A-Za-z0-9+/=]+\\n(.*\\n)*\\n(— [^ \\n]+ [A-Za-z0-9+/=]+\\n)+$"
+    },
+    "key_ids": {
+      "type": "object",
+      "properties": {
+        "log": {
+          "type": "string"
+        },
+        "w1": {
+          "type": "string"
+        },
+        "w2": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "log",
+        "w1"
+      ],
+      "additionalProperties": false
+    },
+    "vkeys": {
+      "type": "object",
+      "properties": {
+        "log": {
+          "type": "string"
+        },
+        "w1": {
+          "type": "string"
+        },
+        "w2": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "log",
+        "w1"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
     "tx",
+    "entry",
+    "seq",
+    "leaf_hash",
+    "tree_size",
     "inclusion_proof",
-    "receipt_sig",
-    "key_id"
+    "checkpoint_note",
+    "key_ids",
+    "vkeys"
   ],
   "additionalProperties": false
 }

@@ -2,16 +2,16 @@
   "endpoint": "POST /signatures",
   "status": 403,
   "request": {
-    "nonce": "4F2A9C",
+    "nonce": "0C55A1E7",
     "role": "clerk",
-    "sig": "0x6b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e36b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e31b",
-    "displayed_text": "AIRGAP CHG #7 n:4F2A9C exp:14:05\nACME s.r.o. OK\nVoP OK"
+    "sig": "0xd6cdae511d1fbfb0e774e08b742949f39dcd1793a6f5b708fabc320441cd3dd1d6cdae511d1fbfb0e774e08b742949f39dcd1793a6f5b708fabc320441cd3dd11b",
+    "displayed_text": "AG1/DEMO PAY 42\n125.00 CZK\nACME OK\nVOP OK"
   },
   "response": {
     "error": "render_mismatch",
     "message": "displayed text differs from executor render",
     "details": {
-      "expected_sha256": "49fcbf7ed00af62347540e4a5c8c2822e2ad1d701554b9db2b244e929844b067"
+      "expected_sha256": "902496cc954dd5c8bb524a00d09947be8d8d7dddb8aa432c899fc5bd295ac4d5"
     }
   }
 }

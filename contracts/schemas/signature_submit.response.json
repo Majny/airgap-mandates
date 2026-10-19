@@ -6,14 +6,16 @@
   "properties": {
     "nonce": {
       "type": "string",
-      "pattern": "^[0-9A-F]{6}$"
+      "pattern": "^[0-9A-F]{8}$"
     },
     "purpose": {
       "enum": [
         "MANDATE",
         "CHG",
         "PAY",
-        "VENDOR_ATTEST"
+        "VENDOR_ATTEST",
+        "ENROLL",
+        "CHG_REJECT"
       ]
     },
     "subject_id": {
@@ -28,18 +30,22 @@
       "properties": {
         "type": {
           "enum": [
+            "mandate_signed",
             "mandate_activated",
             "payment_executed",
             "change_advanced",
+            "change_rejected",
             "attestation_signed",
-            "attestation_published"
+            "attestation_published",
+            "enrolled"
           ]
         },
         "state": {
           "type": "string"
         },
         "tx_id": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^tx_[0-9a-f]{16}$"
         }
       },
       "required": [
@@ -61,6 +67,9 @@
     },
     "attestation": {
       "$ref": "common.json#/$defs/attestation"
+    },
+    "challenge": {
+      "$ref": "common.json#/$defs/challenge_ref"
     }
   },
   "required": [

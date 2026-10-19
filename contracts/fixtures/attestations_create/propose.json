@@ -7,7 +7,7 @@
     "iban": "CZ8601000000000099887766",
     "valid_from": "2026-10-20",
     "supersedes": 4,
-    "penny_nonce": "PX-91-4421"
+    "change_id": "chg_8"
   },
   "response": {
     "attestation": {
@@ -18,6 +18,7 @@
       "iban": "CZ8601000000000099887766",
       "valid_from": "2026-10-20",
       "supersedes": 4,
+      "change_id": "chg_8",
       "policy": {
         "signers": [
           {
@@ -39,10 +40,6 @@
         "threshold": 2,
         "policy_v": 1
       },
-      "proofs": {
-        "or_extract_sha256": "b1b379bde5214ef587247ddd7b69d2b34f7fae929925787ce45971810c0d43db",
-        "penny_nonce": "PX-91-4421"
-      },
       "sigs": [],
       "status": "PENDING_SIGS",
       "commitment": null,
@@ -52,37 +49,52 @@
     },
     "challenges": [
       {
-        "nonce": "7D11E0",
+        "nonce": "7D11E0A2",
         "purpose": "VENDOR_ATTEST",
         "role": "director",
         "subject_id": "12345678#5",
+        "deployment": "DEMO",
+        "profile": "safe5-mono-18x7",
         "exp": "2026-10-19T12:30:00Z",
-        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E0\nACCT CZ86 0100 0000\n     0000 9988 7766\nvalid from 2026-10-20\nsigner: stat. director (OR)\nquorum 2/3",
-        "text_sha256": "a2d36cfd803971540b59a142adfa4ab42783c0a95e781498d9798b1e98c98ff4",
-        "width": 32,
-        "line_count": 7
+        "text": "AG1/DEMO ATTEST\nACME S.R.O.\nICO 12345678\nPAY TO ACCOUNT\nCZ86 0100 0000\n0000 9988 7766\nFROM 2026-10-20\nSIGNER DIR (OR)\nQUORUM 2/3 V5\nCHANGE 8\nN 7D11E0A2\nH 8f2f722f4d64d89d",
+        "text_sha256": "0d1caf782cbd4a89d3fbb0b7e3a0a9c45eab1583f840f28b7e57d5497b56b458",
+        "subject_hash": "8f2f722f4d64d89dc01181804d7cc222dcad291ab644d656a6d73daa9c5c6764",
+        "width": 18,
+        "lines_per_page": 7,
+        "pages": 2,
+        "line_count": 12
       },
       {
-        "nonce": "7D11E1",
+        "nonce": "7D11E0A3",
         "purpose": "VENDOR_ATTEST",
         "role": "accountant",
         "subject_id": "12345678#5",
+        "deployment": "DEMO",
+        "profile": "safe5-mono-18x7",
         "exp": "2026-10-19T12:30:00Z",
-        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E1\nACCT CZ86 0100 0000\n     0000 9988 7766\nvalid from 2026-10-20\nsigner: accountant (POA)\nquorum 2/3",
-        "text_sha256": "a3b212d45dff5f6c2acef9125211f14eb3443bf346b882b02daa14e42a023cc9",
-        "width": 32,
-        "line_count": 7
+        "text": "AG1/DEMO ATTEST\nACME S.R.O.\nICO 12345678\nPAY TO ACCOUNT\nCZ86 0100 0000\n0000 9988 7766\nFROM 2026-10-20\nQUORUM 2/3 V5\nSIGNER ACCT (POA)\nCHANGE 8\nN 7D11E0A3\nH a123e247c24a754b",
+        "text_sha256": "e257f4ca9ad9368bf069e0f1da26f5b93d77dfb38077a38b437c2e7005ef7dbe",
+        "subject_hash": "a123e247c24a754bef8898dae48424a2d37a783b6b73ddd7c621229326afe473",
+        "width": 18,
+        "lines_per_page": 7,
+        "pages": 2,
+        "line_count": 12
       },
       {
-        "nonce": "7D11E2",
+        "nonce": "7D11E0A4",
         "purpose": "VENDOR_ATTEST",
         "role": "finance",
         "subject_id": "12345678#5",
+        "deployment": "DEMO",
+        "profile": "safe5-mono-18x7",
         "exp": "2026-10-19T12:30:00Z",
-        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E2\nACCT CZ86 0100 0000\n     0000 9988 7766\nvalid from 2026-10-20\nsigner: finance (POA)\nquorum 2/3",
-        "text_sha256": "7978c0d794eebbdb6c2fcd2e2e81b22b31aa703227b2221b0c7a3a9b3f55ec9b",
-        "width": 32,
-        "line_count": 7
+        "text": "AG1/DEMO ATTEST\nACME S.R.O.\nICO 12345678\nPAY TO ACCOUNT\nCZ86 0100 0000\n0000 9988 7766\nFROM 2026-10-20\nQUORUM 2/3 V5\nSIGNER FIN (POA)\nCHANGE 8\nN 7D11E0A4\nH 764125aad80e42ee",
+        "text_sha256": "7bf37d58b55ce4f87504adf2936ffe685728aa7b13628008d0469ce857610c2e",
+        "subject_hash": "764125aad80e42ee646116dafa108580016d401be82506e70fa18bfa1c881554",
+        "width": 18,
+        "lines_per_page": 7,
+        "pages": 2,
+        "line_count": 12
       }
     ]
   }

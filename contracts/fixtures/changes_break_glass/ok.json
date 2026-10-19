@@ -1,0 +1,161 @@
+{
+  "endpoint": "POST /changes/{change_id}/break-glass",
+  "status": 200,
+  "request": {
+    "reason": "supplier ERP key lost",
+    "declared_by": "contact#accounting@acme.cz"
+  },
+  "response": {
+    "change_id": "chg_8",
+    "change_no": 8,
+    "state": "CALLBACK_PENDING",
+    "vendor_id": "ven_12345678",
+    "vendor_ico": "12345678",
+    "vendor_name": "ACME s.r.o.",
+    "old_iban": "CZ6508000000192000145399",
+    "old_since": "2024-03-01",
+    "new_iban": "CZ8601000000000099887766",
+    "email_id": "eml_9a8b7c6d5e4f3021",
+    "in_network": true,
+    "break_glass": true,
+    "change_nonce": "cbcde84bd6711075eae757f41d17a768",
+    "aud": "AG1/DEMO/changes/chg_8",
+    "facts": [
+      {
+        "id": "F-ATTEST",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Supplier attestations (distinct pinned classes)",
+        "display_line": "ATT BREAK-GLASS",
+        "evidence": {
+          "k": 0,
+          "n": 3,
+          "break_glass": true
+        }
+      },
+      {
+        "id": "F-CALLBACK",
+        "kind": "F",
+        "severity": "BLOCK",
+        "label": "Callback to registered contact",
+        "display_line": "CALLBACK MISSING",
+        "evidence": {
+          "status": "pending"
+        }
+      },
+      {
+        "id": "F-DOMAIN",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Sender domain vs registry",
+        "display_line": "DOMAIN MATCH",
+        "evidence": {
+          "from_domain": "acme.cz",
+          "registry_domain": "acme.cz",
+          "distance": 0
+        },
+        "prov": "05d68ab8ffb8a861a8ac87becf913f7b0d7c2b68dc614ad1f610d9dcd7508a86"
+      },
+      {
+        "id": "F-DKIM",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "DKIM signature",
+        "display_line": "DKIM PASS",
+        "evidence": {
+          "d": "acme.cz",
+          "valid": true
+        },
+        "prov": "d1c2ca3253f4e69fa8942c2488f68e96534c09bd78b88b1d407f4971886044dd"
+      },
+      {
+        "id": "F-WARNLIST",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Regulator warning lists",
+        "display_line": "WARNLIST CLEAR",
+        "evidence": {
+          "hit": false
+        },
+        "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+      },
+      {
+        "id": "F-SANCTION",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "EU sanctions (entities)",
+        "display_line": "SANCTIONS CLEAR",
+        "evidence": {
+          "hit": false
+        },
+        "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+      },
+      {
+        "id": "F-VOP",
+        "kind": "F",
+        "severity": "WARN",
+        "label": "Verification of Payee",
+        "display_line": "VOP CMTC",
+        "evidence": {
+          "code": "CMTC"
+        },
+        "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+      },
+      {
+        "id": "F-PSP",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+        "display_line": "PSP INST VOP OK",
+        "evidence": {
+          "bank_code": "0100",
+          "in_sct_inst": true,
+          "in_vop": true,
+          "licensed": true
+        },
+        "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+      },
+      {
+        "id": "F-BANK",
+        "kind": "F",
+        "severity": "INFO",
+        "label": "Bank from IBAN",
+        "display_line": "BANK DOMESTIC",
+        "evidence": {
+          "country": "CZ",
+          "bank_code": "0100"
+        },
+        "prov": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
+      }
+    ],
+    "attestations": [],
+    "attest_count": 0,
+    "not_before": null,
+    "expires_at": "2026-10-19T13:00:00Z",
+    "callback": {
+      "status": "pending",
+      "code_exp": "2026-10-19T12:15:00Z",
+      "attempts": 0
+    },
+    "tripwire_sent_at": "2026-10-19T12:00:01Z",
+    "signatures": [],
+    "pending_challenge": null,
+    "history": [
+      {
+        "from": null,
+        "to": "PENDING_ATTEST",
+        "at": "2026-10-19T12:00:00Z",
+        "reason": "created",
+        "actor": "tools"
+      },
+      {
+        "from": "PENDING_ATTEST",
+        "to": "CALLBACK_PENDING",
+        "at": "2026-10-19T12:05:00Z",
+        "reason": "BREAK_GLASS: supplier key lost",
+        "actor": "vendor_portal"
+      }
+    ],
+    "created_at": "2026-10-19T12:00:00Z"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 20,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "ingest",
+  "actor": "ingest",
+  "subject_id": "eml_a1b2c3d4e5f60718",
+  "data": {
+    "email_id": "eml_a1b2c3d4e5f60718",
+    "sha256": "c96d3cef6021c05fb0ab8801af58216bcda043e9366e6437afddfbecf2aae32e",
+    "from_domain": "acme.cz",
+    "received_at": "2026-10-19T11:58:00Z",
+    "dkim": {
+      "result": "pass",
+      "d": "acme.cz"
+    }
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

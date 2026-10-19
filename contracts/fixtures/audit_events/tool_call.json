@@ -1,0 +1,24 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 66,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "tool_call",
+  "actor": "tools",
+  "subject_id": null,
+  "data": {
+    "session_id": "ses_01",
+    "step": 4,
+    "tool": "mandate.write",
+    "args_sha256": "090772cf4068973daad3f715eb788d39fe2c02be42efd86de81f0e59198d6237",
+    "result": "forbidden",
+    "rule_ids": [
+      "T-DECOY"
+    ],
+    "untrusted_read": true
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

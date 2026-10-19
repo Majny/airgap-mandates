@@ -32,7 +32,7 @@
             }
           ]
         },
-        "penny_nonce": {
+        "change_id": {
           "type": "string"
         }
       },
@@ -41,7 +41,8 @@
         "ico",
         "iban",
         "valid_from",
-        "supersedes"
+        "supersedes",
+        "change_id"
       ],
       "additionalProperties": false
     },

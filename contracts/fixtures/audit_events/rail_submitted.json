@@ -1,0 +1,20 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 38,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "rail_submitted",
+  "actor": "rail",
+  "subject_id": "tx_e2c911c285449df6",
+  "data": {
+    "tx_id": "tx_e2c911c285449df6",
+    "format": "pain.001.001.09",
+    "msg_id": "AG1-DEMO-38",
+    "xml_c14n_sha256": "03419efa505d59401be0f2b6db60cd0e4ce222907597b30a7f35bb5db7fecd24",
+    "status": "ACTC"
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

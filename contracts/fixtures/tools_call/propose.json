@@ -1,0 +1,28 @@
+{
+  "endpoint": "POST /tools/{name}",
+  "status": 200,
+  "request": {
+    "session_id": "ses_01",
+    "step": 3,
+    "manifest_sha256": "05b3abf2579a5eb66403cd78be557fd860633a1fe2103c7642030defe32c657f",
+    "args": {
+      "vendor_id": "ven_12345678",
+      "invoice_ref": "doc_43592996ab5306ac",
+      "invoice_no": "FV-2026-0412",
+      "amount_minor": 1450000,
+      "currency": "CZK",
+      "vs": "20260412",
+      "due": "2026-10-29",
+      "reason_code": "DUE",
+      "hints": []
+    }
+  },
+  "response": {
+    "result": {
+      "proposal_id": "prp_38",
+      "decision": "allow",
+      "tx_id": "tx_e2c911c285449df6"
+    },
+    "seq": 33
+  }
+}

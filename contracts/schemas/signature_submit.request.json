@@ -6,7 +6,7 @@
   "properties": {
     "nonce": {
       "type": "string",
-      "pattern": "^[0-9A-F]{6}$"
+      "pattern": "^[0-9A-F]{8}$"
     },
     "role": {
       "enum": [

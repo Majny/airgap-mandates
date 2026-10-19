@@ -1,0 +1,19 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 80,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "witness_refusal",
+  "actor": "witness",
+  "subject_id": null,
+  "data": {
+    "witness": "airgap.example/demo/w1",
+    "status": 422,
+    "old_size": 40,
+    "size": 44
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

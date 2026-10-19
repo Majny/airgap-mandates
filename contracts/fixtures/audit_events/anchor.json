@@ -1,0 +1,19 @@
+{
+  "v": 2,
+  "log_id": "audit",
+  "seq": 81,
+  "ts": "2026-10-19T12:02:03.120Z",
+  "type": "anchor",
+  "actor": "executor",
+  "subject_id": null,
+  "data": {
+    "log_id": "audit",
+    "tree_size": 80,
+    "root_hash": "3967765c0c424b4b8f4b2a828e24bb7ae80d66faf5261197027388c629963487",
+    "s3_key": "audit/000000000080.json"
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
+}

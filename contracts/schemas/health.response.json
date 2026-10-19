@@ -14,19 +14,51 @@
         "aws"
       ]
     },
+    "deployment": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{1,5}$"
+    },
+    "demo_profile": {
+      "enum": [
+        "demo",
+        "prod"
+      ]
+    },
     "policy_hash": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "render_width": {
-      "type": "integer"
+    "render_profile": {
+      "const": "safe5-mono-18x7"
+    },
+    "code_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "log_origin": {
+      "type": "string"
+    },
+    "log_pubkey_id": {
+      "type": "string"
     }
   },
   "required": [
     "status",
     "backend",
+    "deployment",
+    "demo_profile",
     "policy_hash",
-    "render_width"
+    "render_profile",
+    "code_sha256",
+    "log_origin",
+    "log_pubkey_id"
   ],
   "additionalProperties": false
 }

@@ -1,0 +1,11 @@
+{
+  "schema": "attest_result",
+  "instance": {
+    "ok": false,
+    "issuer_class": null,
+    "iss": "https://evil.example/erp",
+    "error": "issuer_not_pinned",
+    "disclosed": {},
+    "vc_sha256": "984054263a3f15f3f07088f85c8ea976cc71a4103aff11839ab3ba68dc652a71"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/break_glass.request.json",
+  "title": "break_glass.request",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "declared_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason",
+    "declared_by"
+  ],
+  "additionalProperties": false
+}

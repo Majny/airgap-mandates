@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap.local/schemas/change_reject.response.json",
+  "title": "change_reject.response",
+  "type": "object",
+  "properties": {
+    "change": {
+      "$ref": "common.json#/$defs/change"
+    },
+    "challenge": {
+      "$ref": "common.json#/$defs/challenge_ref"
+    }
+  },
+  "required": [
+    "change"
+  ],
+  "additionalProperties": false
+}

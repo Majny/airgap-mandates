@@ -1,17 +1,21 @@
 {
-  "v": 1,
+  "v": 2,
   "log_id": "attest",
   "seq": 5,
   "ts": "2026-10-19T12:02:03.120Z",
   "type": "attestation",
-  "actor": "vendor_portal",
-  "subject_id": "12345678#5",
+  "actor": "issuer",
+  "subject_id": "chg_8",
   "data": {
-    "ico": "12345678",
-    "v": 5,
-    "action": "propose",
-    "status": "PUBLISHED",
+    "change_id": "chg_8",
+    "issuer_class": "supplier-erp",
+    "iss": "https://issuer.acme.example/erp",
+    "verified": true,
     "commitment": "f246182a77b2684f4e7757e824ddeee1266a70adc844f6430104389147738969",
-    "attest_leaf_index": 5
-  }
+    "error": null
+  },
+  "policy_hash": null,
+  "inputs_digest": null,
+  "facts_digest": null,
+  "hints_digest": null
 }

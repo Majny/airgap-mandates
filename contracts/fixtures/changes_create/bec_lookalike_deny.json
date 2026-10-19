@@ -2,13 +2,13 @@
   "endpoint": "POST /changes",
   "status": 201,
   "request": {
-    "vendor_ico": "12345678",
+    "vendor_id": "ven_12345678",
     "new_iban": "LT483999000000001234",
     "email_id": "eml_9a8b7c6d5e4f3021",
     "hints": [
       {
         "source": "agent",
-        "text": "bank change, urgent"
+        "text": "bank change, urgent, CFO approved"
       }
     ]
   },
@@ -16,125 +16,162 @@
     "change": {
       "change_id": "chg_7",
       "change_no": 7,
-      "state": "ATTESTATION_CHECK",
+      "state": "REJECTED",
       "vendor_id": "ven_12345678",
       "vendor_ico": "12345678",
       "vendor_name": "ACME s.r.o.",
       "old_iban": "CZ6508000000192000145399",
+      "old_since": "2024-03-01",
       "new_iban": "LT483999000000001234",
       "email_id": "eml_9a8b7c6d5e4f3021",
       "in_network": true,
+      "break_glass": false,
+      "change_nonce": "bfe51c3237cca1aefd9dccd1a8f7d772",
+      "aud": "AG1/DEMO/changes/chg_7",
       "facts": [
         {
           "id": "F-DOMAIN",
           "kind": "F",
           "severity": "BLOCK",
           "label": "Sender domain vs registry",
-          "display_line": "acme-cz.com != acme.cz",
+          "display_line": "DOMAIN LOOKALIKE",
           "evidence": {
             "from_domain": "acme-cz.com",
             "registry_domain": "acme.cz",
             "distance": 1
-          }
-        },
-        {
-          "id": "F-ATTEST",
-          "kind": "F",
-          "severity": "BLOCK",
-          "label": "Vendor attestation for new IBAN",
-          "display_line": "supplier 0/3",
-          "evidence": {
-            "signed": 0,
-            "threshold": 2,
-            "signers": 3
-          }
-        },
-        {
-          "id": "F-BANK",
-          "kind": "F",
-          "severity": "WARN",
-          "label": "Bank from IBAN",
-          "display_line": "bank: EMI Lithuania (fict.)",
-          "evidence": {
-            "country": "LT",
-            "bank_code": "39990"
-          }
-        },
-        {
-          "id": "F-VAT",
-          "kind": "F",
-          "severity": "WARN",
-          "label": "Account published in VAT registry",
-          "display_line": "VAT acct: NO",
-          "evidence": {
-            "account_published": false
-          }
+          },
+          "prov": "05d68ab8ffb8a861a8ac87becf913f7b0d7c2b68dc614ad1f610d9dcd7508a86"
         },
         {
           "id": "F-DKIM",
           "kind": "F",
           "severity": "INFO",
           "label": "DKIM signature",
-          "display_line": "DKIM ok d=acme-cz.com",
+          "display_line": "DKIM PASS",
           "evidence": {
             "d": "acme-cz.com",
             "valid": true
-          }
+          },
+          "prov": "d1c2ca3253f4e69fa8942c2488f68e96534c09bd78b88b1d407f4971886044dd"
+        },
+        {
+          "id": "F-DOMAIN-AGE",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Domain age (WHOIS)",
+          "display_line": "DOMAIN AGE 2D",
+          "evidence": {
+            "days": 2
+          },
+          "prov": "82d44c5f952d4c3391a1edd41d81d4b6f201ffda3a413637df907ac82e41dbb6"
+        },
+        {
+          "id": "F-WARNLIST",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Regulator warning lists",
+          "display_line": "WARNLIST CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-SANCTION",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "EU sanctions (entities)",
+          "display_line": "SANCTIONS CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Verification of Payee",
+          "display_line": "VOP NMTC",
+          "evidence": {
+            "code": "NMTC"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+        },
+        {
+          "id": "F-PSP",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+          "display_line": "PSP UNKNOWN",
+          "evidence": {
+            "bank_code": "39990",
+            "country": "LT",
+            "found": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VAT",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Account published in VAT registry",
+          "display_line": "ADIS ACCT NO",
+          "evidence": {
+            "account_published": false
+          },
+          "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Bank from IBAN",
+          "display_line": "BANK FOREIGN EMI",
+          "evidence": {
+            "country": "LT",
+            "bank_code": "39990"
+          },
+          "prov": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
         },
         {
           "id": "F-FIRSTSEEN",
           "kind": "F",
           "severity": "WARN",
-          "label": "Domain first seen in inbox",
-          "display_line": "domain first seen 2h",
+          "label": "IBAN first seen",
+          "display_line": "IBAN NEW 0H",
           "evidence": {
-            "hours": 2
-          }
+            "hours": 0
+          },
+          "prov": "05d68ab8ffb8a861a8ac87becf913f7b0d7c2b68dc614ad1f610d9dcd7508a86"
         },
         {
           "id": "H-AGENT",
           "kind": "H",
           "severity": "INFO",
           "label": "Agent stated reason",
-          "display_line": "agent: \"bank change, urgent\""
+          "display_line": "bank change, urgent, CFO approved"
         }
       ],
+      "attestations": [],
+      "attest_count": 0,
       "not_before": null,
       "expires_at": "2026-10-19T13:00:00Z",
       "callback": {
         "status": "none",
-        "code_exp": null
+        "code_exp": null,
+        "attempts": 0
       },
+      "tripwire_sent_at": "2026-10-19T12:00:01Z",
       "signatures": [],
-      "pending_challenge": {
-        "nonce": "4F2A9C",
-        "purpose": "CHG",
-        "role": "clerk",
-        "subject_id": "chg_7",
-        "exp": "2026-10-19T12:05:00Z",
-        "text": "AIRGAP CHG #7 n:4F2A9C exp:14:05\nACME s.r.o. ICO 12345678\nOLD CZ65 0800 0000\n    1920 0014 5399\nNEW LT48 3999 0000 0000 1234\n[F] supplier 0/3\n[F] acme-cz.com != acme.cz\n[F] +5 more facts (0 BLOCK)",
-        "text_sha256": "49fcbf7ed00af62347540e4a5c8c2822e2ad1d701554b9db2b244e929844b067",
-        "width": 32,
-        "line_count": 8
-      },
+      "pending_challenge": null,
       "history": [
         {
           "from": null,
-          "to": "REQUESTED",
+          "to": "REJECTED",
           "at": "2026-10-19T12:00:00Z",
-          "reason": "created"
-        },
-        {
-          "from": "REQUESTED",
-          "to": "FACTS_DONE",
-          "at": "2026-10-19T12:00:00Z",
-          "reason": "facts computed"
-        },
-        {
-          "from": "FACTS_DONE",
-          "to": "ATTESTATION_CHECK",
-          "at": "2026-10-19T12:00:00Z",
-          "reason": "auto"
+          "reason": "created: BLOCK F-DOMAIN, F-VOP",
+          "actor": "tools"
         }
       ],
       "created_at": "2026-10-19T12:00:00Z"
@@ -142,11 +179,14 @@
     "decision": {
       "decision": "deny",
       "rule_ids": [
-        "F-ATTEST",
         "F-BANK",
         "F-DOMAIN",
+        "F-DOMAIN-AGE",
+        "F-FIRSTSEEN",
+        "F-PSP",
         "F-VAT",
-        "F-FIRSTSEEN"
+        "F-VOP",
+        "I-BLOCK"
       ],
       "facts": [
         {
@@ -154,88 +194,128 @@
           "kind": "F",
           "severity": "BLOCK",
           "label": "Sender domain vs registry",
-          "display_line": "acme-cz.com != acme.cz",
+          "display_line": "DOMAIN LOOKALIKE",
           "evidence": {
             "from_domain": "acme-cz.com",
             "registry_domain": "acme.cz",
             "distance": 1
-          }
-        },
-        {
-          "id": "F-ATTEST",
-          "kind": "F",
-          "severity": "BLOCK",
-          "label": "Vendor attestation for new IBAN",
-          "display_line": "supplier 0/3",
-          "evidence": {
-            "signed": 0,
-            "threshold": 2,
-            "signers": 3
-          }
-        },
-        {
-          "id": "F-BANK",
-          "kind": "F",
-          "severity": "WARN",
-          "label": "Bank from IBAN",
-          "display_line": "bank: EMI Lithuania (fict.)",
-          "evidence": {
-            "country": "LT",
-            "bank_code": "39990"
-          }
-        },
-        {
-          "id": "F-VAT",
-          "kind": "F",
-          "severity": "WARN",
-          "label": "Account published in VAT registry",
-          "display_line": "VAT acct: NO",
-          "evidence": {
-            "account_published": false
-          }
+          },
+          "prov": "05d68ab8ffb8a861a8ac87becf913f7b0d7c2b68dc614ad1f610d9dcd7508a86"
         },
         {
           "id": "F-DKIM",
           "kind": "F",
           "severity": "INFO",
           "label": "DKIM signature",
-          "display_line": "DKIM ok d=acme-cz.com",
+          "display_line": "DKIM PASS",
           "evidence": {
             "d": "acme-cz.com",
             "valid": true
-          }
+          },
+          "prov": "d1c2ca3253f4e69fa8942c2488f68e96534c09bd78b88b1d407f4971886044dd"
+        },
+        {
+          "id": "F-DOMAIN-AGE",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Domain age (WHOIS)",
+          "display_line": "DOMAIN AGE 2D",
+          "evidence": {
+            "days": 2
+          },
+          "prov": "82d44c5f952d4c3391a1edd41d81d4b6f201ffda3a413637df907ac82e41dbb6"
+        },
+        {
+          "id": "F-WARNLIST",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "Regulator warning lists",
+          "display_line": "WARNLIST CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-SANCTION",
+          "kind": "F",
+          "severity": "INFO",
+          "label": "EU sanctions (entities)",
+          "display_line": "SANCTIONS CLEAR",
+          "evidence": {
+            "hit": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VOP",
+          "kind": "F",
+          "severity": "BLOCK",
+          "label": "Verification of Payee",
+          "display_line": "VOP NMTC",
+          "evidence": {
+            "code": "NMTC"
+          },
+          "prov": "5ab23e0d71b41b3aff8196b2f9fae8bc38494869ba28d298f317928b839568a0"
+        },
+        {
+          "id": "F-PSP",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Payee PSP in SEPA Inst / VoP / licence lists",
+          "display_line": "PSP UNKNOWN",
+          "evidence": {
+            "bank_code": "39990",
+            "country": "LT",
+            "found": false
+          },
+          "prov": "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d"
+        },
+        {
+          "id": "F-VAT",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Account published in VAT registry",
+          "display_line": "ADIS ACCT NO",
+          "evidence": {
+            "account_published": false
+          },
+          "prov": "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333"
+        },
+        {
+          "id": "F-BANK",
+          "kind": "F",
+          "severity": "WARN",
+          "label": "Bank from IBAN",
+          "display_line": "BANK FOREIGN EMI",
+          "evidence": {
+            "country": "LT",
+            "bank_code": "39990"
+          },
+          "prov": "82eba779039a343e9834c01d43c50cf66e3222f5a5de7e7c4728e4ddd56dee57"
         },
         {
           "id": "F-FIRSTSEEN",
           "kind": "F",
           "severity": "WARN",
-          "label": "Domain first seen in inbox",
-          "display_line": "domain first seen 2h",
+          "label": "IBAN first seen",
+          "display_line": "IBAN NEW 0H",
           "evidence": {
-            "hours": 2
-          }
+            "hours": 0
+          },
+          "prov": "05d68ab8ffb8a861a8ac87becf913f7b0d7c2b68dc614ad1f610d9dcd7508a86"
         },
         {
           "id": "H-AGENT",
           "kind": "H",
           "severity": "INFO",
           "label": "Agent stated reason",
-          "display_line": "agent: \"bank change, urgent\""
+          "display_line": "bank change, urgent, CFO approved"
         }
       ],
+      "facts_digest": "5165c5bbf67da86c9d08dfad65e308ffd1641bdec0f182cf716f14c107a1479a",
       "mandate_id": null,
-      "policy_hash": "1f3a9c0eeacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
-      "challenge": {
-        "nonce": "4F2A9C",
-        "purpose": "CHG",
-        "role": "clerk",
-        "subject_id": "chg_7",
-        "exp": "2026-10-19T12:05:00Z",
-        "text": "AIRGAP CHG #7 n:4F2A9C exp:14:05\nACME s.r.o. ICO 12345678\nOLD CZ65 0800 0000\n    1920 0014 5399\nNEW LT48 3999 0000 0000 1234\n[F] supplier 0/3\n[F] acme-cz.com != acme.cz\n[F] +5 more facts (0 BLOCK)",
-        "text_sha256": "49fcbf7ed00af62347540e4a5c8c2822e2ad1d701554b9db2b244e929844b067",
-        "width": 32,
-        "line_count": 8
-      }
+      "policy_hash": "1f3a9c0e7d2b4a616220e532959f0104603057c88704863ca38e7cd188fda812"
     }
   }
 }
