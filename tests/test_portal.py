@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from executor.config import Settings
-from tests.fakes import FakeStore
+from executor.store.memory import MemoryStore
 from vendor import portal
 
 T0 = datetime(2026, 10, 19, 12, 0, 0, tzinfo=timezone.utc)
@@ -34,13 +34,13 @@ def _code() -> str:
     return re.search(r"Code (\d{6})", portal.SMS_OUTBOX[-1]["text"]).group(1)
 
 
-def _issue(store: FakeStore, now: datetime = T0) -> str:
+def _issue(store: MemoryStore, now: datetime = T0) -> str:
     portal.issue_callback(VENDOR, CHANGE, store=store, settings=Settings(), now=now)
     return _code()
 
 
 def test_issue_callback_stores_hash_only_and_sends_simulated_sms():
-    store = FakeStore()
+    store = MemoryStore(Settings())
     out = portal.issue_callback(VENDOR, CHANGE, store=store, settings=Settings(), now=T0)
     code = _code()
     assert out["code_exp"] == "2026-10-19T12:10:00Z" and set(out) == {"code_exp", "notif_id"}
@@ -54,7 +54,7 @@ def test_issue_callback_stores_hash_only_and_sends_simulated_sms():
 
 
 def test_check_code_attempts_and_single_use():
-    store, s = FakeStore(), Settings()
+    store, s = MemoryStore(Settings()), Settings()
     code = _issue(store)
     wrong = f"{(int(code) + 1) % 10**6:06d}"
     assert portal.check_callback_code("87654321", "chg_7", wrong, store=store, settings=s, now=T0) == (False, 1)
@@ -65,7 +65,7 @@ def test_check_code_attempts_and_single_use():
 
 
 def test_three_failures_exhaust_the_code():
-    store, s = FakeStore(), Settings()
+    store, s = MemoryStore(Settings()), Settings()
     code = _issue(store)
     wrong = f"{(int(code) + 1) % 10**6:06d}"
     for i in (1, 2, 3):
@@ -75,7 +75,7 @@ def test_three_failures_exhaust_the_code():
 
 
 def test_expired_code_is_a_failed_attempt():
-    store, s = FakeStore(), Settings()
+    store, s = MemoryStore(Settings()), Settings()
     code = _issue(store)
     late = T0 + timedelta(seconds=s.callback_code_ttl_seconds)
     assert portal.check_callback_code("87654321", "chg_7", code, store=store, settings=s, now=late) == (False, 1)
@@ -84,7 +84,7 @@ def test_expired_code_is_a_failed_attempt():
 def test_latest_code_wins_after_reissue(monkeypatch: pytest.MonkeyPatch):
     codes = iter(["111111", "222222"])
     monkeypatch.setattr(portal, "_new_code", lambda: next(codes))
-    store, s = FakeStore(), Settings()
+    store, s = MemoryStore(Settings()), Settings()
     first = _issue(store)
     second = _issue(store, T0 + timedelta(seconds=1))
     assert (first, second) == ("111111", "222222")
@@ -95,7 +95,7 @@ def test_latest_code_wins_after_reissue(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_tripwire_and_list_notifications_hide_code_hash():
-    store = FakeStore()
+    store = MemoryStore(Settings())
     portal.send_tripwire(VENDOR, CHANGE, store=store, settings=Settings(), now=T0)
     _issue(store, T0 + timedelta(seconds=1))
     notes = portal.list_notifications("87654321", store=store)
@@ -107,12 +107,12 @@ def test_tripwire_and_list_notifications_hide_code_hash():
 def test_sms_outbox_file_is_opt_in(tmp_path, monkeypatch: pytest.MonkeyPatch):
     path = tmp_path / "sms_outbox.jsonl"
     monkeypatch.setenv("AIRGAP_SMS_OUTBOX_FILE", str(path))
-    _issue(FakeStore())
+    _issue(MemoryStore(Settings()))
     (line,) = path.read_text().splitlines()
     assert json.loads(line)["label"].startswith("SIMULATED SMS")
 
 
-def _app(store: FakeStore):
+def _app(store: MemoryStore):
     seen: list[httpx.Request] = []
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -126,7 +126,7 @@ def _app(store: FakeStore):
 
 
 def test_app_serves_page_and_inbox():
-    store = FakeStore()
+    store = MemoryStore(Settings())
     portal.send_tripwire(VENDOR, CHANGE, store=store, settings=Settings(), now=T0)
     client, _ = _app(store)
     page = client.get("/")
@@ -141,7 +141,7 @@ def test_app_serves_page_and_inbox():
 
 
 def test_app_relays_with_vendor_portal_client_header():
-    client, seen = _app(FakeStore())
+    client, seen = _app(MemoryStore(Settings()))
     r = client.post("/api/changes/chg_7/not-us", json={"reason": "not us"})
     assert r.status_code == 200 and r.json()["state"] == "REJECTED"
     r = client.post("/api/callbacks/chg_7", json={"code": "000000", "outcome": "confirm"})
@@ -155,7 +155,7 @@ def test_app_relays_with_vendor_portal_client_header():
 
 @pytest.mark.parametrize("bad", ["chg_7%3Fx=1", "chg_7%23", "..", "ven_1", "chg_"])
 def test_app_refuses_non_change_ids_without_relaying(bad: str):
-    client, seen = _app(FakeStore())
+    client, seen = _app(MemoryStore(Settings()))
     for path in (f"/api/changes/{bad}/not-us", f"/api/callbacks/{bad}", f"/api/changes/{bad}/break-glass"):
         assert client.post(path, json={"code": "123456", "reason": "x"}).status_code in (400, 404, 405)
     assert seen == []

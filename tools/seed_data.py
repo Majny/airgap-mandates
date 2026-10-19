@@ -1,17 +1,23 @@
-"""Seed the registry (vendors + issuer pins + registry#meta) and the inbox (.eml + DKIM verdict). CONTRACTS.md v2 §3.1,
-§11.
+"""Seed the registry (vendors + issuer pins + registry#meta), the enrolled signers and the inbox. CONTRACTS.md v2 §3.1,
+§6, §11.
 
 Owner: WS-D.
 
-Fictitious demo data only. Issuer pins come from the DEMO-ONLY keys in data/issuer_keys/<class>.jwk (public part
-only) and are written for in-network vendors via executor.attest.trust.pin_issuer (enrolment-time). Emails go straight
-into the `inbox` table with the ingest-time DKIM verdict (executor.facts.dkim.dkim_verdict over the DNS snapshot);
-when that module is unavailable the verdict is recorded as "none" (fails closed: F-DKIM BLOCK).
+Fictitious demo data only. Works against any executor.store backend (default: get_store(settings), i.e. the memory
+backend in dev/CI) or a store object passed in. Natural keys only (executor.store.KEY_SCHEMA).
+
+* registry: data/vendors.json; issuer pins from the DEMO-ONLY keys in data/issuer_keys/<class>.jwk (public part only)
+  via executor.attest.trust.pin_issuer (enrolment-time) for in-network vendors; registry#meta with
+  payee_registry_hash from executor.policy.mandate.registry_snapshot.
+* enrolled_signers: data/enrollment.json as written by tools/enroll.py (the ceremony transcript is not stored).
+* inbox: data/emails/*.eml through executor.facts.dkim.ingest (inbox row + ingest-time DKIM verdict + `ingest` leaf);
+  direct rows when ingest() is unavailable (DKIM "none": fails closed, F-DKIM BLOCK).
 """
 from __future__ import annotations
 
 import argparse
 import base64
+import dataclasses
 import email
 import email.utils
 import hashlib
@@ -27,16 +33,11 @@ META_KEY = "registry#meta"
 ISSUER_CLASSES = ("supplier-erp", "supplier-bank", "registry")
 _PUBLIC_JWK = ("kty", "crv", "x", "y")
 _NO_DKIM = {"result": "none", "d": None, "s": None, "aligned": False}
+_SIGNER_PRIVATE = ("ceremony", "leaf")  # enroll.py transcript, not an enrolled_signers attribute
 
 
 def _b64u(b: bytes) -> str:
     return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
-
-
-def _thumbprint(jwk: dict[str, Any]) -> str:
-    """RFC 7638 thumbprint of an EC public JWK (fallback when executor.attest.sdjwt is unavailable)."""
-    body = json.dumps({k: jwk[k] for k in ("crv", "kty", "x", "y")}, separators=(",", ":"), sort_keys=True)
-    return _b64u(hashlib.sha256(body.encode("ascii")).digest())
 
 
 def _issuer_keys(keys_dir: Path) -> list[tuple[str, str, dict[str, Any]]]:
@@ -52,32 +53,11 @@ def _issuer_keys(keys_dir: Path) -> list[tuple[str, str, dict[str, Any]]]:
     return out
 
 
-def _pin(vendor_id: str, cls: str, iss: str, jwk: dict[str, Any], *, store: Any, settings: Any,
-         now: datetime) -> None:
-    try:
-        from executor.attest import trust
-
-        trust.pin_issuer(vendor_id, cls, iss, jwk, store=store, settings=settings, now=now)
-        return
-    except (ImportError, NotImplementedError, AttributeError, TypeError):
-        pass
-    row = store.get("registry", {"vendor_id": vendor_id}) or {}
-    pins = list(row.get("issuer_pins") or [])
-    tp = _thumbprint(jwk)
-    if not any(p["jwk_thumbprint"] == tp for p in pins):
-        pins.append({"issuer_class": cls, "iss": iss, "jwk_thumbprint": tp, "pinned_at": iso(now)})
-        store.update_if("registry", {"vendor_id": vendor_id}, {"issuer_pins": pins}, {})
-
-
-def registry_hash(rows: list[dict[str, Any]]) -> str:
-    """payee_registry_hash = sha256(canonical_json(sorted([[vendor_id, iban] ...]))) (CONTRACTS §3.1)."""
-    from executor.canonical import canonical_json
-
-    return hashlib.sha256(canonical_json(sorted([[r["vendor_id"], r["iban"]] for r in rows]))).hexdigest()
-
-
 def seed_registry(vendors: list[dict[str, Any]], *, store: Any, settings: Any, keys_dir: Path,
                   now: datetime) -> dict[str, int]:
+    from executor.attest import trust
+    from executor.policy.mandate import REGISTRY_META, registry_snapshot
+
     keys = _issuer_keys(keys_dir)
     pinned = 0
     for v in vendors:
@@ -89,27 +69,29 @@ def seed_registry(vendors: list[dict[str, Any]], *, store: Any, settings: Any, k
         store.put("registry", row)
         if row.get("in_network"):
             for cls, iss, jwk in keys:
-                _pin(row["vendor_id"], cls, iss, jwk, store=store, settings=settings, now=now)
+                trust.pin_issuer(row["vendor_id"], cls, iss, jwk, store=store, settings=settings, now=now)
                 pinned += 1
-    rows = [store.get("registry", {"vendor_id": dict(v).get("vendor_id") or f"ven_{v['ico']}"}) for v in vendors]
-    store.put("registry", {"vendor_id": META_KEY, "registry_version": 1, "registry_hash": registry_hash(rows)})
+    meta = store.get("registry", REGISTRY_META) or {}
+    version = int(meta.get("registry_version", 0)) + 1
+    store.put("registry", {**REGISTRY_META, "registry_version": version, "registry_hash": registry_snapshot(store)["hash"]})
     return {"vendors": len(vendors), "pins": pinned}
 
 
-def _dkim(raw: bytes, dns_snapshot: dict[str, Any]) -> dict[str, Any]:
-    try:
-        from executor.facts import dkim
+def seed_signers(path: Path, *, store: Any) -> int:
+    """enrolled_signers rows from data/enrollment.json ({"signers": [...]}, device set by tools/enroll.py)."""
+    if not path.exists():
+        return 0
+    doc = json.loads(path.read_text())
+    n = 0
+    for s in doc.get("signers") or []:
+        row = {k: v for k, v in s.items() if k not in _SIGNER_PRIVATE}
+        row["address"] = str(row["address"]).lower()
+        store.put("enrolled_signers", row)
+        n += 1
+    return n
 
-        return dict(dkim.dkim_verdict(raw, dns_snapshot=dns_snapshot))
-    except (ImportError, NotImplementedError, AttributeError):
-        return dict(_NO_DKIM)
 
-
-def inbox_row(raw: bytes, *, dns_snapshot: dict[str, Any], now: datetime) -> dict[str, Any]:
-    """`inbox` row for one raw .eml (email_id = eml_<16 hex of sha256(raw)>)."""
-    sha = hashlib.sha256(raw).hexdigest()
-    msg = email.message_from_bytes(raw)
-    from_addr = email.utils.parseaddr(msg.get("From", ""))[1].lower()
+def _received_at(msg: email.message.Message, now: datetime) -> str:
     received = now
     if msg.get("Date"):
         try:
@@ -118,49 +100,73 @@ def inbox_row(raw: bytes, *, dns_snapshot: dict[str, Any], now: datetime) -> dic
                 received = received.replace(tzinfo=timezone.utc)
         except (TypeError, ValueError):
             received = now
+    return iso(received.replace(microsecond=0))
+
+
+def inbox_row(raw: bytes, *, now: datetime) -> dict[str, Any]:
+    """Direct `inbox` row (email_id = eml_<16 hex of sha256(raw)>) for when ingest() is unavailable: no DKIM
+    verdict ("none"), so F-DKIM fails closed."""
+    sha = hashlib.sha256(raw).hexdigest()
+    msg = email.message_from_bytes(raw)
+    from_addr = email.utils.parseaddr(msg.get("From", ""))[1].lower()
     email_id = f"eml_{sha[:16]}"
+    from_domain = from_addr.rpartition("@")[2]
+    received_at = _received_at(msg, now)
     return {
         "email_id": email_id, "s3_key": f"inbox-raw/{email_id}.eml", "sha256": sha, "from_addr": from_addr,
-        "from_domain": from_addr.rpartition("@")[2], "subject": str(msg.get("Subject", "")),
-        "received_at": iso(received.replace(microsecond=0)), "dkim": _dkim(raw, dns_snapshot),
+        "from_domain": from_domain, "subject": str(msg.get("Subject", "")), "received_at": received_at,
+        "dkim": dict(_NO_DKIM), "gsi1pk": f"domain#{from_domain}", "gsi1sk": received_at,
+        "raw_b64": base64.b64encode(raw).decode("ascii"),
     }
 
 
-def seed_inbox(emails_dir: Path, *, store: Any, dns_snapshot: dict[str, Any], now: datetime) -> int:
+def seed_inbox(emails_dir: Path, *, store: Any, settings: Any, now: datetime) -> int:
+    try:
+        from executor.facts.dkim import ingest
+    except ImportError:
+        ingest = None
     n = 0
     for path in sorted(emails_dir.glob("*.eml")):
-        store.put("inbox", inbox_row(path.read_bytes(), dns_snapshot=dns_snapshot, now=now))
+        raw = path.read_bytes()
+        if ingest is not None:
+            received_at = _received_at(email.message_from_bytes(raw), now)
+            ingest({"raw_b64": base64.b64encode(raw).decode("ascii"), "received_at": received_at},
+                   store=store, settings=settings)
+        else:
+            store.put("inbox", inbox_row(raw, now=now))
         n += 1
     return n
 
 
-def seed(*, settings: Any = None, data_dir: str = "data", store: Any = None,
+def seed(*, settings: Any = None, data_dir: str | None = None, store: Any = None,
          now: datetime | None = None) -> dict[str, int]:
-    """Load data/vendors.json (+ issuer pins) and data/emails/*.eml into the store; returns counts."""
+    """Load vendors.json (+ issuer pins), enrollment.json and emails/*.eml from `data_dir` (default
+    settings.data_dir) into `store` (default get_store(settings)); returns counts."""
     settings = settings or Settings.from_env()
+    if data_dir is not None and data_dir != settings.data_dir:
+        settings = dataclasses.replace(settings, data_dir=data_dir)  # ingest reads the DNS snapshot from data_dir
     if store is None:
         from executor.store import get_store
 
         store = get_store(settings)
     now = now or datetime.now(timezone.utc)
-    base = Path(data_dir)
+    base = Path(settings.data_dir)
     vendors_path = base / "vendors.json"
     vendors = json.loads(vendors_path.read_text()) if vendors_path.exists() else []
     out = seed_registry(vendors, store=store, settings=settings, keys_dir=base / "issuer_keys", now=now)
-    dns_path = base / "dns_snapshot.json"
-    dns_snapshot = json.loads(dns_path.read_text()) if dns_path.exists() else {}
-    out["emails"] = seed_inbox(base / "emails", store=store, dns_snapshot=dns_snapshot, now=now)
+    out["signers"] = seed_signers(base / "enrollment.json", store=store)
+    out["emails"] = seed_inbox(base / "emails", store=store, settings=settings, now=now)
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
-    ap = argparse.ArgumentParser(description="Seed fictitious demo vendors, issuer pins and emails.")
+    ap = argparse.ArgumentParser(description="Seed fictitious demo vendors, issuer pins, signers and emails.")
     ap.add_argument("--data-dir", default=None, help="default: AIRGAP_DATA_DIR or data/")
     args = ap.parse_args(argv)
     settings = Settings.from_env()
     try:
-        counts = seed(settings=settings, data_dir=args.data_dir or settings.data_dir)
+        counts = seed(settings=settings, data_dir=args.data_dir)
     except NotImplementedError as e:
         print(f"seed: backend not available yet: {e}", file=sys.stderr)
         return 1

@@ -1,24 +1,28 @@
-"""Payee-change FSM v2 guards end to end over FakeStore/FakeAudit (CONTRACTS §6.1, §3.1, §7.2). Owner: WS-D.
+"""Payee-change FSM v2 guards end to end over the real MemoryStore, audit log and challenge issuer (CONTRACTS §6.1,
+§3.1, §7.2). Owner: WS-D.
 
 verify_vc and compute() are replaced by deterministic fakes (machine references them as module attributes); one
-integration test uses the real modules and skips while they are unavailable.
+integration test uses the real modules and skips while they are unavailable; one test drives the flow through
+executor.handler.dispatch with real EIP-191 signatures.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 
 from executor.change import machine as M
-from executor.change import ports
-from executor.config import Settings
+from executor.config import Settings, iso
 from executor.errors import ApiError
 from executor.facts import compute as real_compute
 from executor.models import ChangeEvent, ChangeState
-from tests.fakes import FakeAudit, FakeStore
+from executor.store import KEY_SCHEMA
+from executor.store.memory import MemoryStore
 from vendor import portal
 
 S, E = ChangeState, ChangeEvent
@@ -47,6 +51,46 @@ DOMAIN_BLOCK = {"id": "F-DOMAIN", "kind": "F", "severity": "BLOCK", "label": "lo
                 "display_line": "DOMAIN LOOKALIKE"}
 
 
+class RecordingStore(MemoryStore):
+    """MemoryStore that records committed transactions touching `changes` / `registry` (the activation tx)."""
+
+    def __init__(self, settings: Any) -> None:
+        super().__init__(settings)
+        self.transactions: list[list[Any]] = []
+
+    def transact(self, ops: list[Any], client_request_token: str | None = None) -> bool:
+        ok = super().transact(ops, client_request_token)
+        if ok and any(op.table in ("changes", "registry") for op in ops):
+            self.transactions.append(list(ops))
+        return ok
+
+    def all_rows(self) -> list[tuple[str, dict]]:
+        return [(t, r) for t in KEY_SCHEMA for r in self.scan(t)]
+
+
+class AuditView:
+    """Reads the leaves the real audit log wrote to the store (logs `audit` and `attest`)."""
+
+    def __init__(self, store: MemoryStore) -> None:
+        self.store = store
+
+    @property
+    def leaves(self) -> list[dict]:
+        return [json.loads(r["event"]) for log_id in ("audit", "attest")
+                for r in self.store.query("audit", ("log_id", log_id))]
+
+    def of_type(self, type: str, subject_id: str | None = None) -> list[dict]:
+        return [x for x in self.leaves if x["type"] == type and (subject_id is None or x["subject_id"] == subject_id)]
+
+    def events(self, subject_id: str | None = None) -> list[str]:
+        """change_event kinds in order."""
+        return [x["data"]["event"] for x in self.of_type("change_event", subject_id)]
+
+    def transitions(self, subject_id: str | None = None) -> list[tuple[str | None, str, str]]:
+        return [(x["data"]["from"], x["data"]["to"], x["data"]["event"])
+                for x in self.of_type("state_transition", subject_id)]
+
+
 def _fact(fid: str, sev: str, line: str) -> dict:
     return {"id": fid, "kind": "F", "severity": sev, "label": fid, "display_line": line}
 
@@ -54,10 +98,9 @@ def _fact(fid: str, sev: str, line: str) -> dict:
 class Env:
     def __init__(self, monkeypatch: pytest.MonkeyPatch, settings: Settings):
         self.settings = settings
-        self.store = FakeStore()
-        self.audit = FakeAudit()
+        self.store = RecordingStore(settings)
+        self.audit = AuditView(self.store)
         self.extra: list[dict] = [VOP_OK]
-        monkeypatch.setattr(ports, "emit", self.audit.emit)
         monkeypatch.setattr(M._compute, "compute", self.fake_compute)
         monkeypatch.setattr(M._vc, "verify_vc", self.fake_verify)
         portal.SMS_OUTBOX.clear()
@@ -67,7 +110,7 @@ class Env:
 
     # -- fakes ---------------------------------------------------------------------------------------------
     def fake_compute(self, subject: dict, state: dict, now: datetime) -> dict:
-        payee, change = state["payee"], state["change"]
+        payee, change = state["payee"], state.get("change") or {}  # the handler's first pass has change None
         in_net, bg = bool(payee.get("in_network")), bool(change.get("break_glass"))
         k = len({r["issuer_class"] for r in state.get("attest_results") or [] if r["ok"]})
         if bg:
@@ -82,13 +125,13 @@ class Env:
             facts.append(_fact("F-CALLBACK", "INFO", "CALLBACK OK") if ok else _fact("F-CALLBACK", "BLOCK",
                                                                                      "CALLBACK MISSING"))
         ordered = real_compute.order_facts(facts + [dict(f) for f in self.extra])
-        return {"subject_id": subject["subject_id"], "computed_at": "x", "facts": ordered,
+        return {"subject_id": subject.get("subject_id", ""), "computed_at": "x", "facts": ordered,
                 "facts_digest": real_compute.facts_digest(ordered), "snapshots": {},
                 "max_severity": real_compute.max_severity(ordered)}
 
     @staticmethod
     def fake_verify(vc: str, change: dict, *, pins: list, now: datetime, revoked=None) -> dict:
-        kind, _, val = vc.partition(":")
+        kind, _, val = vc.replace("~", ":").partition(":")  # "~" form passes vc_submit.request
         sha = hashlib.sha256(vc.encode()).hexdigest()
         if kind == "ok":
             return {"ok": True, "issuer_class": val, "iss": f"https://{val}.example", "error": None,
@@ -200,7 +243,8 @@ def test_one_vc_stays_pending_attest_no_challenge(env: Env):
     assert env.advance(ch, T0 + timedelta(minutes=30))["state"] == "PENDING_ATTEST"
     assert env.audit.of_type("challenge") == []
     rows = env.store.query("attestations", ("change_id", ch["change_id"]))
-    assert [r["n"] for r in rows] == [1, 2] and all(re.fullmatch(r"[0-9a-f]{64}", r["commitment"]) for r in rows)
+    assert [(r["n"], r["sk"]) for r in rows] == [(1, "vc#000001"), (2, "vc#000002")]
+    assert all(re.fullmatch(r"[0-9a-f]{64}", r["commitment"]) for r in rows)
     att_leaves = env.audit.of_type("attestation")
     assert att_leaves and all(x["log_id"] == "attest" and "iban" not in x["data"] for x in att_leaves)
 
@@ -311,7 +355,9 @@ def test_activation_conflict_writes_nothing(env: Env):
     ch = env.sig_clerk()
     env.sign(ch, "clerk", CLERK, now=T0 + timedelta(seconds=30))
     env.store.update_if("registry", {"vendor_id": M.META_KEY}, {"registry_version": 7}, {})
-    env.store.transact = lambda ops, client_request_token=None: False  # a racing writer
+    real = env.store.transact
+    env.store.transact = lambda ops, client_request_token=None: (  # a racing writer
+        False if any(op.table == "changes" for op in ops) else real(ops, client_request_token))
     assert _err(env.sign, ch, "treasury", TREASURY, now=T0 + timedelta(seconds=31)) == "state_conflict"
     assert env.get(ch)["state"] == "SIG_TREASURY"
     assert env.store.get("registry", {"vendor_id": ACME["vendor_id"]})["iban"] == ACME["iban"]
@@ -551,9 +597,8 @@ def test_activation_sets_bic_of_the_new_bank(env: Env):
 
 def test_integration_real_compute_verifier_and_issuers(monkeypatch: pytest.MonkeyPatch):
     """Real compute(), verify_vc() and DEMO-ONLY issuers: 2 real SD-JWT VCs -> COOLING -> clerk CHG challenge."""
-    store, audit = FakeStore(), FakeAudit()
-    monkeypatch.setattr(ports, "emit", audit.emit)
     settings = Settings()
+    store = MemoryStore(settings)
     try:
         from executor.attest import trust
         from executor.issuers import issuer
@@ -585,7 +630,7 @@ def test_integration_real_compute_verifier_and_issuers(monkeypatch: pytest.Monke
     assert out["state"] == "SIG_CLERK" and "ROLE CLERK 1/2" in out["pending_challenge"]["text"]
 
 
-def test_seed_registry_and_inbox(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_seed_registry_signers_and_inbox(tmp_path):
     from cryptography.hazmat.primitives.asymmetric import ec
 
     from tools import seed_data
@@ -599,22 +644,127 @@ def test_seed_registry_and_inbox(tmp_path, monkeypatch: pytest.MonkeyPatch):
         (keys / f"{cls}.jwk").write_text(json.dumps(jwk))
     vendors = [{k: v for k, v in x.items() if k != "issuer_pins"} for x in (ACME, BETA)]
     (tmp_path / "vendors.json").write_text(json.dumps(vendors))
+    (tmp_path / "enrollment.json").write_text(json.dumps({"version": 1, "signers": [
+        {"address": CLERK.upper().replace("0X", "0x"), "role": "clerk", "device": "GENUINE", "active": True,
+         "ceremony": {"text": "AG1/DEMO ENROLL"}},
+        {"address": TREASURY, "role": "treasury", "device": "EMULATOR", "active": True}]}))
     (tmp_path / "emails").mkdir()
     raw = (b"From: ACME Finance <finance@acme.cz>\r\nTo: ap@buyer.example\r\nSubject: New bank account\r\n"
            b"Date: Mon, 19 Oct 2026 09:15:00 +0000\r\n\r\nPlease update our IBAN.\r\n")
     (tmp_path / "emails" / "01_legit.eml").write_bytes(raw)
     (tmp_path / "dns_snapshot.json").write_text("{}")
-    store = FakeStore()
-    out = seed_data.seed(settings=Settings(), data_dir=str(tmp_path), store=store, now=T0)
-    assert out == {"vendors": 2, "pins": 3, "emails": 1}
+    settings = Settings()
+    store = MemoryStore(settings)
+    out = seed_data.seed(settings=settings, data_dir=str(tmp_path), store=store, now=T0)
+    assert out == {"vendors": 2, "pins": 3, "signers": 2, "emails": 1}
     acme = store.get("registry", {"vendor_id": "ven_12345678"})
     assert sorted(p["issuer_class"] for p in acme["issuer_pins"]) == ["registry", "supplier-bank", "supplier-erp"]
     assert all(len(p["jwk_thumbprint"]) == 43 for p in acme["issuer_pins"])
     assert store.get("registry", {"vendor_id": "ven_87654321"})["issuer_pins"] == []
     meta = store.get("registry", {"vendor_id": "registry#meta"})
-    assert meta["registry_version"] == 1 and re.fullmatch(r"[0-9a-f]{64}", meta["registry_hash"])
+    from executor.policy.mandate import registry_snapshot
+
+    assert meta["registry_version"] == 1 and meta["registry_hash"] == registry_snapshot(store)["hash"]
+    clerk = store.get("enrolled_signers", {"address": CLERK})
+    assert clerk["device"] == "GENUINE" and "ceremony" not in clerk
     (row,) = store.scan("inbox")
     assert row["email_id"] == "eml_" + hashlib.sha256(raw).hexdigest()[:16]
     assert row["from_domain"] == "acme.cz" and row["received_at"] == "2026-10-19T09:15:00Z"
     assert row["dkim"]["result"] in ("pass", "fail", "none")  # no DKIM-Signature: never "pass"
-    assert row["dkim"]["result"] != "pass"
+    assert [json.loads(r["event"])["type"] for r in store.query("audit", ("log_id", "audit"))] == ["ingest"]
+    # a second run is idempotent on the inbox and bumps the registry version
+    assert seed_data.seed(settings=settings, data_dir=str(tmp_path), store=store, now=T0)["emails"] == 1
+    assert len(store.scan("inbox")) == 1
+    assert store.get("registry", {"vendor_id": "registry#meta"})["registry_version"] == 2
+
+
+def test_seed_default_store_and_repo_data():
+    from tools import seed_data
+
+    out = seed_data.seed(settings=Settings(), now=T0)  # get_store(Settings()) -> memory backend
+    assert out["vendors"] >= 2 and out["pins"] >= 3 and out["signers"] >= 2 and out["emails"] >= 1
+
+
+# --------------------------------------------------------------------------- through executor.handler
+
+
+def test_handler_dispatch_change_flow(env: Env):
+    """WS-A's handler drives the FSM: POST /changes, VC submit (AttestResult in the response), lazy advance on GET,
+    clerk + treasury CHG signatures, signed CHG_REJECT, portal NOT-US and callback codes."""
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+
+    from executor import handler
+    from executor.store import seed
+
+    clerk, treasury = Account.create(), Account.create()
+    seed.enroll_signer(env.store, clerk.address, "clerk", device="GENUINE")
+    seed.enroll_signer(env.store, treasury.address, "treasury")
+
+    def call(method: str, path: str, body: Any = None, principal: str | None = None, now: datetime = T0):
+        ctx = handler.Context(dataclasses.replace(env.settings, fake_now=iso(now)), env.store)
+        return handler.dispatch(method, path, None, body, principal=principal, ctx=ctx)
+
+    def sign(ch: dict, acct: Any, now: datetime):
+        sig = acct.sign_message(encode_defunct(text=ch["text"])).signature.hex()
+        body = {"nonce": ch["nonce"], "role": ch["role"], "sig": sig if sig.startswith("0x") else "0x" + sig}
+        return call("POST", "/signatures", body, "host", now)
+
+    st, r = call("POST", "/changes", {"vendor_id": ACME["vendor_id"], "new_iban": NEW_IBAN}, "tools")
+    assert st == 201 and r["change"]["state"] == "PENDING_ATTEST" and r["decision"]["decision"] == "pending", r
+    handler.validate(r, "change_create.response")
+    cid = r["change"]["change_id"]
+    st, r = call("POST", f"/changes/{cid}/attestations", {"vc": "ok~supplier-erp"}, "issuer")
+    assert st == 200 and r["attest"]["ok"] is True and r["change"]["attest_count"] == 1, r
+    handler.validate(r, "vc_submit.response")
+    st, r = call("POST", f"/changes/{cid}/attestations", {"vc": "bad~kb_jwt_invalid"}, "issuer")
+    assert st == 403 and r["error"] == "kb_jwt_invalid", r
+    st, r = call("POST", f"/changes/{cid}/attestations", {"vc": "ok~supplier-bank"}, "vendor_portal")
+    assert st == 200 and r["change"]["state"] == "COOLING", r
+    st, r = call("GET", f"/changes/{cid}", now=T0 + timedelta(seconds=20))
+    assert st == 200 and r["state"] == "SIG_CLERK", r
+    handler.validate(r, "change")
+    t1 = T0 + timedelta(seconds=30)
+    st, r = sign(r["pending_challenge"], clerk, t1)
+    assert st == 200 and r["effect"] == {"type": "change_advanced", "state": "SIG_TREASURY"}, r
+    assert r["challenge"]["role"] == "treasury" and r["change"]["signatures"][0]["address"] == clerk.address.lower()
+    handler.validate(r, "signature_submit.response")
+    st, r = sign(r["challenge"], treasury, t1)
+    assert st == 200 and r["effect"] == {"type": "change_advanced", "state": "ACTIVE"}, r
+    assert env.store.get("registry", {"vendor_id": ACME["vendor_id"]})["iban"] == NEW_IBAN
+    signed = [(x["data"]["purpose"], x["data"]["accepted"]) for x in env.audit.of_type("signature", cid)]
+    assert signed == [("CHG", True), ("CHG", True)]
+
+    # host reject: CHG_REJECT challenge, the clerk's signature rejects
+    st, r = call("POST", "/changes", {"vendor_id": BETA["vendor_id"], "new_iban": "CZ7501000000001155443322"}, "tools")
+    assert st == 201 and r["change"]["state"] == "CALLBACK_PENDING", r
+    b = r["change"]["change_id"]
+    st, r = call("POST", f"/callbacks/{b}", {"code": _wrong(env.code(b)), "outcome": "confirm"}, "vendor_portal")
+    assert st == 403 and r["error"] == "callback_code_invalid", r
+    st, r = call("POST", f"/changes/{b}/reject", {"reason": "duplicate request"}, "host")
+    assert st == 200 and r["challenge"]["purpose"] == "CHG_REJECT", r
+    st, r = sign(r["challenge"], clerk, T0 + timedelta(seconds=40))
+    assert st == 200 and r["effect"] == {"type": "change_rejected", "state": "REJECTED"}, r
+    assert r["change"]["history"][-1]["actor"] == "host"
+    assert env.audit.transitions(b)[-1] == ("CALLBACK_PENDING", "REJECTED", "CLERK_REJECT_SIGNED")
+
+    # portal NOT US and callback confirm through the handler
+    st, r = call("POST", "/changes", {"vendor_id": BETA["vendor_id"], "new_iban": "CZ7501000000001155443322"}, "tools")
+    c = r["change"]["change_id"]
+    st, r = call("POST", f"/callbacks/{c}", {"code": env.code(c), "outcome": "confirm"}, "vendor_portal")
+    assert st == 200 and r["state"] == "COOLING", r
+    st, r = call("POST", f"/changes/{c}/reject", {"reason": "not us"}, "vendor_portal")
+    assert st == 200 and r["change"]["state"] == "REJECTED", r
+    assert r["change"]["history"][-1] == {"from": "COOLING", "to": "REJECTED", "at": "2026-10-19T12:00:00Z",
+                                          "reason": "not us", "actor": "vendor_portal"}
+
+
+def test_forbidden_transition_is_state_conflict_through_the_handler(env: Env):
+    from executor import handler
+
+    ch = env.cooling()
+    ctx = handler.Context(dataclasses.replace(env.settings, fake_now=iso(T0)), env.store)
+    st, r = handler.dispatch("POST", f"/callbacks/{ch['change_id']}", None, {"code": "123456", "outcome": "confirm"},
+                             principal="vendor_portal", ctx=ctx)
+    assert st == 409 and r["error"] == "state_conflict", r
+    assert env.get(ch)["state"] == "COOLING"
