@@ -229,7 +229,7 @@ DEFS = {
 
 AUDIT_DATA_REQUIRED = {
     "enroll": ["address", "role", "label", "device", "device_model", "firmware_version", "cert_chain_sha256",
-               "fw_hash", "derivation_path", "enroll_sig"],
+               "fw_hash", "derivation_path", "enroll_sig", "active"],
     "ingest": ["email_id", "sha256", "from_domain", "received_at", "dkim"],
     "challenge": ["nonce", "nonce_secret_sha256", "purpose", "role", "subject_id", "deployment", "profile",
                   "text_sha256", "subject_hash", "exp"],
@@ -256,7 +256,7 @@ assert set(AUDIT_DATA_REQUIRED) == set(EVENT_TYPES)
 DATA_ENUMS = {
     "change_event": {"event": {"enum": [k.value for k in ChangeEventKind]}},
     "state_transition": {"event": {"enum": [e.value for e in ChangeEvent]}},
-    "enroll": {"device": {"enum": ["GENUINE", "EMULATOR"]}},
+    "enroll": {"device": {"enum": ["GENUINE", "EMULATOR"]}, "active": {"type": "boolean"}},
     "attack_simulated": {"level": {"enum": ATTACKER_LEVELS}},
     "tool_call": {"result": {"enum": ["ok", "forbidden", "error"]}},
     "iam_deny_mirror": {"source": {"enum": ["simulate", "boto3", "cloudtrail"]}},
@@ -855,7 +855,8 @@ AUDIT_EVENTS = {
     "enroll": ev(0, "enroll", "signer#" + CLERK, {
         "address": CLERK, "role": "clerk", "label": "Clerk (Trezor Safe 5)", "device": "GENUINE",
         "device_model": "T3T1", "firmware_version": "2.12.5", "cert_chain_sha256": _h("optiga-chain"),
-        "fw_hash": _h("fw-2.12.5"), "derivation_path": "m/44'/60'/0'/0/0", "enroll_sig": _sig("enroll")}),
+        "fw_hash": _h("fw-2.12.5"), "derivation_path": "m/44'/60'/0'/0/0", "enroll_sig": _sig("enroll"),
+        "active": True}),
     "ingest": ev(20, "ingest", "eml_a1b2c3d4e5f60718", {
         "email_id": "eml_a1b2c3d4e5f60718", "sha256": _h("eml1"), "from_domain": "acme.cz",
         "received_at": "2026-10-19T11:58:00Z", "dkim": {"result": "pass", "d": "acme.cz"}}, actor="ingest"),

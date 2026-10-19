@@ -694,7 +694,7 @@ restrictions the output is byte-identical to RFC 8785 JCS (`tests/test_canonical
 
 | type | data (required fields) |
 |---|---|
-| `enroll` | `address, role, label, device (GENUINE\|EMULATOR), device_model, firmware_version, cert_chain_sha256, fw_hash, derivation_path, enroll_sig` |
+| `enroll` | `address, role, label, device (GENUINE\|EMULATOR), device_model, firmware_version, cert_chain_sha256, fw_hash, derivation_path, enroll_sig, active (bool)` — the latest `enroll` leaf per (address, role) is authoritative; deactivation = a new `enroll` leaf with `active: false` (`executor.store.signers.deactivate()`) |
 | `ingest` | `email_id, sha256, from_domain, received_at, dkim` |
 | `challenge` | `nonce, nonce_secret_sha256, purpose, role, subject_id, deployment, profile, text_sha256, subject_hash, exp, template, params` (`template` + exact render `params` so the offline verifier re-renders the signed text and checks `text_sha256` and the EIP-191 signature, S2) |
 | `mandate_signed` | `mandate_id, mandate_no, signer_address, role, nonce, sig_index, sig_total, status, fields{...}` |
