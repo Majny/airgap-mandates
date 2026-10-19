@@ -1,17 +1,17 @@
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=deltastavby.cz;
- i=@deltastavby.cz; q=dns/txt; s=demo2026; t=1792395600; h=from : to :
+ i=@deltastavby.cz; q=dns/txt; s=demo2026; t=1791790800; h=from : to :
  subject : date : message-id : mime-version : content-type;
- bh=e1w4Yl13TxX3okdx2U3qM3ejc4drixQM2jKtcrAkJlI=;
- b=l8b2Dvw6rawUP54rtZjWEFgYNbYaXKm6a2Tm/r54230SW83QDeqyX8oqKAzmYaFFgqg5T
- V7SoP2d2xTL5BPZ31UbBfLUlBSTR/C2s9lQHxdWe2yPUAmB6adEjgfKyTiBN6y0HY0TUBaf
- 2R0+jLUeQ/6PdEt+QtpenHc4I2I1f689ep1z9YCm1U7P3rGrOo+l7ZIcUOCbCurrQ/oVTDb
- 5IAHKQiCyKOMrxBF0RLqjUyon5XVUKiXRMTGYx1BePplF9XcQw+nHRXnFVV9xQiu0hQh4R2
- azPP2p+1z/GDMcp9Lif9eJ0bsQWXF2bwqZes3LwRI1qmUj4sXzoUs9V/LDqQ==
+ bh=2BBOu9V7qirzUAKmct/oAy0e1HHrylWvnlELv0m/XdM=;
+ b=bdN1a9a0USciuvMoMlSIDo5rNi1Je+MMvB1Djmz4NFhjQhlncK9t+HtQ62x1jmvEnFnXX
+ 4YgSBuQXhspdubUYR+EW+euPw4ws6GIWQxP2jmNwxH013BC1VUW344wjV2xRDQi7aqC94k3
+ KRS6dbLszmDrnk89xthF3VCE7d5QsNh2A1/K7mj6AbCup5goKUZybbwbkaDqUr4jITE4nhv
+ FojWCETIH19YjvPhjsQHs1N5z1Td+f77z+72Yew8reWLr0ihkS0WwPSFxJTbqv0Yyqi2/bG
+ xsauPOUmSeNNgEaL0lcKI5p6me1b2yCMTWHjZNuS0nFibYWUpzF3lLa9at4w==
 From: Tomas Kral <fakturace@deltastavby.cz>
 To: Accounts Payable <ap@buyer-demo.example>
 Subject: Invoice DS-2026-0777
-Date: Mon, 19 Oct 2026 07:40:00 +0000
-Message-ID: <09_delta_invoice_overcap.20261019@deltastavby.cz>
+Date: Mon, 12 Oct 2026 07:40:00 +0000
+Message-ID: <09_delta_invoice_overcap.20261012@deltastavby.cz>
 MIME-Version: 1.0
 X-AirGap-Fixture: synthetic; scenario=overcap_invoice
 Content-Type: multipart/mixed; boundary="=_airgap_09_boundary"
@@ -25,7 +25,7 @@ Dear colleagues,
 please find attached invoice DS-2026-0777 for construction works, phase 2 (fictitious).
 
 Amount: CZK 125 000.50
-Due date: 2026-10-21
+Due date: 2026-10-19
 Variable symbol: 20260777
 Account: CZ5201000000007788990011 (as registered)
 
@@ -42,8 +42,8 @@ Content-Transfer-Encoding: 7bit
 <Invoice xmlns="http://isdoc.cz/namespace/2013" version="6.0.2">
   <!-- ISDOC-like FICTITIOUS demo invoice (AirGap Mandates fixture) -->
   <ID>DS-2026-0777</ID>
-  <IssueDate>2026-10-19</IssueDate>
-  <DueDate>2026-10-21</DueDate>
+  <IssueDate>2026-10-12</IssueDate>
+  <DueDate>2026-10-19</DueDate>
   <Supplier><Name>Delta Stavby s.r.o.</Name><ICO>77665546</ICO></Supplier>
   <Line><Description>Construction works, phase 2 (fictitious)</Description></Line>
   <PayableAmount currency="CZK">125000.50</PayableAmount>
