@@ -20,9 +20,12 @@ export AWS_PROFILE=hackathon
 ## T-60 min: reset routine (Tue 11:00, after the 06:00 policy freeze)
 
 1. AWS owner: `make demo-reset` (= `python -m infra.reset_state --yes`; wipes 7 tables, seeds registry +
-   `data/enrollment.json` signers with their `enroll` leaves, first checkpoint; ~72 s). Add `--fallback-clerk` only
+   `data/enrollment.json` signers with their `enroll` leaves, resets W2's litewitness state for our origin, first
+   checkpoint; ~72 s). Add `--fallback-clerk` only
    if the fallback switch is decided before the demo. Then `python -m infra.load_inbox --url $API` (8 emails, 5 s).
-   Nobody else resets.
+   Nobody else resets. W2 cosigns every checkpoint automatically (checkpointer tick -> `witness.relay_w2.after_tick`
+   over SSM); manual fallback: `python -m witness.relay_w2 --executor-url $API --aws-role airgap-relay --read-role
+   airgap-auditor --w2-ssm i-0bc5865c1ddae7b1d` with `AIRGAP_W2_VKEY` set.
 2. **While online:** `make .local/bin/noteverify` (Go build; the offline beat cannot build it with Wi-Fi off).
 3. Re-seal the stage bundle once the freeze build is deployed: `make demo-bundle` (refuses unless green), then
    `make offline-demo` once to see ALL PASS.
