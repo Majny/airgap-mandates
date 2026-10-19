@@ -115,5 +115,20 @@
     },
     "claimed_iban": "CZ2003000000002001234567",
     "bank_letter_ref": "BCL-2026-0918"
+  },
+  {
+    "file": "09_delta_invoice_overcap.eml",
+    "email_id": "eml_8a5241b9da0f73e2",
+    "from_domain": "deltastavby.cz",
+    "received_at": "2026-10-19T07:40:00Z",
+    "scenario": "overcap_invoice",
+    "attack": false,
+    "vendor_id": "ven_77665546",
+    "expected_facts": {
+      "F-DKIM": "DKIM PASS",
+      "F-DOMAIN": "DOMAIN MATCH"
+    },
+    "invoice": "delta_ds-2026-0777.json",
+    "note": "S1 step-up: above the per-payment cap, no other payment to this vendor that day"
   }
 ]
