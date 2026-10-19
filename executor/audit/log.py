@@ -165,8 +165,13 @@ def export(log_id: str, from_seq: int = 0, *, redact: bool = False, store: Any, 
                   for r in leaves(log_id, from_seq, store=store)]
     notes = [r["note"] for r in sorted(store.query("checkpoints", checkpoint_pk(log_id)), key=lambda r: int(r["size"]))]
     vk = cp.vkeys(settings)
-    approvers = [{"address": e["data"]["address"], "role": e["data"]["role"], "device": e["data"]["device"],
-                  "enroll_seq": le["seq"]} for le in out_leaves if (e := le["event"])["type"] == "enroll"]
+    latest: dict[tuple[str, str], dict[str, Any]] = {}  # one approvers row per (address, role): its latest enroll leaf
+    for le in out_leaves:
+        if (e := le["event"])["type"] == "enroll":
+            d = e["data"]
+            latest[(d["address"], d["role"])] = {"address": d["address"], "role": d["role"], "device": d["device"],
+                                                 "enroll_seq": le["seq"]}
+    approvers = list(latest.values())
     material = rules.policy_material()
     return {"log_id": log_id, "redacted": 0, "leaves": out_leaves, "checkpoints": notes,
             "pubkeys": {"log": vk["log"], "w1": vk["w1"], "w2": w2_vkey(settings)},
