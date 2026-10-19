@@ -577,11 +577,6 @@ def test_s8_audit_after_legit_change():
         assert not [b for b in blobs if rx.search(b)], code
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "executor/handler.py (WS-A) _apply_signature CHG branch appends the accepted `signature` leaf AFTER "
-    "machine.on_signature() has written the SIG_TREASURY->ACTIVE state_transition leaf, so tools/verify_audit.py "
-    "(WS-B) _check_changes reports 'reached ACTIVE without accepted CHG signatures'. Fix: pass "
-    "on_accept=sig_leaf to on_signature() and drop the later sig_leaf() call"))
 def test_s8_verify_audit_accepts_an_export_of_the_run():
     from tools import verify_audit
 

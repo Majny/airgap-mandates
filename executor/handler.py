@@ -378,7 +378,7 @@ def post_break_glass(ctx: Context, p: dict, q: dict, body: Any, principal: str |
     body = validate(body, "break_glass.request")
     _change_or_404(ctx, p["change_id"])
     c = _machine().transition(p["change_id"], ChangeEvent.BREAK_GLASS, payload=body, store=ctx.store,
-                              settings=ctx.settings, now=_now(ctx))
+                              settings=ctx.settings, now=_now(ctx), actor=principal or "vendor_portal")
     return 200, _change_out(c)
 
 
@@ -502,9 +502,9 @@ def _apply_signature(ctx: Context, row: dict, signer: str, sig: str, now: dateti
         return _apply_pay(ctx, row, signer, now, sig_leaf)
     if purpose == "CHG":
         c = _change_or_404(ctx, row["subject_id"])
+        # the accepted signature leaf must precede the state_transition leaf it causes (verify_audit ordering)
         c = _machine().on_signature(c, role=row["role"], signer_address=signer, nonce=row["nonce"], store=st,
-                                    settings=settings, now=now)
-        sig_leaf()
+                                    settings=settings, now=now, on_accept=sig_leaf)
         out = {"effect": {"type": "change_advanced", "state": c["state"]}, "change": _change_out(c)}
         if c.get("pending_challenge") and c["state"] == "SIG_TREASURY":
             out["challenge"] = c["pending_challenge"]
