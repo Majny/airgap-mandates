@@ -2,8 +2,7 @@
 
 Account 503002144042, region eu-central-1, role `AWSReservedSSO_ai-hackathon-TeamAdmin`.
 Probed Mon 19 Oct 2026 ~14:15-14:30 CEST. Round 1 = read-only probes and test calls only.
-Probes that create resources (IAM role, Lambda, KMS keys, buckets, VPC endpoints) are PENDING:
-they need explicit human approval first.
+Round 2 (after human approval "APPROVE AWS", Mon ~15:30): resource probes ran as part of the real deploy; see below.
 
 ## Summary
 
@@ -67,3 +66,26 @@ All named `airgap-probe-*`, tagged `project=airgap-mandates`, deleted right afte
 6. Guardrail with PROMPT_ATTACK + IBAN regex, ApplyGuardrail on an injected text.
 7. AgentCore Gateway create (MCP, AWS_IAM authorizer).
 8. VPC (no IGW/NAT) + interface endpoints `bedrock-runtime`, `execute-api`; Flow Logs.
+
+## Round 2: confirmed by the deployed stack (Mon 19 Oct, after "APPROVE AWS")
+
+| Item | Status | Evidence |
+|---|---|---|
+| Lambda py3.12 arm64 + REST API (regional IAM + private) | GO | stack `AirgapMandates`; `/health` 200 |
+| DynamoDB `TransactWriteItems` | GO | S1 executions (`infra/evidence/aws_e2e*.txt`) |
+| KMS Ed25519 Sign | GO | signed-note checkpoints verified by stock Go `sumdb/note` (WS-B) |
+| S3 Object Lock GOVERNANCE 1 d | GO | delete without bypass -> AccessDenied (WS-B) |
+| Guardrails create + ApplyGuardrail | GO | `airgap-a1` in the stack |
+| AgentCore Gateway (MCP, AWS_IAM) | GO | create -> READY -> deleted (probe); not on the demo path |
+| VPC no-NAT + endpoints + Flow Logs + DNS Firewall | GO | S10 probe; Resolver query log NXDOMAIN/BLOCK |
+| EventBridge Scheduler | GO | tick 1 min (Scheduler minimum), anchor 5 min |
+| W2 litewitness on EC2 (t4g.nano) | GO | 3-signature checkpoints log + W1 + W2 (WS-B, `docs/audit/aws-main-mon`) |
+| Account Lambda concurrency | LIMIT | **10 in total**; reserved concurrency impossible (AWS keeps 10 unreserved) |
+
+## Known residuals (security review, low severity, open)
+
+- Typed `invoice_no` can still carry very short imperative-looking values within its shape budget (e.g. `STOP/00`);
+  the planner sees them as data only, and no money path depends on them.
+- A later body-only "reminder" email for an already paid invoice with a different VS / due date is not linked to
+  the first payment by the tools λ; the executor's I-DUP / F-SPLIT and the human step-up remain the gate.
+- Lambda pool of 10 means overlapping ticks are possible; W2 answers 409 and the relay catches up.
