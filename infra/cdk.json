@@ -1,0 +1,8 @@
+{
+  "app": ".venv/bin/python app.py",
+  "context": {
+    "deployment_id": "DEMO",
+    "w2": "true",
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

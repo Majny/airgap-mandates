@@ -1,4 +1,0 @@
-# AWS IaC (eu-central-1; the demo runs here). Owner: WS-E. CONTRACTS.md v2 §3, §9, S7, S10.
-# TODO WS-E: executor Lambda + HTTP API, witness Lambda (separate role + KMS key),
-# DynamoDB tables per CONTRACTS.md v2 §3.1 (ledger, mandates, audit, registry, witness_state, main, portal), S3 inbox bucket, S3 anchor bucket
-# with Object Lock (GOVERNANCE, 1 day), KMS Ed25519 keys (log, W1), agent role with explicit Deny (infra/iam/).

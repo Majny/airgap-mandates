@@ -46,8 +46,10 @@ DESCRIPTIONS = {
     "mandate.status": "Remaining payment mandate budget and count.",
     "payment.propose": "Propose paying an invoice to the vendor's registered account. invoice_ref is the doc_id.",
     "payee.request_change": "Request a change of the vendor's bank account (verified out of band by humans).",
-    "mail.send_template": "Send a fixed-template email (ack_invoice, payment_scheduled, request_resend, "
-                          "query_amount) to a registered supplier address.",
+    "mail.send_template": "Send a fixed-template email to a registered supplier address. template_id and its "
+                          "required vars: ack_invoice {invoice_no}; payment_scheduled {invoice_no, date}; "
+                          "request_resend {invoice_no}; query_amount {invoice_no, po}. Var values: letters, digits, "
+                          "space and . _ / : - only, max 40 chars.",
 }
 _REQUIRED = {"inbox.read": ["email_id"], "invoice.extract": ["doc_id"],
              "payment.propose": ["vendor_id", "invoice_ref", "invoice_no", "amount_minor", "currency", "reason_code"],
