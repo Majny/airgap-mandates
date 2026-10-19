@@ -8,7 +8,7 @@ Draft for the pitch lead. Rules:
 Run IDs:
 - **QA** = `20261019T150142_qwen-qwen3-235b-a22b-2507-v1_pitch-attack`
 - **QB** = `20261019T153447_qwen-qwen3-235b-a22b-2507-v1_pitch-benign-v2`
-- **SC** = `scripted_462ade534575`
+- **SC** = `scripted_64ff276755d5`
 - **SA** = `20261019T153447_eu-anthropic-claude-sonnet-4-5-20250929-v1_sonnet-spot-attack`
 
 ---
