@@ -128,7 +128,7 @@ def test_cli_receipt(r, env, tmp_path, capsys):
     assert "RESULT: OK" in capsys.readouterr().out
     bp = tmp_path / "b.json"
     bp.write_text(json.dumps(log.export("audit", store=store, settings=settings)), encoding="utf-8")
-    assert va.main([str(bp), "--receipt", str(rp)]) == 0
+    assert va.main([str(bp), "--no-replay", "--receipt", str(rp)]) == 0
     capsys.readouterr()
     r["entry"]["data"]["amount_minor"] += 1
     rp.write_text(json.dumps(r), encoding="utf-8")

@@ -454,79 +454,33 @@ def _check_executions(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
             ctx.bad(f"seq {seq}: execution {tx} has no ledger row", seq)
 
 
-# 7. decide() replay at the logged policy_hash (S12)
-def decide_available() -> bool:
-    """False while executor/policy/decide.py still raises NotImplementedError."""
-    from executor.policy import decide as dmod
-
-    try:
-        dmod.decide({}, {"subject_id": "", "computed_at": "", "facts": [], "facts_digest": "", "snapshots": {},
-                         "max_severity": "INFO"}, {}, {})
-    except NotImplementedError:
-        return False
-    except Exception:  # noqa: BLE001 - implemented, merely unhappy with the dummy inputs
-        return True
-    return True
-
-
-def _replay_inputs(seq: int, ev: dict[str, Any], by_subject: dict[tuple[str, str], dict[str, Any]]
-                   ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None:
-    """(subject, facts, state) from the decision leaf ('inputs') or proposal/facts leaves + data 'state'."""
-    d = ev.get("data") or {}
-    if isinstance(d.get("inputs"), dict):
-        i = d["inputs"]
-        return i.get("subject"), i.get("facts"), i.get("state")
-    sid = d.get("subject_id") or ev.get("subject_id")
-    prop, facts = by_subject.get(("proposal", sid)), by_subject.get(("facts", sid))
-    if prop is None or facts is None or not isinstance(d.get("state"), dict):
-        return None
-    fd = facts["data"]
-    factset = {"subject_id": sid, "computed_at": facts.get("ts"), "facts": fd.get("facts", []),
-               "facts_digest": facts.get("facts_digest"), "snapshots": fd.get("snapshots", {}),
-               "max_severity": max((f.get("severity", "INFO") for f in fd.get("facts", [])),
-                                   key=["INFO", "WARN", "BLOCK"].index, default="INFO")}
-    return prop["data"], factset, d["state"]
-
-
+# 7. decide() replay at the logged policy_hash (S12): WS-A's replay_decision on every decision leaf (incl. rechecks)
 def _check_replay(bundle: dict[str, Any], events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
-    decisions = [(s, e) for s, e in events if e.get("type") == "decision"]
-    if not decisions:
-        return
-    if not decide_available():
-        ctx.checked["replay_unavailable"] = len(decisions)
-        ctx.note("decide() replay " + _SKIP_UPSTREAM.format("executor/policy/decide.py"))
-        return
-    from executor.policy.decide import decide
+    from executor.policy.decide import replay_decision
 
     policies = bundle.get("policies") or {}
-    by_subject: dict[tuple[str, str], dict[str, Any]] = {}
     for seq, ev in events:
-        if ev.get("type") in ("proposal", "facts"):
-            by_subject[(ev["type"], ev.get("subject_id"))] = ev
-        elif ev.get("type") == "decision":
-            inputs = _replay_inputs(seq, ev, by_subject)
-            material = policies.get(ev.get("policy_hash"))
-            if inputs is None:
-                ctx.count("replay_no_inputs")
-                continue
-            if material is None:
-                ctx.bad(f"seq {seq}: cannot replay, policy {str(ev.get('policy_hash'))[:12]} not in bundle", seq)
-                continue
-            try:
-                got = decide(*inputs, material)
-            except Exception as exc:  # noqa: BLE001 - any failure to replay is a finding
-                ctx.bad(f"seq {seq}: decide() replay raised {type(exc).__name__}: {exc}", seq)
-                continue
-            d = ev.get("data") or {}
-            if got.get("decision") != d.get("decision") or sorted(got.get("rule_ids") or []) != sorted(
-                    d.get("rule_ids") or []):
-                ctx.bad(f"seq {seq}: replay gives {got.get('decision')} {got.get('rule_ids')}, leaf says "
-                        f"{d.get('decision')} {d.get('rule_ids')}", seq)
-            else:
-                ctx.count("replayed")
-    if ctx.checked.get("replay_no_inputs"):
-        ctx.note(f"decide() replay SKIPPED for {ctx.checked['replay_no_inputs']} decisions: the bundle does not "
-                 "carry their decide() state inputs")
+        if ev.get("type") != "decision":
+            continue
+        if not isinstance((ev.get("data") or {}).get("inputs"), dict):
+            ctx.bad(f"seq {seq}: decision leaf carries no data.inputs, cannot replay", seq)
+            continue
+        material = policies.get(ev.get("policy_hash"))
+        if material is None:
+            ctx.bad(f"seq {seq}: cannot replay, policy {str(ev.get('policy_hash'))[:12]} not in bundle", seq)
+            continue
+        try:
+            match, got = replay_decision(ev, material)
+        except Exception as exc:  # noqa: BLE001 - any failure to replay is a finding
+            ctx.bad(f"seq {seq}: decide() replay failed: {type(exc).__name__}: {exc}", seq)
+            continue
+        if not match:
+            d = ev["data"]
+            detail = got.get("error") or (f"replay gives {got.get('decision')} {got.get('rule_ids')}, leaf says "
+                                          f"{d.get('decision')} {d.get('rule_ids')}")
+            ctx.bad(f"seq {seq}: {detail}", seq)
+        else:
+            ctx.count("replayed")
 
 
 def verify(bundle: dict[str, Any], *, replay: bool = True,

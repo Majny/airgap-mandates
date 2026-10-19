@@ -152,15 +152,29 @@ def test_s6_checkpoint_lag(tmp_path):
         assert cover - ts <= timedelta(seconds=60), f"seq {seq}: covered after {cover - ts}"
 
 
-def test_s12_replay(tmp_path):
-    if not va.decide_available():
-        pytest.skip("decide() not implemented upstream yet (executor/policy/decide.py, WS-A)")
-    store, s = FakeStore(), make_settings(tmp_path, checkpoint_every_n_leaves=5)
-    build_log(store, s)
-    rep = va.verify(log.export("audit", store=store, settings=s), replay=True)
-    assert not [p for p in rep.problems if "replay" in p], rep.problems
-    if not rep.checked.get("replayed"):
-        pytest.skip("export carries no decide() state inputs for its decision leaves (contract gap, WS-B report)")
+def test_s12_replay():
+    """verify_audit --replay re-runs decide() for every decision leaf of a real executor run (allow, deny, challenge,
+    step-up recheck) at its policy_hash; a tampered decision is caught and named by seq."""
+    from tests.wsa_helpers import Harness
+
+    h = Harness()
+    h.mandate()
+    h.propose(1_000_000)
+    h.propose(1_000_000)  # duplicate -> deny
+    _, r = h.propose(12_500_050, vendor="ven_87654321", no="Z-1")
+    h.submit(r["decision"]["challenge"], h.clerk)  # step-up recheck leaf
+    log.tick(store=h.store, settings=h.settings)
+    bundle = log.export("audit", store=h.store, settings=h.settings)
+    rep = va.verify(bundle, replay=True)
+    decisions = [le for le in bundle["leaves"] if le["event"]["type"] == "decision"]
+    assert len(decisions) == 4 and rep.checked.get("replayed") == 4
+    assert not [p for p in rep.problems if "replay" in p or "decide" in p], rep.problems
+
+    bad = copy.deepcopy(bundle)
+    le = next(x for x in bad["leaves"] if x["event"]["type"] == "decision" and x["event"]["data"]["decision"] == "allow")
+    le["event"]["data"]["decision"] = "deny"
+    rep = va.verify(bad, replay=True)
+    assert any(p.startswith(f"seq {le['seq']}: replay gives allow") for p in rep.problems), rep.problems
 
 
 # property: any single mutation of a checkpoint-covered leaf is detected and named
@@ -185,7 +199,7 @@ def test_property_single_mutation_detected(keydir, data):
     store = FakeStore()
     build_log(store, s, _random_events(data.draw, n))
     bundle = log.export("audit", store=store, settings=s)
-    rep = va.verify(bundle)
+    rep = va.verify(bundle, replay=False)
     assert rep.ok, rep.problems
     covered = rep.checked["covered_leaves"]  # mutating the uncovered tail is only caught by the next checkpoint
 
@@ -211,6 +225,6 @@ def test_property_single_mutation_detected(keydir, data):
             needle = "root mismatch"
         else:
             needle = f"seq {i}: leaf hash mismatch"
-    rep = va.verify(b)
+    rep = va.verify(b, replay=False)
     assert not rep.ok
     assert needle in "\n".join(rep.problems), (kind, rep.problems)

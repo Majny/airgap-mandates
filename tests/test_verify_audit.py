@@ -32,7 +32,7 @@ def b(bundle):
 
 
 def _fails(b, *needles, **kw):
-    rep = va.verify(b, **kw)
+    rep = va.verify(b, **{"replay": False, **kw})
     assert not rep.ok
     text = "\n".join(rep.problems)
     for n in needles:
@@ -45,7 +45,7 @@ def _seq_of(b, type_):
 
 
 def test_real_log_verifies(b):
-    rep = va.verify(b)
+    rep = va.verify(b, replay=False)
     assert rep.ok, rep.problems
     c = rep.checked
     assert c["leaf_hashes"] == c["leaves"] == len(b["leaves"])
@@ -57,11 +57,15 @@ def test_real_log_verifies(b):
 
 
 def test_upstream_gaps_are_skipped_not_failed(b):
-    rep = va.verify(b)
-    if not va.decide_available():
-        assert rep.checked["replay_unavailable"] == 2
-        assert any("SKIPPED (not yet implemented upstream" in n for n in rep.notes)
+    rep = va.verify(b, replay=False)
+    assert any("replay SKIPPED (--no-replay)" in n for n in rep.notes)
     assert rep.checked["rerender_unavailable"] == 4  # signed text / params are not in the export (see report)
+
+
+def test_decision_without_inputs_fails_replay(b):
+    """Synthetic decision leaves carry no data.inputs (CONTRACTS §3.3 requires them): replay must say so, by seq."""
+    seq = _seq_of(b, "decision")
+    _fails(b, f"seq {seq}: decision leaf carries no data.inputs", replay=True)
 
 
 def test_edit_one_byte(b):
@@ -136,7 +140,7 @@ def test_w1_cosignature_removed(b):
                         for n in b["checkpoints"]]
     _fails(b, "signature quorum not met (valid: log; need log AND (w1 OR w2))")
     # with a log-only quorum the notes pass; only the checkpoint leaves still notice the stripped cosignature
-    rep = va.verify(b, quorum=va.parse_quorum("log"))
+    rep = va.verify(b, replay=False, quorum=va.parse_quorum("log"))
     assert rep.problems and all("note_sha256 does not match" in p for p in rep.problems)
 
 
@@ -198,7 +202,7 @@ def test_execution_after_deny(tmp_path):
 def test_ledger_rows(b):
     ex = [le for le in b["leaves"] if le["event"]["type"] == "execution"]
     b["ledger"] = [{**le["event"]["data"], "seq": le["seq"]} for le in ex]
-    assert va.verify(b).ok
+    assert va.verify(b, replay=False).ok
     b["ledger"][0]["amount_minor"] += 1
     _fails(b, f"seq {ex[0]['seq']}: ledger row {ex[0]['event']['data']['tx_id']} does not match")
     b["ledger"] = b["ledger"][1:]
@@ -209,7 +213,7 @@ def test_cli_offline_demo(b, tmp_path, capsys):
     """Wi-Fi off demo: flip one byte in the exported file, the verifier goes red naming the leaf."""
     good = tmp_path / "bundle.json"
     good.write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
-    assert va.main([str(good)]) == 0
+    assert va.main([str(good), "--no-replay"]) == 0
     assert "RESULT: OK" in capsys.readouterr().out
     text = good.read_text(encoding="utf-8")
     i = text.index('"FV-2"')
@@ -225,7 +229,7 @@ def test_cli_offline_demo(b, tmp_path, capsys):
 def test_cli_unreadable_bundle(tmp_path, capsys):
     p = tmp_path / "x.json"
     p.write_text("{not json", encoding="utf-8")
-    assert va.main([str(p)]) == 1
+    assert va.main([str(p), "--no-replay"]) == 1
     assert "cannot read JSON" in capsys.readouterr().out
 
 
