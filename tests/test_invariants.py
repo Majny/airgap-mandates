@@ -29,7 +29,7 @@ F_POOL = [_f("F-VOP", "INFO", "VOP MTCH", code="MTCH"), _f("F-VOP", "WARN", "VOP
           _f("F-VOP", "BLOCK", "VOP NMTC", code="NMTC"), _f("F-PSP", "WARN", "PSP UNKNOWN"),
           _f("F-WARNLIST", "BLOCK", "WARNLIST HIT"), _f("F-SANCTION", "INFO", "SANCTIONS CLEAR"),
           _f("F-ANOM", "WARN", "ANOM 55/100", score=55), _f("F-ANOM", "INFO", "ANOM 10/100", score=10),
-          _f("F-MANDATE", "WARN", "OVER MANDATE CAP"), _f("F-DUP", "BLOCK", "DUPLICATE INVOICE"),
+          _f("F-MANDATE", "WARN", "OVER MANDATE CAP"), _f("F-DUP", "BLOCK", "DUPLICATE INV"),
           _f("F-ATTEST", "BLOCK", "ATT 0/3"), _f("F-DOMAIN", "BLOCK", "DOMAIN LOOKALIKE"),
           _f("F-BANK", "INFO", "BANK DOMESTIC")]
 _text = st.text(st.characters(min_codepoint=0x20, max_codepoint=0x7E), max_size=30)

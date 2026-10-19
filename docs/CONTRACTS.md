@@ -126,7 +126,7 @@ order (§5.4). Values not listed are INFO.
 | `F-VAT` | `adis` cache: unreliable-payer flag and published accounts for the DIČ | published → INFO; not published → WARN; unreliable payer → BLOCK | `ADIS ACCT YES`, `ADIS ACCT NO`, `VAT UNRELIABLE` |
 | `F-BANK` | `bank_codes` (bank-code list, IBAN → bank) | domestic → INFO; foreign or EMI for a CZ vendor → WARN | `BANK DOMESTIC`, `BANK FOREIGN EMI` |
 | `F-FIRSTSEEN` | `registry` history | IBAN first seen < 72 h → WARN | `IBAN NEW 2H`, `IBAN SEEN 400D` |
-| `F-DUP` (WS-A) | ledger | duplicate → BLOCK (deny) | `DUPLICATE INVOICE` |
+| `F-DUP` (WS-A) | ledger | duplicate → BLOCK (deny) | `DUPLICATE INV` |
 | `F-AMOUNT-DOC` (WS-D computes; WS-E `executor/docs` `check_against_document`) | provenance-hashed source document (`invoice_ref`) | `match`, or `partial` (lower with `reason_code` `PARTIAL`) → INFO; `mismatch` (higher, lower without PARTIAL, or currency/VS/due date/invoice_no/supplier ICO differ) → BLOCK; `unavailable` (document missing or not extractable) → **BLOCK** (fail closed). evidence `{invoice_amount_minor, doc_amount_minor, doc_sha256, invoice_ref, mismatched (comma-joined field names), reason_code}`, `prov` = `doc_sha256` | `AMOUNT OK DOC`, `AMOUNT != DOC` |
 | `F-SPLIT` (WS-A) | ledger | 24 h split → WARN (step-up) | `SPLIT 24H` |
 | `F-Z` (WS-A) | ledger | robust z > 3.5 → WARN (step-up) | `AMOUNT OUTLIER` |

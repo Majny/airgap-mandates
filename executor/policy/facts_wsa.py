@@ -38,7 +38,7 @@ def wsa_facts(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> 
 
     matched = inv.find_duplicate(invoice, state.get("proposals") or [], proposal_id=subject.get("proposal_id"))
     if matched is not None:
-        out.append(_fact("F-DUP", "duplicate", "Duplicate invoice", "DUPLICATE INVOICE", {"matched": matched}))
+        out.append(_fact("F-DUP", "duplicate", "Duplicate invoice", "DUPLICATE INV", {"matched": matched}))
 
     history = state.get("history") or []
     if active is not None:
