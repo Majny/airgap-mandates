@@ -122,10 +122,43 @@ def test_escaping(b):
     assert 'class="banner failed"' in page  # the edit breaks the leaf hash
 
 
-def test_host_rendered_banner(b):
-    assert "Rendered by the host UI" not in sv.render_html(b, replay=False)
-    page = sv.render_html(b, replay=False, host_rendered=True)
-    assert 'id="host-rendered"' in page and "under a compromised host this page can lie" in page
+def test_no_host_banner_and_stable_verdict_id(b):
+    """The host UI adds its own banner (WS-F); the verdict element is addressable for UI tests."""
+    page = sv.render_html(b, replay=False)
+    assert "Rendered by the host" not in page and 'id="verdict" data-ok="true"' in page
+    assert "all performed checks passed" in page and "skipped check(s)" in page  # replay off is a SKIPPED note
+
+
+def test_malformed_inputs_give_a_red_page_not_a_traceback(b):
+    bad = copy.deepcopy(b)
+    bad["checkpoints"][0] = bad["checkpoints"][0].replace("=\n", "\u00e9=\n", 1)  # non-ASCII inside base64
+    page = sv.render_html(bad, replay=False)
+    _static_ok(page)
+    assert 'data-ok="false"' in page
+    page = sv.render_html({**b, "leaves": 7}, replay=False)
+    _static_ok(page)
+    assert 'data-ok="false"' in page
+
+
+def test_malformed_note_is_not_blamed_on_valid_signers(b):
+    bad = copy.deepcopy(b)
+    note = bad["checkpoints"][0]
+    w1_line = next(x for x in note.splitlines() if "/w1 " in x)
+    bad["checkpoints"][0] = note + w1_line + "\n"  # duplicate signature line: the note does not parse
+    row = sv.render_html(bad, replay=False).split('id="cp-0"')[1].split("</tr>")[0]
+    assert "malformed" in row and "BAD" not in row
+
+
+def test_unpinned_w2_is_self_asserted_when_others_are_pinned(b, tmp_path):
+    w2 = make_settings(tmp_path / "w2")
+    name = "supervisor.example/w2"
+    bb = copy.deepcopy(b)
+    body = cp.parse_note(bb["checkpoints"][-1])["body"]
+    bb["checkpoints"][-1] += cp.cosign(body, name=name, settings=w2)
+    bb["pubkeys"]["w2"] = cp.verifier_key(name, kms.public_key(settings=w2, key="w1"), cp.SIG_COSIGNATURE)
+    pinned = {"log": bb["pubkeys"]["log"], "w1": bb["pubkeys"]["w1"]}
+    row = sv.render_html(bb, pinned, replay=False).split(f'id="cp-{len(bb["checkpoints"]) - 1}"')[1].split("</tr>")[0]
+    assert 'class="neutral sig-w2">self-asserted' in row
 
 
 def test_not_a_dict_is_red():

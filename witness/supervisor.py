@@ -22,8 +22,6 @@ from tools import verify_audit as va
 GREEN, AMBER, RED = "#067647", "#b54708", "#b42318"  # WS-F palette
 SIGNERS = (("log", "log"), ("w1", "W1"), ("w2", "W2 - independent supervisor witness (simulated operator)"))
 MAX_PROBLEMS = 10
-HOST_WARNING = ("Rendered by the host UI - under a compromised host this page can lie; verify the exported bundle "
-                "offline with tools/verify_audit.py")
 
 CSS = f"""
 body {{ font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 20px;
@@ -36,8 +34,6 @@ h2 {{ font-size: 26px; margin: 32px 0 12px; }}
 .banner li {{ margin: 4px 0; }}
 .verified {{ background: {GREEN}; }}
 .failed {{ background: {RED}; }}
-.host {{ background: #fef0c7; color: {AMBER}; border: 3px solid {AMBER}; padding: 14px 20px; border-radius: 8px;
-  font-weight: 700; margin: 0 0 16px; }}
 .seq {{ font-weight: 800; background: rgba(255,255,255,0.25); padding: 0 4px; border-radius: 4px; }}
 table {{ border-collapse: collapse; margin: 8px 0; }}
 th, td {{ border: 1px solid #d0d5dd; padding: 6px 12px; text-align: left; vertical-align: top; }}
@@ -45,6 +41,7 @@ th {{ background: #f2f4f7; }}
 td.ok {{ color: {GREEN}; font-weight: 700; }}
 td.missing {{ color: {AMBER}; font-weight: 700; }}
 td.bad {{ color: {RED}; font-weight: 700; }}
+td.neutral {{ color: #475467; font-weight: 700; }}
 code {{ font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 18px; }}
 .warn {{ color: {AMBER}; font-weight: 700; }}
 .good {{ color: {GREEN}; font-weight: 700; }}
@@ -84,18 +81,18 @@ def signer_status(note: Any, vkey: str) -> str:
     try:
         k = cp.parse_vkey(vkey)
         parsed = cp.parse_note(note)
-    except (cp.NoteError, TypeError, AttributeError, ValueError):
-        return "BAD"
+    except Exception:  # noqa: BLE001 - unparseable note: not attributable to this signer
+        return "malformed"
     if not any(s["name"] == k["name"] and s["key_id"] == k["key_id"] for s in parsed["signatures"]):
         return "missing"
     try:
         v = cp.verify_note(note, [vkey])
-    except cp.NoteError:
+    except Exception:  # noqa: BLE001 - parsed fine, so the failure is this signer's line
         return "BAD"
     return "OK" if k["name"] in v["verified"] else "missing"
 
 
-def _checkpoint_rows(bundle: dict[str, Any], keys: dict[str, tuple[str, bool]]) -> list[str]:
+def _checkpoint_rows(bundle: dict[str, Any], keys: dict[str, tuple[str, bool]], pinning: bool) -> list[str]:
     roles = [(r, label) for r, label in SIGNERS if r in keys]
     head = "".join(f"<th>{_e(label)}{'' if keys[r][1] else ' (unpinned)'}</th>" for r, label in roles)
     rows = [f"<tr><th>created order</th><th>size</th><th>root hash</th>{head}</tr>"]
@@ -104,12 +101,15 @@ def _checkpoint_rows(bundle: dict[str, Any], keys: dict[str, tuple[str, bool]]) 
         try:
             p = cp.parse_note(note)
             size, root = str(p["size"]), p["root_hash"][:16] + "..."
-        except (cp.NoteError, TypeError, AttributeError):
+        except Exception:  # noqa: BLE001 - any unparseable note is shown as such
             size, root = "?", "malformed note"
         cells = []
         for role, _ in roles:
             st = signer_status(note, keys[role][0])
-            cells.append(f'<td class="{st.lower()} sig-{role}">{st}</td>')
+            if st == "OK" and pinning and not keys[role][1]:
+                st = "self-asserted"  # some keys are pinned, this one only comes from the bundle
+            cls = {"OK": "ok", "BAD": "bad", "missing": "missing"}.get(st, "neutral")
+            cells.append(f'<td class="{cls} sig-{role}">{st}</td>')
         rows.append(f'<tr id="cp-{i}"><td>#{i}</td><td>{_e(size)}</td><td><code>{_e(root)}</code></td>'
                     f'{"".join(cells)}</tr>')
     return rows
@@ -117,25 +117,28 @@ def _checkpoint_rows(bundle: dict[str, Any], keys: dict[str, tuple[str, bool]]) 
 
 def _event_counts(bundle: dict[str, Any]) -> Counter[str]:
     counts: Counter[str] = Counter()
-    for le in bundle.get("leaves") or []:
+    leaves = bundle.get("leaves")
+    for le in leaves if isinstance(leaves, list) else []:
         ev = le.get("event") if isinstance(le, dict) else None
         counts[str(ev.get("type")) if isinstance(ev, dict) else "(malformed leaf)"] += 1
     return counts
 
 
 def render_html(bundle: dict[str, Any], trusted_vkeys: dict[str, str] | None = None, *,
-                title: str = "AirGap Mandates - audit log supervisor view", host_rendered: bool = False,
-                replay: bool = True) -> str:
+                title: str = "AirGap Mandates - audit log supervisor view", replay: bool = True,
+                allow_uncovered_tail: bool = False) -> str:
     """Self-contained HTML5 page (inline CSS, no JS, ASCII only) over verify(bundle, replay=, trusted_vkeys=).
 
     `replay=False` skips the decide() replay (shown as a SKIPPED note); synthetic test logs need it because their
-    decision leaves carry no data.inputs. `host_rendered=True` adds a banner that the host may be lying."""
+    decision leaves carry no data.inputs. No host banner here: the host UI adds its own (WS-F); this page is meant
+    to be generated offline. The verdict element is id="verdict" with data-ok="true|false"."""
     if not isinstance(bundle, dict):
         bundle = {}
         rep = va.Report(False, ["bundle is not a JSON object"])
     else:
         try:
-            rep = va.verify(bundle, replay=replay, trusted_vkeys=trusted_vkeys)
+            rep = va.verify(bundle, replay=replay, trusted_vkeys=trusted_vkeys,
+                            allow_uncovered_tail=allow_uncovered_tail)
         except Exception as exc:  # noqa: BLE001 - a malformed bundle must give a red page, not a traceback
             rep = va.Report(False, [f"malformed bundle ({type(exc).__name__}: {exc})"])
     keys = _signer_keys(bundle, trusted_vkeys)
@@ -143,17 +146,16 @@ def render_html(bundle: dict[str, Any], trusted_vkeys: dict[str, str] | None = N
     out = ["<!DOCTYPE html>", '<html lang="en"><head><meta charset="utf-8">',
            '<meta name="viewport" content="width=device-width, initial-scale=1">',
            f"<title>{_e(title)}</title><style>{CSS}</style></head><body>", f"<h1>{_e(title)}</h1>"]
-    if host_rendered:
-        out.append(f'<div class="host" id="host-rendered">{_e(HOST_WARNING)}</div>')
     if rep.ok:
-        out.append('<div class="banner verified" id="verdict"><div class="verdict">VERIFIED</div>'
-                   f"<div>{c.get('leaves', 0)} leaves, {c.get('checkpoints', 0)} checkpoints, all checks passed"
-                   f"{'' if rep.pinned else ' (keys not pinned)'}</div></div>")
+        skipped = f" ({len(rep.notes)} skipped check(s) or warning(s), see below)" if rep.notes else ""
+        out.append('<div class="banner verified" id="verdict" data-ok="true"><div class="verdict">VERIFIED</div>'
+                   f"<div>{c.get('leaves', 0)} leaves, {c.get('checkpoints', 0)} checkpoints, all performed checks "
+                   f"passed{skipped}{'' if rep.pinned else ' (keys not pinned)'}</div></div>")
     else:
         items = "".join(f"<li>{_seq_marked(p)}</li>" for p in rep.problems[:MAX_PROBLEMS])
         more = (f"<div>... and {len(rep.problems) - MAX_PROBLEMS} more problem(s)</div>"
                 if len(rep.problems) > MAX_PROBLEMS else "")
-        out.append(f'<div class="banner failed" id="verdict"><div class="verdict">FAILED</div>'
+        out.append(f'<div class="banner failed" id="verdict" data-ok="false"><div class="verdict">FAILED</div>'
                    f"<div>{len(rep.problems)} problem(s):</div><ol>{items}</ol>{more}</div>")
     out.append(f'<p>log <code>{_e(bundle.get("log_id", "?"))}</code> - {c.get("leaves", 0)} leaves, '
                f'{c.get("checkpoints", 0)} checkpoints, decide() replay {"on" if replay else "off"}</p>')
@@ -167,9 +169,10 @@ def render_html(bundle: dict[str, Any], trusted_vkeys: dict[str, str] | None = N
                    "pinned): whoever can rewrite the bundle can re-sign it; pin with --trust-keys</p>")
 
     out.append("<h2>Checkpoints</h2><table>")
-    out += _checkpoint_rows(bundle, keys)
+    out += _checkpoint_rows(bundle, keys, pinning=bool(trusted_vkeys))
     out.append("</table><p class=\"small\">Each signer is checked on its own against its key: OK = valid signature, "
-               "missing = no line from that key, BAD = a line from that key that does not verify.</p>")
+               "missing = no line from that key, BAD = a line from that key that does not verify, self-asserted = "
+               "valid under a bundle-supplied (unpinned) key, malformed = the note itself does not parse.</p>")
 
     out.append("<h2>Coverage</h2>")
     unc = c.get("uncovered_leaves")
@@ -203,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--trust-keys", metavar="FILE", help='pinned verifier keys, JSON {"log", "w1", "w2"?}')
     ap.add_argument("-o", "--output", metavar="FILE", help="write the page here (default: stdout)")
     ap.add_argument("--no-replay", action="store_true", help="skip decide() replay")
+    ap.add_argument("--allow-uncovered-tail", action="store_true", help="as tools.verify_audit")
     args = ap.parse_args(argv)
     try:
         with open(args.bundle, encoding="utf-8") as f:
@@ -219,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"supervisor: --trust-keys {args.trust_keys}: {exc}", file=sys.stderr)
             return 2
-    page = render_html(bundle, trusted, replay=not args.no_replay)
+    page = render_html(bundle, trusted, replay=not args.no_replay, allow_uncovered_tail=args.allow_uncovered_tail)
     if args.output:
         with open(args.output, "w", encoding="ascii") as f:
             f.write(page)
