@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # "Wi-Fi off" stage check of a pre-sealed demo bundle (tools/demo_bundle.py). No network needed.
 # Usage: bash tools/offline_demo.sh [dir]   (default docs/audit/demo; `make offline-demo` builds noteverify first)
-# Env: PY (default .venv/bin/python), NOTEVERIFY (default .local/bin/noteverify). Exit 1 if any step fails.
+# Env: PY (default .venv/bin/python), NOTEVERIFY (default .local/bin/noteverify), QUORUM (verify_audit --quorum for
+# step 2, e.g. log,w1,w2 = every checkpoint signed by the log and both witnesses; default log AND (w1 OR w2)).
+# Exit 1 if any step fails.
 # Owner: WS-B.
 set -euo pipefail
 
@@ -77,8 +79,10 @@ fi
 banner "2/4 audit bundle - pinned keys, replay on"
 echo "keys pinned from trust-keys.json (shipped with the bundle;"
 echo "in real use the auditor gets them out of band, e.g. /health)"
+[ -n "${QUORUM:-}" ] && echo "quorum on every checkpoint: $QUORUM"
 set +e
-"$PY" -m tools.verify_audit "$DIR/bundle.json" --trust-keys "$DIR/trust-keys.json" >"$WORK/b.out" 2>&1
+"$PY" -m tools.verify_audit "$DIR/bundle.json" --trust-keys "$DIR/trust-keys.json" ${QUORUM:+--quorum "$QUORUM"} \
+  >"$WORK/b.out" 2>&1
 rc=$?
 set -e
 short "$WORK/b.out"
