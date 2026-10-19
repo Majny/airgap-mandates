@@ -128,7 +128,7 @@ class AirgapStack(Stack):
                            policy=iam.PolicyDocument(statements=[admin, sign, read]))
 
         k_log = ed_key("log", r_ckpt, [r_exec, r_w1, r_host, r_auditor, r_relay])
-        k_w1 = ed_key("w1", r_w1, [r_exec, r_host, r_auditor, r_relay])
+        k_w1 = ed_key("w1", r_w1, [r_exec, r_ckpt, r_host, r_auditor, r_relay])
 
         # ------------------------------------------------------------ Guardrails (A1 input + egress 2nd opinion)
         iban_rx = r"[A-Z]{2}[0-9]{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,4})?"
@@ -163,11 +163,13 @@ class AirgapStack(Stack):
                                     log_retention=logs.RetentionDays.ONE_WEEK, **extra)
 
         f_exec = fn("executor", "executor.handler.lambda_handler", r_exec,
-                    env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id})  # egress E-GUARDRAILS 2nd opinion
+                    env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id,  # egress E-GUARDRAILS 2nd opinion
+                         "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})  # GetPublicKey only (vkeys in /health, export)
         f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1,
                   env={"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""})
         f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60,
-                    env={"AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "10", "AIRGAP_CHECKPOINT_MAX_SECONDS": "30"})
+                    env={"AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "10", "AIRGAP_CHECKPOINT_MAX_SECONDS": "30",
+                         "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})
 
         # ------------------------------------------------------------ regional API (IAM)
         api = apigw.RestApi(self, "Api", rest_api_name=f"{PREFIX}api",
@@ -287,8 +289,12 @@ class AirgapStack(Stack):
                                                   resources=[invoke("POST", "/tools/*", papi)]))
         deny = iam.Effect.DENY
         r_agent.add_to_policy(iam.PolicyStatement(sid="DenyState", effect=deny, actions=[
-            "dynamodb:*", "kms:*", "secretsmanager:*", "states:*", "s3:Put*", "s3:Delete*", "lambda:InvokeFunction",
-            "iam:*", "sts:AssumeRole"], resources=["*"]))
+            "dynamodb:*", "kms:Sign", "kms:GenerateDataKey*", "secretsmanager:*", "states:*", "s3:Put*", "s3:Delete*",
+            "lambda:InvokeFunction", "iam:*", "sts:AssumeRole"], resources=["*"]))
+        # kms:* on our keys; kms:Decrypt elsewhere stays possible because Lambda decrypts the function's own env
+        # vars (aws/lambda key) with the execution role
+        r_agent.add_to_policy(iam.PolicyStatement(sid="DenyOurKeys", effect=deny, actions=["kms:*"],
+                                                  resources=[k_log.key_arn, k_w1.key_arn]))
         r_agent.add_to_policy(iam.PolicyStatement(sid="DenyMoneyRoutes", effect=deny, actions=["execute-api:Invoke"],
                                                   resources=[invoke("*", "/signatures"), invoke("*", "/mandates*"),
                                                              invoke("*", "/changes/*/approve"), invoke("*", "/proposals"),

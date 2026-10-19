@@ -1,0 +1,45 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/majny/Desktop/MyProjects/am-agent/infra/aws_e2e.py", line 84, in <module>
+    main()
+  File "/Users/majny/Desktop/MyProjects/am-agent/infra/aws_e2e.py", line 79, in main
+    out = e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/executor/e2e.py", line 86, in run
+    assert r["decision"]["decision"] == "allow", r["decision"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'decision': 'deny', 'rule_ids': ['F-DUP', 'I-BLOCK', 'I-DUP'], 'facts': [{'id': 'F-MANDATE', 'kind': 'F', 'severity': 'INFO', 'label': 'Within mandate limits', 'display_line': 'WITHIN MANDATE', 'evidence': {'amount_minor': 1450000, 'max_per_payment_minor': 8000000, 'spent_minor': 0, 'max_total_minor': 25000000}}, {'id': 'F-WARNLIST', 'kind': 'F', 'severity': 'INFO', 'label': 'Regulator warning lists (MostlyRight): no name or domain match', 'display_line': 'WARNLIST CLEAR', 'evidence': {'name': 'ACME s.r.o.', 'domains': ['acme.cz']}, 'prov': '9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c'}, {'id': 'F-SANCTION', 'kind': 'F', 'severity': 'INFO', 'label': 'EU financial sanctions, entities (MostlyRight): no match', 'display_line': 'SANCTIONS CLEAR', 'evidence': {'name': 'ACME s.r.o.', 'ico': '12345678'}, 'prov': '9d8f54135eb7c1376c110f281f436d223e6bd9c507d8caf4df083335abea508c'}, {'id': 'F-VOP', 'kind': 'F', 'severity': 'INFO', 'label': 'Verification of Payee (simulated): MTCH', 'display_line': 'VOP MTCH', 'evidence': {'country': 'CZ', 'bank_code': '0800', 'participant': True, 'account_found': True, 'score': 100, 'code': 'MTCH'}, 'prov': '6602f6caaf66a6ac1fda63e76a790e74d358b887f7ce79940108f373adb6d1bc'}, {'id': 'F-VAT', 'kind': 'F', 'severity': 'INFO', 'label': 'Account published in VAT registry (ADIS): yes', 'display_line': 'ADIS ACCT YES', 'evidence': {'dic': 'CZ12345678', 'payer_found': True, 'unreliable': False, 'account_published': True, 'as_of': '2026-10-19T06:00:00Z', 'source': 'adis-cache'}, 'prov': '140f73db27f06232537d7145d70216842a11d1eb3acc60ef3a3c4e2cc4046af1'}, {'id': 'F-BANK', 'kind': 'F', 'severity': 'INFO', 'label': 'Bank from IBAN: Bank 0800 (CZ)', 'display_line': 'BANK DOMESTIC', 'evidence': {'country': 'CZ', 'bank_code': '0800', 'vendor_country': 'CZ', 'found': True, 'kind': 'bank'}, 'prov': '0c4afb11c04416817581330a76344383ad956d4da3c85ee1f3d9ed36c6c52487'}, {'id': 'F-FIRSTSEEN', 'kind': 'F', 'severity': 'INFO', 'label': 'IBAN first seen in payee registry: 962 days ago', 'display_line': 'IBAN SEEN 962D', 'evidence': {'found': True, 'first_seen': '2024-03-01T00:00:00Z', 'hours': 23101}, 'prov': 'b2f54daa9f97c80f368b934151d6e398975a6f074aa55b81b95ed055e6612677'}, {'id': 'F-DUP', 'kind': 'F', 'severity': 'BLOCK', 'label': 'Duplicate invoice', 'display_line': 'DUPLICATE INVOICE', 'evidence': {'matched': 'prp_1'}}, {'id': 'F-ANOM', 'kind': 'F', 'severity': 'INFO', 'label': 'Action anomaly score (tool-call log): 0/100', 'display_line': 'ANOM 0/100', 'evidence': {'score': 0, 'features': '', 'tool_calls': 0, 'vendor_id': 'ven_12345678'}, 'prov': '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945'}], 'facts_digest': '8a7ae51eb7088fc71e0b6c4d5eddbeec541052747175eba0a9c7ad313ad55318', 'mandate_id': 'mnd_6', 'policy_hash': '3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd'}
+{
+ "status": "ok",
+ "backend": "aws",
+ "deployment": "DEMO",
+ "demo_profile": "demo",
+ "policy_hash": "3909f806c268773b10b6b3012a736a3efd183154ed4a2916f42488b9d877e8cd",
+ "render_profile": "safe3-mono-16x4",
+ "code_sha256": "040c6bbb36b462eec3f6b2ff5320157adf1c95b49b8befbd55a91078e6bcbde2",
+ "log_origin": "airgap.example/demo/audit",
+ "log_pubkey_id": "",
+ "log_vkey": null,
+ "w1_vkey": null,
+ "w2_vkey": null
+}
+mandate mnd_6: sig_required=2
+AG1/DEMO MANDATE
+NO 6 CZK
+PER PAY 80000
+TOTAL 250000
+MAX 20 PAYMENTS
+EXISTING PAYEES
+TO 10-20 15:07
+ROLE CLERK 1/2
+FROM 10-19 15:07
+REQ VOP MTCH
+PAYEES 2 REG V1
+N 3D44F809
+P 3909f806c26877
+H b5732854390df7
+
+clerk signed -> PENDING_SIG_TREASURY
+treasury signed -> ACTIVE (mnd_6)
+

@@ -1,0 +1,1 @@
+{"https://example.com": "blocked: URLError: <urlopen error [Errno 99] Cannot assign requested address>", "https://checkip.amazonaws.com": "blocked: URLError: <urlopen error timed out>", "no_route": true}
