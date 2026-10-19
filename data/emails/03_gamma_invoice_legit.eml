@@ -1,0 +1,53 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gammatisk.cz;
+ i=@gammatisk.cz; q=dns/txt; s=demo2026; t=1791021900; h=from : to :
+ subject : date : message-id : mime-version : content-type;
+ bh=vlSoMGB3gIR+oeAk+YFkGqrEVrKKVyQdz3KGxcgcU/4=;
+ b=iy+ApeB3aMgcesTXSmpuL8BmUGrvVzMlVtTyf0YeqHII/4NFesz5+Ttvj3xaRyXRVoilm
+ 8MXoHsI49bpgLTc8JVNqueII2GpOSiXCpd2NbfbKosgs/U99uO8kyoZvtelgSbRi8UykQQX
+ wHPnpN35wGndAQVLh0XniAAUmlUvxGrOziIVS7S3VlSetpnoYU1qpn3Rf1K6bAKNSC8T5g3
+ i0yd+kjA1EaFkbwvV6dinM/+UdrBPLme9EtNAi6aao0Mmhsd/Mgi229Q9EymwmOslh9wETx
+ 4Z/F7ouJNf1w/28U7VttBmEeWKW1HYG9KZ/Bdj8NGFl8V+cEk+AAJV9tA+Lw==
+From: Eva Dvorakova <eva.dvorakova@gammatisk.cz>
+To: Accounts Payable <ap@buyer-demo.example>
+Subject: Invoice GT-26-0093
+Date: Sat, 03 Oct 2026 10:05:00 +0000
+Message-ID: <03_gamma_invoice_legit.20261003@gammatisk.cz>
+MIME-Version: 1.0
+X-AirGap-Fixture: synthetic; scenario=legit_invoice
+Content-Type: multipart/mixed; boundary="=_airgap_03_boundary"
+
+--=_airgap_03_boundary
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Dear colleagues,
+
+please find attached invoice GT-26-0093 for printing of product leaflets.
+
+Amount: CZK 31 460.00
+Due date: 2026-10-17
+Variable symbol: 260093
+Account: CZ7501000000001155443322 (as registered)
+
+Kind regards,
+Eva Dvorakova
+Gamma Tisk s.r.o.
+
+--=_airgap_03_boundary
+Content-Type: application/xml; name="GT-26-0093.isdoc"
+Content-Disposition: attachment; filename="GT-26-0093.isdoc"
+Content-Transfer-Encoding: 7bit
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="http://isdoc.cz/namespace/2013" version="6.0.2">
+  <!-- ISDOC-like FICTITIOUS demo invoice (AirGap Mandates fixture) -->
+  <ID>GT-26-0093</ID>
+  <IssueDate>2026-10-03</IssueDate>
+  <DueDate>2026-10-17</DueDate>
+  <Supplier><Name>Gamma Tisk s.r.o.</Name><ICO>99887762</ICO></Supplier>
+  <Line><Description>Printing of product leaflets</Description></Line>
+  <PayableAmount currency="CZK">31460.00</PayableAmount>
+  <Payment><IBAN>CZ7501000000001155443322</IBAN><VariableSymbol>260093</VariableSymbol></Payment>
+</Invoice>
+
+--=_airgap_03_boundary--

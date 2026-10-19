@@ -1,0 +1,30 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=acme.cz;
+ i=@acme.cz; q=dns/txt; s=demo2026; t=1791968400; h=from : to : subject
+ : date : message-id : mime-version : content-type;
+ bh=WuEMSHRiuTX3aeCJ/4D3NqoBFOSEgCugbMRloGyAdvM=;
+ b=UgOBhQU47cpGb22XFummPMs2ZDvTaWXHLHZq8Lq+/+YQvLaZYhifCK+hJlEVYg2JprDVs
+ syyehXeCTyM2chP2o9lQHm+2dEYZYfwsEFP+gxVNDzpy/trk2thlZ2CX9b5IoFvyRZNdjHE
+ ruuUL9irvMkr4qwg+6i5yj8iwzCIG+82EOAeWKEo2kltZkTrzJ+FJxBgg9g6tXS0/oOPQ2m
+ /6/k6ijAQaXYsok4Ocm2oXPzMqX7nM+CRwRpltvqLZRLTFZa1isPyjPNExMEjZDZDJk9Le7
+ m2fZF8g8jAzTRCN6CQlWp4H7TzNs4LKenxNChRNL2wHvYhPd2U5tkVgc6bHg==
+From: Jana Novakova <jana.novakova@acme.cz>
+To: Accounts Payable <ap@buyer-demo.example>
+Subject: ACME s.r.o. - new bank account from 1 November 2026
+Date: Wed, 14 Oct 2026 09:00:00 +0000
+Message-ID: <08_acme_change_legit.20261014@acme.cz>
+MIME-Version: 1.0
+X-AirGap-Fixture: synthetic; scenario=legit_change
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Dear business partners,
+
+we would like to inform you that from 1 November 2026 ACME s.r.o. (ICO 12345678) will receive payments to our new account:
+
+  CZ2003000000002001234567
+
+The account is published in the VAT register for CZ12345678. Our bank's confirmation letter (ref. BCL-2026-0918) is available on request, and we will confirm the change through your supplier attestation process as usual. Until 31 October please keep using the current account CZ6508000000192000145399.
+
+Thank you,
+Jana Novakova
+Accounting, ACME s.r.o.

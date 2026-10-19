@@ -1,0 +1,53 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=betaservis.cz;
+ i=@betaservis.cz; q=dns/txt; s=demo2026; t=1790933400; h=from : to :
+ subject : date : message-id : mime-version : content-type;
+ bh=xinsPrWbahyiqOYQtSQ9y2zwl9PBehdkwWj8e7u+bLI=;
+ b=O1rxpV7l9ejE4CD0Gy/oxCGicz2FyGy5OuqRfnabJRNdFzGm2fSt5SHjwmfRmix2MqJbD
+ SSIFe+7k0rAsoKD7L8Zp8loEz28qod9bA60buZG5erfLxudkoLIKTC0Llqgiv6nqCZUJK0c
+ 2sCeVmP3n7C09PgX1WXePK0HQS0NaJewE+WlPoB+McSVQA5Y9Ax9Ryqcfg9mp9p2VEIXDUZ
+ aVMmP2s2lFTUTcIoVSfKwga2+4Zszy9P6t5/UI8DDYZ5xzN+hUGKCt//9KW/QF+PAicRlWR
+ axjIFNVCTsZv5NNc3796d27f/9T46apWepts0oR+hj0xtt6Zw1VwwXI2TpQw==
+From: Petr Svoboda <fakturace@betaservis.cz>
+To: Accounts Payable <ap@buyer-demo.example>
+Subject: Faktura BS-2026/1187
+Date: Fri, 02 Oct 2026 09:30:00 +0000
+Message-ID: <02_beta_invoice_legit.20261002@betaservis.cz>
+MIME-Version: 1.0
+X-AirGap-Fixture: synthetic; scenario=legit_invoice
+Content-Type: multipart/mixed; boundary="=_airgap_02_boundary"
+
+--=_airgap_02_boundary
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+Dear colleagues,
+
+please find attached invoice BS-2026/1187 for facility cleaning 09/2026.
+
+Amount: CZK 12 705.00
+Due date: 2026-10-16
+Variable symbol: 20261187
+Account: CZ6203000000000123456789 (as registered)
+
+Kind regards,
+Petr Svoboda
+Beta Servis a.s.
+
+--=_airgap_02_boundary
+Content-Type: application/xml; name="BS-2026-1187.isdoc"
+Content-Disposition: attachment; filename="BS-2026-1187.isdoc"
+Content-Transfer-Encoding: 7bit
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="http://isdoc.cz/namespace/2013" version="6.0.2">
+  <!-- ISDOC-like FICTITIOUS demo invoice (AirGap Mandates fixture) -->
+  <ID>BS-2026/1187</ID>
+  <IssueDate>2026-10-02</IssueDate>
+  <DueDate>2026-10-16</DueDate>
+  <Supplier><Name>Beta Servis a.s.</Name><ICO>87654321</ICO></Supplier>
+  <Line><Description>Facility cleaning 09/2026</Description></Line>
+  <PayableAmount currency="CZK">12705.00</PayableAmount>
+  <Payment><IBAN>CZ6203000000000123456789</IBAN><VariableSymbol>20261187</VariableSymbol></Payment>
+</Invoice>
+
+--=_airgap_02_boundary--
