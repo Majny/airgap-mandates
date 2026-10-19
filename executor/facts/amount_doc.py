@@ -6,9 +6,10 @@ Owner: WS-D.
 The document is resolved by invoice.invoice_ref (doc_<16 hex of sha256(part bytes)>) among the parts of the raw inbox
 email, read with WS-E's deterministic extractor (executor.docs.extract) and checked with the same
 check_against_document() the tools λ uses (A2), so the agent and the facts engine can never disagree. Any rule it
-returns (T-DOC-MISSING / T-AMOUNT-MISMATCH / T-DOC-MISMATCH) -> BLOCK "AMOUNT != DOC"; none -> INFO "AMOUNT OK DOC".
-A lower amount is consistent only with reason_code PARTIAL (handled inside check_against_document). Fail closed: no
-raw email, an unresolvable invoice_ref or an extraction error -> BLOCK. prov = sha256 of the document part.
+returns maps to the CONTRACTS §2.1 values: match -> INFO "AMOUNT OK DOC"; partial (lower with reason_code PARTIAL)
+-> INFO "AMOUNT PART DOC"; mismatch (T-AMOUNT-MISMATCH / T-DOC-MISMATCH) -> BLOCK "AMOUNT != DOC"; unavailable (no
+raw email, an unresolvable invoice_ref, an extraction error or T-DOC-MISSING) -> BLOCK "AMOUNT DOC N/A" (fail
+closed). evidence.mismatched = sorted comma-joined field names. prov = sha256 of the document part.
 """
 from __future__ import annotations
 
@@ -17,8 +18,20 @@ from typing import Any
 from executor.facts import _util
 from executor.models import Fact
 
-_BLOCK_LINE = "AMOUNT != DOC"
-_OK_LINE = "AMOUNT OK DOC"
+_OK_LINE = "AMOUNT OK DOC"  # match
+_PART_LINE = "AMOUNT PART DOC"  # partial
+_BLOCK_LINE = "AMOUNT != DOC"  # mismatch
+_NA_LINE = "AMOUNT DOC N/A"  # unavailable
+
+
+def _field(rule_id: str, reason: str) -> str:
+    """Contract field name of one check_against_document() finding."""
+    if rule_id == "T-AMOUNT-MISMATCH":
+        return "amount"
+    if "supplier ICO" in reason:
+        return "ico"
+    name = reason.split(" ", 1)[0]
+    return "due_date" if name == "due" else name
 
 
 def _claimed(invoice: dict[str, Any]) -> dict[str, Any]:
@@ -46,11 +59,11 @@ def amount_doc_fact(invoice: dict[str, Any], raw_eml: bytes | None, *, vendor_ic
     }
     if not raw_eml:
         return _fact("BLOCK", "No source email for the invoice: amount cannot be checked against a document",
-                     _BLOCK_LINE, evidence)
+                     _NA_LINE, evidence)
     try:
         doc = next((d for d in extract.documents(raw_eml) if d["doc_id"] == ref), None) if ref else None
         if doc is None:
-            return _fact("BLOCK", f"invoice_ref {ref} does not name a document of the source email", _BLOCK_LINE,
+            return _fact("BLOCK", f"invoice_ref {ref} does not name a document of the source email", _NA_LINE,
                          evidence)
         evidence["doc_sha256"] = doc["sha256"]
         draft = extract.extract_draft(doc)
@@ -60,9 +73,13 @@ def amount_doc_fact(invoice: dict[str, Any], raw_eml: bytes | None, *, vendor_ic
             raise ValueError("invoice amount_minor is not an integer")
         found = extract.check_against_document(draft, _claimed(invoice), vendor_ico)
     except Exception as e:  # noqa: BLE001 - any parse/extraction failure fails closed
-        return _fact("BLOCK", f"Document could not be checked ({type(e).__name__})", _BLOCK_LINE, evidence)
+        return _fact("BLOCK", f"Document could not be checked ({type(e).__name__})", _NA_LINE, evidence)
+    if any(rid == "T-DOC-MISSING" for rid, _ in found):
+        return _fact("BLOCK", "Document has no machine-readable amount/currency", _NA_LINE, evidence)
     if found:
-        evidence["mismatched"] = ",".join(sorted({rid for rid, _ in found}))
+        evidence["mismatched"] = ",".join(sorted({_field(rid, reason) for rid, reason in found}))
         reasons = "; ".join(reason for _, reason in found)
         return _fact("BLOCK", f"Invoice disagrees with the document: {reasons}"[:300], _BLOCK_LINE, evidence)
+    if amount < doc_amount:
+        return _fact("INFO", f"Partial payment {amount} of document {ref} ({doc_amount})", _PART_LINE, evidence)
     return _fact("INFO", f"Amount {amount} agrees with document {ref}", _OK_LINE, evidence)

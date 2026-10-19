@@ -85,8 +85,19 @@ def _email_facts(email: dict[str, Any], payee: dict[str, Any], state: dict[str, 
     dns_raw, dns_sha = _util.read_snapshot(_util.snapshot_path(state, "dns"))
     snapshots["dns"] = dns_sha
     out.append(dkim.dkim_fact(email.get("dkim") or {"result": "none"}, prov=dns_sha))
-    out.append(domain_age.domain_age_fact(from_domain, state.get("domain_first_seen"), now))
+    out.append(domain_age.domain_age_fact(from_domain, _first_seen(from_domain, payee, state), now))
     return out
+
+
+def _first_seen(from_domain: str, payee: dict[str, Any], state: dict[str, Any]) -> str | None:
+    """First time we saw the sender domain: our inbox, or the registry when it is exactly the vendor's registered
+    domain (known to us since enrolment). Lookalikes never equal the registered domain, so they stay new."""
+    seen = [state["domain_first_seen"]] if state.get("domain_first_seen") else []
+    registered = (payee.get("domain") or "").lower()
+    if registered and from_domain == registered and payee.get("registered_since"):
+        since = str(payee["registered_since"])
+        seen.append(since if "T" in since else f"{since}T00:00:00Z")
+    return min(seen) if seen else None
 
 
 def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> FactSet:
@@ -132,6 +143,12 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
 
     if state.get("email"):
         facts.extend(_email_facts(state["email"], payee, state, now, snapshots))
+    elif subject.get("email_id"):
+        # The request cites an email the inbox does not hold: there is no verified sender at all (fail closed;
+        # without this a made-up email_id would silently drop F-DOMAIN / F-DKIM).
+        cited = str(subject["email_id"])[:64]
+        add(_util.make_fact("F-DKIM", "BLOCK", f"Cited email {cited} is not in the inbox", "DKIM FAIL",
+                            evidence={"result": "none", "d": None, "s": None, "aligned": False}))
 
     mr_path = _util.snapshot_path(state, "mostlyright")
     add(warnlist.warnlist_fact(name, [payee.get("domain", "")], mr_path=mr_path), "mostlyright")

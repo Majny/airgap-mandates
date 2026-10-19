@@ -90,41 +90,42 @@ def test_synthetic_consistent_info():
 
 def test_amount_higher_blocks():
     f = _f(amount_minor=1450001)
-    assert f["severity"] == "BLOCK" and f["evidence"]["mismatched"] == "T-AMOUNT-MISMATCH"
+    assert (f["severity"], f["display_line"]) == ("BLOCK", "AMOUNT != DOC") and f["evidence"]["mismatched"] == "amount"
 
 
 def test_amount_lower_needs_partial():
     f = _f(amount_minor=1000000)
-    assert f["severity"] == "BLOCK" and f["evidence"]["mismatched"] == "T-AMOUNT-MISMATCH"
+    assert f["severity"] == "BLOCK" and f["evidence"]["mismatched"] == "amount"
     f = _f(amount_minor=1000000, reason_code="PARTIAL")
-    assert (f["severity"], f["display_line"]) == ("INFO", "AMOUNT OK DOC")
+    assert (f["severity"], f["display_line"]) == ("INFO", "AMOUNT PART DOC")
     assert f["evidence"]["reason_code"] == "PARTIAL"
 
 
-@pytest.mark.parametrize("over,ico", [({"vs": "99999999"}, "12345678"), ({"currency": "EUR"}, "12345678"),
-                                      ({}, "87654321"), ({"due_date": "2026-11-30"}, "12345678"),
-                                      ({"invoice_no": "FV-OTHER"}, "12345678")])
-def test_field_mismatch_blocks(over, ico):
+@pytest.mark.parametrize("over,ico,field", [({"vs": "99999999"}, "12345678", "vs"),
+                                            ({"currency": "EUR"}, "12345678", "currency"), ({}, "87654321", "ico"),
+                                            ({"due_date": "2026-11-30"}, "12345678", "due_date"),
+                                            ({"invoice_no": "FV-OTHER"}, "12345678", "invoice_no")])
+def test_field_mismatch_blocks(over, ico, field):
     f = _f(ico=ico, **over)
     assert (f["severity"], f["display_line"]) == ("BLOCK", "AMOUNT != DOC")
-    assert f["evidence"]["mismatched"] == "T-DOC-MISMATCH"
+    assert f["evidence"]["mismatched"] == field
 
 
 def test_mismatched_is_sorted_and_deduplicated():
     f = _f(ico="87654321", amount_minor=1450001, vs="1")
-    assert f["evidence"]["mismatched"] == "T-AMOUNT-MISMATCH,T-DOC-MISMATCH"
+    assert f["evidence"]["mismatched"] == "amount,ico,vs"
 
 
 @pytest.mark.parametrize("raw", [None, b""])
 def test_no_raw_email_blocks(raw):
     f = _f(raw=raw)
-    assert f["severity"] == "BLOCK" and "prov" not in f
+    assert (f["severity"], f["display_line"]) == ("BLOCK", "AMOUNT DOC N/A") and "prov" not in f
     assert f["evidence"]["doc_sha256"] is None and f["evidence"]["doc_amount_minor"] is None
 
 
 def test_unresolved_invoice_ref_blocks():
     f = _f(invoice_ref="doc_0000000000000000")
-    assert f["severity"] == "BLOCK" and f["evidence"]["doc_sha256"] is None
+    assert (f["severity"], f["display_line"]) == ("BLOCK", "AMOUNT DOC N/A") and f["evidence"]["doc_sha256"] is None
     assert _f(invoice_ref=None)["severity"] == "BLOCK"
 
 
@@ -132,7 +133,7 @@ def test_body_without_amount_blocks_doc_missing():
     body = next(d for d in extract.documents(_raw("05_takeover_acme_real_domain.eml")))
     f = amount_doc_fact({**SYNTH, "invoice_ref": body["doc_id"]}, _raw("05_takeover_acme_real_domain.eml"),
                         vendor_ico="12345678")
-    assert f["severity"] == "BLOCK" and f["evidence"]["mismatched"] == "T-DOC-MISSING"
+    assert (f["severity"], f["display_line"]) == ("BLOCK", "AMOUNT DOC N/A") and f["evidence"]["mismatched"] == ""
 
 
 def test_extraction_error_fails_closed(monkeypatch):

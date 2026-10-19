@@ -38,6 +38,44 @@ def raw_email(row: dict[str, Any] | None, *, settings: Any = None) -> bytes | No
         return None
 
 
+MAX_EVIDENCE = 8
+
+
+def resolve_email_ids(evidence_ids: list[Any] | None, *, store: Any, settings: Any = None) -> list[str]:
+    """Inbox email_ids named by a change request's `evidence_ids` (CONTRACTS §4.2), in order, deduplicated: an
+    `eml_` id of a stored email, or a `doc_<16 hex>` handle of a document inside a stored email (the ids the tools
+    surface hands the agent). Ids that resolve to nothing are dropped; at most MAX_EVIDENCE are looked at."""
+    ids = [i for i in (evidence_ids or []) if isinstance(i, str) and i][:MAX_EVIDENCE]
+    out: list[str] = []
+    docs: dict[str, str] | None = None  # doc_id -> email_id, built on first doc_ id
+    for i in ids:
+        eid: str | None = None
+        if store.get("inbox", {"email_id": i}) is not None:
+            eid = i
+        elif i.startswith("doc_"):
+            if docs is None:
+                docs = _doc_index(store=store, settings=settings)
+            eid = docs.get(i)
+        if eid and eid not in out:
+            out.append(eid)
+    return out
+
+
+def _doc_index(*, store: Any, settings: Any) -> dict[str, str]:
+    from executor.docs import extract
+
+    index: dict[str, str] = {}
+    for row in sorted(store.scan("inbox"), key=lambda r: (r.get("received_at") or "", r["email_id"])):
+        raw = raw_email(row, settings=settings)
+        try:
+            found = extract.documents(raw) if raw else []
+        except Exception:  # noqa: BLE001 - an unparseable message names no document
+            found = []
+        for d in found:
+            index.setdefault(d["doc_id"], row["email_id"])
+    return index
+
+
 def email_state(email_id: str | None, *, store: Any, settings: Any = None) -> dict[str, Any]:
     """{"email": inbox row (with the ingest `dkim` verdict) or None, "domain_first_seen": iso | None,
     "email_raw": raw .eml bytes | None (F-AMOUNT-DOC)}."""
