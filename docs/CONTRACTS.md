@@ -246,7 +246,7 @@ The v1 `sth` table is dropped (replaced by `checkpoints` holding note text).
   4. `ledger` `Put` with `attribute_not_exists(tx_id)`;
   5. `proposals` `Update` to `EXECUTED` (condition `status = PENDING_SIG` or new).
   `tx_id = "tx_" + sha256(f"{auth_ref}|{proposal_id}".encode()).hexdigest()[:16]` where `auth_ref` = `mandate_id`
-  (mandate path) or the challenge nonce (step-up). `ClientRequestToken = tx_id` (retries idempotent ~10 min [U]).
+  (mandate path) or the challenge nonce (step-up). `ClientRequestToken = tx_id + "-" + first 16 hex of the execution leaf hash` (idempotent for identical retries within ~10 min; distinct after a table reset; `IdempotentParameterMismatch` → `IdempotencyMismatch(TxConflict)`).
 - **Rail after commit**: write pain.001.001.09 [U version], put its c14n SHA-256 in a `rail_submitted` leaf; pain.002-style
   statuses `ACTC`/`ACSC`/`RJCT`, `DUPL` on resubmission. Recovery re-submits executions that have no `rail_submitted` leaf.
 - Non-execution leaves use the same head-conditioned `Put` (steps 1–2) in their own transaction.

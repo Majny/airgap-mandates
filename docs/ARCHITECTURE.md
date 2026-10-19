@@ -463,7 +463,7 @@ There is **one** source of truth. Verified Permissions is dropped.
    - (d) the `ledger` `Put` (`attribute_not_exists(tx_id)`), where `tx_id = hash(mandate_id|nonce, proposal_id)`;
    - (e) the `proposals` `Update` to EXECUTED.
 
-   `ClientRequestToken` = `tx_id`, so retries are idempotent within about 10 min [U window].
+   `ClientRequestToken` = `tx_id-<leaf_hash[:16]>`, so identical retries are idempotent within about 10 min and runs after a table reset are distinct.
 3. **Rail, after commit.** Write pain.001.001.09 [U version vs the SEPA 2025 rulebook] and put its c14n SHA-256 in a follow-up `rail_submitted` leaf. TSYS, if writes are allowed, uses `tx_id` as the idempotency key. pain.002-style statuses ACTC/ACSC/RJCT are logged; **DUPL** on resubmission demonstrates exactly-once [codes from memory, U].
 4. **Crash test.** Kill the process between steps 2 and 3. Recovery re-submits from leaves that have no `rail_submitted`.
 
