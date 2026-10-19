@@ -1,1 +1,29 @@
-{"version": 1, "signers": []}
+{
+  "_note": "Enrolled approvers (enrolled_signers rows, CONTRACTS 3.1). device is set by tools/enroll.py, never by the host. Public data only: addresses and signatures, no seeds.",
+  "signers": [
+    {
+      "active": true,
+      "address": "0x6a7438740dc3289067175efda02459170dc1317d",
+      "ceremony": {
+        "authenticity": "optiga chain verified",
+        "bootloader_locked": true,
+        "fw_challenge": "01023b82cc4ebcc828ec2650cd81ddd29525ef04d435203f44d364c31d97f04c",
+        "fw_official_match": true,
+        "nonce": "E64B923D",
+        "text": "AG1/DEMO ENROLL\nROLE CLERK\nN E64B923D",
+        "transport": "usb"
+      },
+      "cert_chain_sha256": "7d3637951df9f2b48a08527e9871a161071ee55ec534df5d78f5ff8edf917981",
+      "derivation_path": "m/44'/60'/0'/0/0",
+      "device": "GENUINE",
+      "device_model": "T2B1",
+      "enroll_sig": "0xe1d0dd34299570d708344758ac7da8b6260318f3c8f08628af5a8bacfe7f142728422d3ec2d317bcfa0bdaef544d3ed62add79ff8c890a33fc80a9535eb7b3ad1b",
+      "enrolled_at": "2026-10-19T12:39:53Z",
+      "firmware_version": "2.12.0",
+      "fw_hash": "19fd7ab4fa23d5248b25647a9016deffe112b46fe0bc26587a3de1fc8a455e1c",
+      "label": "Clerk (Trezor Safe 3)",
+      "role": "clerk"
+    }
+  ],
+  "version": 1
+}
