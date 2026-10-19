@@ -63,6 +63,9 @@ def main() -> None:
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--fallback-clerk", action="store_true",
                     help="also activate the emulator clerk from data/enrollment.json (physical clerk stays active)")
+    ap.add_argument("--stage", action="store_true",
+                    help="stage reset: do NOT enroll the software e2e keys, so the bundle's approvers are only the "
+                         "data/enrollment.json devices (make demo-s1 / aws_e2e then cannot sign: use host.signer)")
     a = ap.parse_args()
     if not a.yes:
         sys.exit("refusing without --yes (deletes all demo data in the airgap-* tables)")
@@ -88,8 +91,9 @@ def main() -> None:
         from executor.store import get_store
         from infra.aws_e2e import aws_settings, seed
 
-        clerk, treasury = seed(fallback_clerk=a.fallback_clerk)
-        print("re-seeded registry; signers", clerk.address, treasury.address)
+        clerk, treasury = seed(fallback_clerk=a.fallback_clerk, stage=a.stage)
+        print("re-seeded registry; " + ("stage: no software keys enrolled" if a.stage
+                                         else f"software e2e signers {clerk.address} {treasury.address}"))
         st = get_store(aws_settings())
         reset_w2()
         size = int((st.get("audit", {"log_id": "head#audit", "seq": 0}) or {}).get("next_seq", 0))
