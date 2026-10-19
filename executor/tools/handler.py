@@ -252,12 +252,10 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         inv, warn = invoice_from_document(args, draft, vendor, settings=settings, siblings=_others(draft, drafts))
         inv["email_id"] = email_id
         rows = _live_proposals(store=store, settings=settings)
-        if prior := _reminder_of(inv, draft["fields"]["amount_minor"], rows, own_no="T-INVOICENO-DOCID" not in warn,
-                                 doc_amount_of=lambda ri: _prior_doc_amount(ri, store=store, settings=settings)):
-            # a reminder in another email repeating a paid invoice: same invoice_no / issue_date, so I-DUP sees it
-            # and the PARTIAL cap counts what was paid
-            inv["invoice_no"], inv["issue_date"] = prior["invoice_no"], prior["issue_date"]
-            warn.append("T-INVOICENO-PRIOR")
+        # Cross-email reminders of an already paid invoice are NOT matched here by amount/VS heuristics: every such
+        # rule either missed real reminders (late fees, reverse order, rounding) or refused legitimate recurring
+        # invoices forever (constant-VS vendors, fixed monthly fees). Residual, gated by the executor's I-DUP and the
+        # human step-up (infra/PROBES.md "Known residuals").
         _check_cumulative(inv, _invoice_cap(draft, drafts), store=store, settings=settings, rows=rows)
         out = ex("POST", "/proposals", {"invoice": inv, "hints": hints})
         return {"proposal_id": out["proposal"]["proposal_id"], "decision": out["decision"]["decision"],
@@ -376,7 +374,7 @@ def _vendor_of(r: dict[str, Any]) -> Any:
 def _same_invoice(r: dict[str, Any], inv: dict[str, Any]) -> bool:
     """Does live proposal `r` pay (part of) the invoice `inv`? Same document; or the same email (body and attachments
     describe one invoice unless they carry different invoice numbers); or, across emails, the same vendor with the
-    same invoice number (a reminder of a paid invoice has been given its number by _reminder_of). A shared VS alone
+    same invoice number. A shared VS alone
     does not make two invoices one: some vendors use a constant VS (a customer number)."""
     ri = r.get("invoice") or {}
     if ri.get("invoice_ref") == inv["invoice_ref"]:
@@ -390,54 +388,6 @@ def _same_invoice(r: dict[str, Any], inv: dict[str, Any]) -> bool:
 def _norm_vs(v: Any) -> str:
     """VS as a number: leading zeros carry no meaning ('0020260412' == '20260412')."""
     return str(v or "").strip().lstrip("0")
-
-
-def _repeats(amount: int | None, paid: set[int]) -> bool:
-    """Is `amount` one of the `paid` amounts, possibly plus a late fee (REMINDER_FEE_BP, at least REMINDER_FEE_MIN)?"""
-    return amount is not None and any(
-        0 < p <= amount <= p + max(p * REMINDER_FEE_BP // 10_000, REMINDER_FEE_MIN) for p in paid)
-
-
-def _reminder_of(inv: dict[str, Any], doc_amount: int | None, rows: list[dict[str, Any]], *, own_no: bool,
-                 doc_amount_of: Any = None) -> dict[str, Any] | None:
-    """The live proposal of the same vendor, from another email, that this document repeats (a reminder), or None.
-
-    A reminder carries a new due date, maybe a late fee, maybe no VS, maybe a number of its own, so neither the due
-    date nor the exact amount identifies it. A repeat is a document whose amount is the paid proposal's amount or its
-    document's amount (plus at most a late fee) and whose VS does not differ (leading zeros ignored); when both carry
-    an invoice number of their own (the numbers differ: the same number is I-DUP's), the VS must also be the same.
-    A genuinely different invoice of another amount is not a repeat, whatever its VS."""
-    vs = _norm_vs(inv.get("vs"))
-    for r in rows:
-        ri = r.get("invoice") or {}
-        if ri.get("email_id") == inv.get("email_id") or _vendor_of(r) != inv["vendor_id"]:
-            continue
-        if not ri.get("invoice_no") or _norm_no(ri["invoice_no"]) == _norm_no(inv.get("invoice_no")):
-            continue
-        if ri.get("currency") and inv.get("currency") and ri["currency"] != inv["currency"]:
-            continue
-        rvs = _norm_vs(ri.get("vs"))
-        if own_no and not _unbound(ri):
-            if not vs or vs != rvs:
-                continue
-        elif vs and rvs and vs != rvs:
-            continue
-        paid = {int(ri.get("amount_minor") or 0), int((doc_amount_of(ri) if doc_amount_of else None) or 0)}
-        if _repeats(doc_amount, paid):
-            return ri
-    return None
-
-
-def _prior_doc_amount(ri: dict[str, Any], *, store: Any, settings: Any) -> int | None:
-    """The document amount behind an earlier proposal (a PARTIAL pays less than its document)."""
-    if not ri.get("email_id") or not ri.get("invoice_ref"):
-        return None
-    try:
-        _, docs = _email_docs(ri["email_id"], store=store, settings=settings)
-    except ApiError:
-        return None
-    return next((extract.extract_draft(d)["fields"]["amount_minor"] for d in docs if d["doc_id"] == ri["invoice_ref"]),
-                None)
 
 
 def _others(draft: dict[str, Any], drafts: list[dict[str, Any]]) -> list[dict[str, Any]]:

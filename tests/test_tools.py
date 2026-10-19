@@ -536,50 +536,6 @@ def _body_id(h: ToolHarness, email_id: str) -> str:
     return next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "body")
 
 
-def test_reminder_in_another_email_cannot_pay_the_invoice_again():
-    """#6 round 3: a body-only reminder (other email, no invoice number, issue date falls back to due) used to be a
-    second EXECUTED payment. It now takes the paid invoice's number and issue date and counts against its amount."""
-    h = ToolHarness()
-    h.mandate()
-    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h)))
-    assert st == 200 and r["result"]["decision"] == "allow", r
-    _put_email(h, "eml_0006", REMINDER)
-    rem = _body_id(h, "eml_0006")
-    st, r = h.tool("payment.propose", _propose_args(rem, invoice_no="AGENT-1"))
-    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
-    st, r = h.tool("payment.propose", _propose_args(rem, invoice_no="AGENT-1", amount_minor=1000,
-                                                    reason_code="PARTIAL"))
-    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
-    executed = [p for p in h.store.scan("proposals") if p["status"] == "EXECUTED"]
-    assert len(executed) == 1
-
-
-def test_reminder_partial_hits_i_dup_with_the_paid_invoice_number():
-    h = ToolHarness()
-    h.mandate()
-    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h), amount_minor=700000, reason_code="PARTIAL"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
-    _put_email(h, "eml_0006", REMINDER)
-    st, r = h.tool("payment.propose", _propose_args(_body_id(h, "eml_0006"), invoice_no="AGENT-1",
-                                                    amount_minor=700000, reason_code="PARTIAL"))
-    assert st == 200 and r["result"]["decision"] == "deny" and "I-DUP" in r["result"]["rule_ids"], r
-    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
-    assert "T-INVOICENO-PRIOR" in leaf["data"]["rule_ids"]
-    denied = [p for p in h.store.scan("proposals") if p["status"] != "EXECUTED"][0]
-    assert (denied["invoice"]["invoice_no"], denied["invoice"]["issue_date"]) == ("FV-2026-0412", "2026-10-15")
-
-
-def test_reminder_first_then_the_invoice_is_refused():
-    """#6 round 3, reverse order: the body-only reminder paid first, then the real ISDOC invoice (same VS)."""
-    h = ToolHarness()
-    h.mandate()
-    _put_email(h, "eml_0006", REMINDER)
-    st, r = h.tool("payment.propose", _propose_args(_body_id(h, "eml_0006"), invoice_no="AGENT-1"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
-    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h)))
-    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
-
-
 def _isdoc(no: str, amount: str, vs: str) -> str:
     return (ISDOC.replace("FV-2026-0412", no).replace("14500.00", amount).replace("20260412", vs)
             .replace("\n", "\r\n"))
@@ -701,62 +657,6 @@ def _executed(h: ToolHarness) -> list[dict]:
     return [p for p in h.store.scan("proposals") if p["status"] == "EXECUTED"]
 
 
-def test_reminders_without_the_paid_vs_or_due_date_are_refused():
-    """#6 round 4: (A) no X-VS + new DT, (B) late fee, (C) VS with leading zeros, (D) a number of its own + the same
-    VS: each used to be a second EXECUTED payment of FV-2026-0412. Now each is the paid invoice (T-INVOICENO-PRIOR)
-    and the cap refuses it."""
-    acc = "SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK"
-    cases = {
-        "A": (_spayd_mail(f"{acc}*AM:14500.00*DT:20261110"), {"amount_minor": 1450000}),
-        "B": (_spayd_mail(f"{acc}*AM:14645.00*DT:20261110"), {"amount_minor": 1464500}),
-        "C": (_spayd_mail(f"{acc}*AM:14500.00*X-VS:0020260412*DT:20261110"),
-              {"amount_minor": 1450000, "vs": "0020260412"}),
-        "D": (_spayd_mail(f"{acc}*AM:14500.00*X-VS:20260412*DT:20261110", "Faktura c. UP-2026-77, upominka:"),
-              {"amount_minor": 1450000, "vs": "20260412", "invoice_no": "UP-2026-77"}),
-    }
-    for case, (raw, over) in cases.items():
-        h = ToolHarness()
-        h.mandate()
-        _pay_isdoc_in_full(h)
-        st, r = _propose_body(h, "eml_0020", raw, due="2026-11-10", **over)
-        assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], (case, r)
-        assert len(_executed(h)) == 1, case
-        # after a PARTIAL of the invoice, a PARTIAL of the reminder reaches the executor as FV-2026-0412: I-DUP
-        h = ToolHarness()
-        h.mandate()
-        st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h), amount_minor=700000, reason_code="PARTIAL"))
-        assert st == 200 and r["result"]["decision"] == "allow", r
-        st, r = _propose_body(h, "eml_0020", raw, due="2026-11-10", reason_code="PARTIAL",
-                              **{**over, "amount_minor": 700000})
-        assert st == 200 and r["result"]["decision"] == "deny" and "I-DUP" in r["result"]["rule_ids"], (case, r)
-        leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
-        assert "T-INVOICENO-PRIOR" in leaf["data"]["rule_ids"], case
-        assert [p["invoice"]["invoice_no"] for p in h.store.scan("proposals")] == ["FV-2026-0412"] * 2, case
-
-
-def test_two_body_only_mails_without_vs_are_one_invoice():
-    """#6 round 4 (E): two body-only emails, no VS, different due dates, same amount: the second is the first's."""
-    h = ToolHarness()
-    h.mandate()
-    acc = "SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK*AM:14500.00"
-    st, r = _propose_body(h, "eml_0021", _spayd_mail(f"{acc}*DT:20261029", "Platebni udaje:"), due="2026-10-29")
-    assert st == 200 and r["result"]["decision"] == "allow", r
-    st, r = _propose_body(h, "eml_0022", _spayd_mail(f"{acc}*DT:20261112"), due="2026-11-12")
-    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
-    assert len(_executed(h)) == 1
-
-
-def test_reminder_of_a_partial_counts_the_paid_document_amount():
-    """#6 round 4: after a PARTIAL of FV-2026-0412, a reminder for the full amount is the same invoice."""
-    h = ToolHarness()
-    h.mandate()
-    st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h), amount_minor=700000, reason_code="PARTIAL"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
-    raw = _spayd_mail("SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK*AM:14500.00*DT:20261110")
-    st, r = _propose_body(h, "eml_0023", raw, due="2026-11-10")
-    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r  # 700 000 + 1 450 000 > 1 450 000
-
-
 def test_other_invoices_of_the_vendor_are_not_reminders():
     """#6 round 4 regression (F): a constant-VS vendor's genuinely different body-only invoice (other amount) was
     refused by the cap; and a numbered invoice of the same amount with its own VS is not a repeat either."""
@@ -777,15 +677,6 @@ def test_other_invoices_of_the_vendor_are_not_reminders():
     st, r = h.tool("payment.propose", _propose_args(att, invoice_no="FV-2026-0413", vs="20260413"))
     assert st == 200 and r["result"]["decision"] == "allow", r
     assert len(_executed(h)) == 3
-
-
-def test_reminder_amount_band():
-    from executor.tools.handler import _repeats
-
-    assert _repeats(1450000, {1450000}) and _repeats(1464500, {1450000}) and _repeats(1595000, {1450000})
-    assert not _repeats(1595001, {1450000}) and not _repeats(1449999, {1450000}) and not _repeats(300000, {1450000})
-    assert _repeats(150000, {100000}) and not _repeats(150001, {100000})  # small invoice: fee up to 500.00
-    assert not _repeats(None, {1}) and not _repeats(5, {0})
 
 
 def test_invoice_extract_shows_an_iban_start_as_a_reference():
@@ -829,3 +720,19 @@ def test_dkim_of_a_subdomain_authenticates_the_domain(monkeypatch):
         monkeypatch.setattr(dkim, "dkim_verdict", lambda raw, dns_snapshot, d=d: {"result": "pass", "aligned": True,
                                                                                    "d": d})
         assert _authenticated(b"", "acme.cz", settings=h.settings) is ok, d
+
+
+def test_constant_vs_monthly_invoices_of_the_same_amount_are_paid():
+    """Regression guard (review round 4, R1): a vendor that uses one VS (customer number) for every month's separately
+    numbered invoice of the same amount must not be refused as a 'repeat' of last month's paid invoice."""
+    h = ToolHarness()
+    h.mandate()
+    _pay_isdoc_in_full(h)
+    raw = (RAW.replace(b"FV-2026-0412", b"FV-2026-1101").replace(b"2026-10-15", b"2026-11-15")
+           .replace(b"2026-10-29", b"2026-11-29"))  # same amount, same VS 20260412, next month, own number
+    _put_email(h, "eml_0031", raw)
+    st, r = h.tool("inbox.read", {"email_id": "eml_0031"})
+    att = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment")
+    st, r = h.tool("payment.propose", _propose_args(att, invoice_no="FV-2026-1101", due="2026-11-29"))
+    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert len(_executed(h)) == 2
