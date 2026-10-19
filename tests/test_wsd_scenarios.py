@@ -31,6 +31,7 @@ from hypothesis import strategies as st
 
 from executor import handler, render
 from executor.config import Settings, iso
+from executor.docs import extract
 from executor.errors import ApiError
 from executor.issuers import issuer
 from executor.store import KEY_SCHEMA
@@ -147,6 +148,8 @@ class World:
         inv.update(invoice_ref="doc_" + hashlib.sha256(d["invoice_no"].encode()).hexdigest()[:16], reason_code="DUE")
         if with_email:
             inv["email_id"] = d["email_id"]
+            raw = base64.b64decode(self.store.get("inbox", {"email_id": d["email_id"]})["raw_b64"])
+            inv["invoice_ref"] = next(x for x in extract.documents(raw) if x["kind"] == "attachment")["doc_id"]
         inv.update(over)
         return self.call("POST", "/proposals", {"invoice": inv, "hints": []}, "tools")
 
@@ -166,6 +169,8 @@ class World:
 
 def test_s1_legit_invoice_emails_and_proposals_under_mandate():
     w = World()
+    m = w.mandate()
+    assert m["sig_required"] == 2
     for key, inv in LEGIT_INVOICES.items():
         row = w.store.get("inbox", {"email_id": w.emails[key]})
         assert row["dkim"]["result"] == "pass", row["dkim"]
@@ -173,20 +178,22 @@ def test_s1_legit_invoice_emails_and_proposals_under_mandate():
         assert st_ == 201, r
         f = _facts(r["proposal"]["facts"])
         assert f["F-DKIM"] == ("INFO", "DKIM PASS") and f["F-DOMAIN"] == ("INFO", "DOMAIN MATCH"), f
-        blocks = {k for k, (sev, _) in f.items() if sev == "BLOCK"}
-        # Known WS-E gap (tests/test_amount_doc.py strict xfails): executor/docs/extract.py cannot read the fixture
-        # ISDOC, so F-AMOUNT-DOC blocks the legit invoices. It must be the ONLY block.
-        assert blocks == {"F-AMOUNT-DOC"} and f["F-AMOUNT-DOC"] == ("BLOCK", "AMOUNT DOC N/A"), f
-        assert r["decision"]["decision"] == "deny" and not w.nonces_for(r["proposal"]["proposal_id"])
-    m = w.mandate()
-    assert m["sig_required"] == 2
-    for inv in LEGIT_INVOICES.values():
-        st_, r = w.propose(inv, with_email=False)
-        assert st_ == 201 and r["decision"]["decision"] == "allow", r["decision"]
+        assert f["F-AMOUNT-DOC"] == ("INFO", "AMOUNT OK DOC") and f["F-DOMAIN-AGE"][0] == "INFO", f
+        assert {k for k, (sev, _) in f.items() if sev != "INFO"} == set(), f
+        assert r["decision"]["decision"] == "allow", r["decision"]
         assert r["tx"]["authorization"] == {"kind": "mandate", "mandate_id": m["mandate_id"]}
-        assert "F-DKIM" not in _facts(r["proposal"]["facts"])  # no email -> no email facts
     _, led = w.call("GET", "/ledger")
     assert sorted(t["vendor_id"] for t in led["txs"]) == sorted([ACME, BETA, GAMMA])
+
+
+def test_s1_lookalike_sender_domain_stays_new():
+    """Registry-aware first-seen applies only to the vendor's exact registered domain."""
+    from executor.facts.compute import _first_seen
+
+    acme = {"domain": "acme.cz", "registered_since": "2024-03-01"}
+    assert _first_seen("acme.cz", acme, {}) == "2024-03-01T00:00:00Z"
+    assert _first_seen("acme-cz.com", acme, {}) is None
+    assert _first_seen("acme-cz.com", acme, {"domain_first_seen": "2026-10-19T08:00:00Z"}) == "2026-10-19T08:00:00Z"
 
 
 # --------------------------------------------------------------------------- 2. S2 lookalike BEC
@@ -302,7 +309,7 @@ def _scenario4(w: World) -> dict[str, Any]:
     lines = text.split("\n")
     assert len(lines) == 14 and lines[0] == f"AG1/DEMO CHG {c['change_no']}", text  # two 7-line blocks (§5.3)
     assert render.check_text(text, w.settings.render_profile)  # device pages valid (S11)
-    assert lines[7] == "0 BLOCK 3 WARN" and "COOLOFF DONE" in lines and "ROLE CLERK 1/2" in lines, text
+    assert lines[7] == "0 BLOCK 2 WARN" and "COOLOFF DONE" in lines and "ROLE CLERK 1/2" in lines, text
     # The attestation count is in the signed facts (facts_digest) but NOT on the device: §5.4 overflow keeps WARN
     # before INFO, so with 3 WARN facts F-ATTEST (INFO "ATT 2/3 ERP BANK") is folded into "+11 MORE 0 BLOCK".
     assert _facts(c["facts"])["F-ATTEST"] == ("INFO", "ATT 2/3 ERP BANK")
