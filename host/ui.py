@@ -165,7 +165,7 @@ def tab_receipts(st: Any) -> None:
         st.image(short_qr_png(r), width=480)
         st.code(short_qr_payload(r), language="text")
         st.caption("scan → the verifier checks this receipt offline against the signed log")
-    except (ImportError, NotImplementedError) as exc:
+    except (ImportError, NotImplementedError, RuntimeError) as exc:  # RuntimeError: segno missing
         st.info(f"receipt QR unavailable ({exc}); install the [ui] extra (segno)")
     st.json(r, expanded=False)
 
