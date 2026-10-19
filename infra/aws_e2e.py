@@ -47,18 +47,34 @@ def signed_call(base: str):
     return call
 
 
-def seed() -> tuple[Any, Any]:
+def aws_settings() -> Any:
     from executor.config import Settings
+
+    acct = boto3.client("sts").get_caller_identity()["Account"]
+    out = {o["OutputKey"]: o["OutputValue"] for o in boto3.client("cloudformation", region_name=REGION)
+           .describe_stacks(StackName="AirgapMandates")["Stacks"][0]["Outputs"]}
+    # like the Lambdas: only the scheduled checkpointer signs checkpoints, never this operator process
+    return Settings.from_env({**os.environ, "AIRGAP_BACKEND": "aws", "AWS_REGION": REGION,
+                              "AIRGAP_INBOX_BUCKET": f"airgap-inbox-{acct}", "AIRGAP_DATA_DIR": "data",
+                              "AIRGAP_KMS_KEY_ID": out["LogKeyId"], "AIRGAP_WITNESS_KMS_KEY_ID": out["W1KeyId"],
+                              "AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "1000000000",
+                              "AIRGAP_CHECKPOINT_MAX_SECONDS": "1000000000"})
+
+
+def seed() -> tuple[Any, Any]:
+    """Registry (vendors.json + issuer pins), enrolled signers and inbox via WS-D's tools.seed_data, then the two
+    e2e software signer keys (enroll leaf labelled 'software key, aws e2e')."""
     from executor.store import get_store
     from executor.store import seed as seedmod
+    from tools import seed_data
 
     keys = json.loads(KEYS.read_text()) if KEYS.exists() else {
         "clerk": Account.create().key.hex(), "treasury": Account.create().key.hex()}
     KEYS.parent.mkdir(exist_ok=True)
     KEYS.write_text(json.dumps(keys))
-    s = Settings.from_env({**os.environ, "AIRGAP_BACKEND": "aws", "AWS_REGION": REGION})
+    s = aws_settings()
     st = get_store(s)
-    seedmod.seed_registry(st)
+    print("seed_data:", seed_data.seed(settings=s, store=st))
     clerk, treasury = Account.from_key(keys["clerk"]), Account.from_key(keys["treasury"])
     seedmod.enroll_signer(st, clerk.address, "clerk", device="GENUINE", label="clerk (software key, aws e2e)", settings=s)
     seedmod.enroll_signer(st, treasury.address, "treasury", label="treasury (software key, aws e2e)", settings=s)
