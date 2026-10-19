@@ -909,10 +909,17 @@
       "type": "object",
       "properties": {
         "issuer_class": {
-          "enum": [
-            "supplier-erp",
-            "supplier-bank",
-            "registry"
+          "anyOf": [
+            {
+              "enum": [
+                "supplier-erp",
+                "supplier-bank",
+                "registry"
+              ]
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "iss": {
@@ -1350,7 +1357,14 @@
           "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
         },
         "bic": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "country": {
           "type": "string",
