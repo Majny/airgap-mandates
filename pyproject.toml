@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "airgap-mandates"
-version = "0.1.0"
+version = "0.2.0"
 description = "AirGap Mandates: hardware-signed payment mandates for AI agents (FinTechers Hackathon 2026, Track 3)"
 requires-python = ">=3.12,<3.13"
 readme = "README.md"
+# Runtime = what the Lambda functions need (no trezorlib / streamlit / moto / pytest in Lambda).
 dependencies = [
-  "trezorlib",
   "eth-account",
   "dkimpy",
   "dnspython",
@@ -18,24 +18,39 @@ dependencies = [
   "schwifty",
   "rapidfuzz",
   "confusable_homoglyphs",
-  "hypothesis",
   "lxml",
-  "rfc3161ng",
-  "fastapi",
-  "uvicorn",
-  "streamlit",
-  "pytest",
-  "moto",
   "jsonschema",
   "tzdata",
   "cryptography",
   "httpx",
+  "cedarpy",
+  "sd-jwt",
+  "pynacl",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest", "hypothesis", "moto", "ruff", "fastapi", "uvicorn"]
+ui = ["streamlit"]
+host = ["trezor"]  # PyPI name of trezorlib
+tsa = ["rfc3161ng"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["executor*", "host*", "vendor*", "witness*", "bench*", "tools*"]
+include = ["executor*", "host*", "vendor*", "witness*", "bench*", "tools*", "agent*", "demo*", "contracts*"]
+
+[tool.setuptools.package-data]
+"executor.policy" = ["cedar/*.cedar", "cedar/*.json"]
+"executor.tools" = ["policies/*.cedar", "policies/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv", "contracts/schemas", "contracts/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E731"]
