@@ -1,0 +1,39 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/majny/Desktop/MyProjects/am-agent/demo/scene_s1.py", line 29, in <module>
+    print(json.dumps(run(), indent=1))
+                     ^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/demo/scene_s1.py", line 25, in run
+    return beat(AwsEnv(url or settings.executor_url), log)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/demo/scene_s1.py", line 17, in beat
+    return e2e.run(env.call, env.clerk, env.treasury, now=env.now, log=log)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/executor/e2e.py", line 104, in run
+    inv = cite(call, {
+          ^^^^^^^^^^^^
+  File "/Users/majny/Desktop/MyProjects/am-agent/executor/e2e.py", line 66, in cite
+    assert st in (200, 201) and isinstance(r, dict) and r.get("email_id"), f"ingest HTTP {st}: {r}"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ingest HTTP 500: {'error': 'internal_error', 'message': 'AccessDenied'}
+mandate mnd_1: sig_required=2
+AG1/DEMO MANDATE
+NO 1 CZK
+PER PAY 80000
+TOTAL 250000
+MAX 20 PAYMENTS
+EXISTING PAYEES
+TO 10-20 18:34
+ROLE CLERK 1/2
+FROM 10-19 18:34
+REQ VOP MTCH
+PAYEES 3 REG V1
+N 94BE6094
+P 3909f806c26877
+H 8faf5ac194b1da
+
+clerk signed -> PENDING_SIG_TREASURY
+treasury signed -> ACTIVE (mnd_1)
+
+make: *** [demo-s1] Error 1

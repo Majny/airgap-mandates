@@ -1,0 +1,2 @@
+agent (quarantined, eu.anthropic.claude-sonnet-4-5-20250929-v1:0) 12162 ms, 2241 tokens
+  final: I notice the invoice has critical missing information (supplier_ico, issue_date, due_date, currency, amount_minor). However, I can see there's an IBAN (CZ6508000000192000145399). Let me check if I can identify the vendor. Since there's no ICO and no registered_vendor_id in the email, I cannot procee
