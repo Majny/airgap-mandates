@@ -12,6 +12,7 @@ Owner: WS-A.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -651,10 +652,30 @@ def post_witness(ctx: Context, p: dict, q: dict, body: Any, principal: str | Non
 
 # ------------------------------------------------------------------ tools, egress (WS-E), inbox
 
+def _log_bad_tool_request(ctx: Context, name: str, body: Any) -> None:
+    """A malformed tool call is still an agent action: log a tool_call leaf (result error, T-BAD-REQUEST) so an
+    escalation attempt with a bad body is visible in the audit log. Leaf only: no tool_calls row (its key is the
+    step, which is not trustworthy here). Values are coerced so the leaf stays canonical (no floats)."""
+    b = body if isinstance(body, dict) else {}
+    sid = b.get("session_id") if isinstance(b.get("session_id"), str) else None
+    step = b.get("step")
+    step = step if isinstance(step, int) and not isinstance(step, bool) else None
+    raw = json.dumps(b.get("args"), sort_keys=True, default=repr).encode() if b else repr(body).encode()
+    data = {"session_id": sid[:128] if sid else None, "step": step, "tool": name[:64],
+            "args_sha256": hashlib.sha256(raw).hexdigest(), "result": "error", "rule_ids": ["T-BAD-REQUEST"],
+            "untrusted_read": False}
+    shims.append(shims.make_event("tool_call", data, subject_id=data["session_id"], actor="tools",
+                                  settings=ctx.settings), store=ctx.store, settings=ctx.settings)
+
+
 def post_tool(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
     from executor.tools import handler as tools
 
-    body = validate(body, "tool_call.request")
+    try:
+        body = validate(body, "tool_call.request")
+    except ApiError:
+        _log_bad_tool_request(ctx, p["name"], body)
+        raise
     return 200, tools.call_tool(p["name"], body, store=ctx.store, settings=ctx.settings)
 
 
