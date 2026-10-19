@@ -705,7 +705,7 @@ restrictions the output is byte-identical to RFC 8785 JCS (`tests/test_canonical
 ### 7.4 Export and receipt
 `audit_export.response`: `{log_id, redacted, leaves: [{seq, event, leaf_hash}], checkpoints: [note text with cosignatures],
 pubkeys: {log, w1, w2} (note verifier keys), approvers: [{address, role, device, enroll_seq}],
-policies: {<policy_hash>: {cedar_policies_text, cedar_schema, translit_table, fact_severity_table, policy_v}},
+policies: {<policy_hash>: {cedar_policies_text, cedar_schema, translit_table, fact_severity_table, params, policy_v} (= `policy_material()` verbatim, so sha256(canonical_json(material)) == policy_hash)},
 snapshots: {<sha256>: <uri>}, render_profile: "safe5-mono-18x7"}`. `redacted=1` replaces IBANs with commitments.
 **Receipt** (`receipt.json`, self-contained, tlog-proof style): `{tx, entry (the execution event), seq, leaf_hash,
 tree_size, inclusion_proof [hex], checkpoint_note (with cosignatures), key_ids {log, w1, w2?}, vkeys {log, w1, w2?}}`;
