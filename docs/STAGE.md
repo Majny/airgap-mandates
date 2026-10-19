@@ -26,7 +26,9 @@ export AWS_PROFILE=hackathon
    Nobody else resets. W2 cosigns every checkpoint automatically (checkpointer tick -> `witness.relay_w2.after_tick`
    over SSM); manual fallback: `python -m witness.relay_w2 --executor-url $API --aws-role airgap-relay --read-role
    airgap-auditor --w2-ssm i-0bc5865c1ddae7b1d` with `AIRGAP_W2_VKEY` set.
-2. **While online:** `make .local/bin/noteverify` (Go build; the offline beat cannot build it with Wi-Fi off).
+2. **While online:** `make .local/bin/noteverify` (Go build; the offline beat cannot build it with Wi-Fi off) and
+   `make data` (rebuilds `data/mostlyright/snapshot.sqlite` to the committed `snapshot.sha256`; stale after any
+   rebase that changes it, ~22 tests and the facts go wrong otherwise; `make preflight` checks it).
 3. Re-seal the stage bundle once the freeze build is deployed: `make demo-bundle` (refuses unless green), then
    `make offline-demo` once to see ALL PASS.
 4. Device operator: Safe 3 auto-lock to max (Settings -> Auto-lock), short data cable seated and taped, no hub.
@@ -71,10 +73,8 @@ export AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324     # the one switch; unset to go 
   recorded video. `host.signer ... --url` refuses to run if a device address is not active (says which reset).
 - **Rehearsed on AWS** (Mon, WS-C, after `reset_state --fallback-clerk`, emulator clerk + treasury, auto-confirm):
   `scene s2 --url $API` GREEN in 29 s, `scene s3 --url $API` GREEN in 67 s; CHG shows the pinned `ATT 2/3 ERP BANK`
-  (logs: `docs/device/rehearsal/aws_fallback_s*.log`). **Open (WS-B):** the audit bundle of a `--fallback-clerk`
-  deployment is RED ("approver 0x73d0...: does not match an enroll leaf"): the re-enrolment writes a second enroll
-  leaf and the export/verifier assume one per address. The S5 beat after a fallback run must use the pre-sealed
-  `docs/audit/demo` until that is fixed.
+  (logs: `docs/device/rehearsal/aws_fallback_s*.log`). `--fallback-clerk` now activates the clerk before seeding,
+  so each address has exactly one `enroll` leaf (WS-E); the verifier also accepts re-enrolments (WS-B `f5cbe7b`).
 - Last resort for any beat: the pre-recorded video (WS-F). First real-device take: `docs/device/photos/`.
 
 ## Recovery
