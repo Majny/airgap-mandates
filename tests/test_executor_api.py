@@ -228,3 +228,12 @@ def test_accepted_signature_leaves_carry_recoverable_sig():
         text = R.render(c["template"], c["params"], profile=c["profile"])
         assert shims.verify_eip191(text, e["data"]["sig"]) == e["data"]["signer_address"]
         assert enrolled[e["data"]["signer_address"]] < e["seq"]
+
+
+def test_query_string_in_path():
+    h = Harness()
+    h.mandate()
+    h.propose(1_000_000)
+    st, r = h.call("GET", "/ledger?vendor_id=ven_87654321")
+    assert st == 200 and r["txs"] == []
+    assert len(h.call("GET", "/ledger?vendor_id=ven_12345678")[1]["txs"]) == 1
