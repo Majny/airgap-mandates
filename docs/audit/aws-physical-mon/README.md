@@ -22,7 +22,8 @@ the PAY execution), `trust-keys.json` (log + W1 verifier keys pinned from KMS).
 
 Honest notes:
 - Leaves 11-12 enrol WS-E's two **software** test keys (labels say "software key, aws e2e") left by `reset_state`; leaf 11
-  carries `device: GENUINE` although it is a software key (seeding default in `infra/aws_e2e.py`, reported to WS-E).
-  They sign nothing in this run.
+  carries `device: GENUINE` although it is a software key (seeding default in `infra/aws_e2e.py`). They sign nothing
+  in this run. Fixed in ws-e-agent `fb6cdca`: from the next reset software keys are enrolled as `device: EMULATOR`,
+  label "<role> (SOFTWARE key, aws e2e; no device)", no made-up model/firmware. This sealed bundle stays as recorded.
 - The treasury is an emulator by design (demo profile); `prod` would refuse it.
 - This is not the stage bundle: `docs/audit/demo` is re-sealed Tue after the 06:00 policy freeze.
