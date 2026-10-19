@@ -37,6 +37,9 @@ def main() -> None:
     ap.add_argument("--yes", action="store_true")
     if not ap.parse_args().yes:
         sys.exit("refusing without --yes (deletes all demo data in the airgap-* tables)")
+    from infra.aws_e2e import require_team_account
+
+    require_team_account()
     sch = boto3.client("scheduler", region_name=REGION)
     tick = sch.get_schedule(Name="airgap-tick")
 
@@ -66,8 +69,8 @@ def main() -> None:
         print(f"log size {size}, no stale checkpoints")
     finally:
         lam.delete_function_concurrency(FunctionName="airgap-checkpointer")
-        set_tick("ENABLED")
-        print("checkpointer + tick re-enabled")
+        set_tick(tick.get("State", "ENABLED"))  # restore whatever it was before the reset
+        print(f"checkpointer re-enabled, tick {tick.get('State', 'ENABLED')}")
 
 
 if __name__ == "__main__":

@@ -5,17 +5,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=infra/build/lambda
 rm -rf infra/build && mkdir -p "$OUT"
-DEPS=$(python3 - <<'PY'
-import tomllib
-deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
-print(" ".join(d for d in deps if not d.startswith("boto3")))
-PY
-)
-uv pip install --quiet --target "$OUT" --python-platform aarch64-manylinux2014 --python-version 3.12 \
-  --only-binary=:all: --no-binary dkimpy $DEPS
+export TZ=UTC
+# runtime deps pinned from uv.lock (no dev/ui/host extras); boto3/botocore come from the Lambda runtime;
+# manylinux_2_28 wheels: the python3.12 runtime is Amazon Linux 2023 (glibc 2.34)
+uv export --quiet --frozen --no-dev --no-hashes --no-emit-project --format requirements-txt \
+  | grep -v -E '^(boto3|botocore|s3transfer)==' > infra/build/requirements.lock
+uv pip install --quiet --target "$OUT" --python-platform aarch64-manylinux_2_28 --python-version 3.12 \
+  --only-binary=:all: --no-binary dkimpy -r infra/build/requirements.lock
 cp -R executor agent witness "$OUT"/
 mkdir -p "$OUT/contracts" && cp -R contracts/schemas "$OUT/contracts/" && cp contracts/__init__.py "$OUT/contracts/"
-[ -d data ] && cp -R data "$OUT/" || true
+# data snapshots only: no DEMO private keys (issuer/holder JWKs, DKIM PEMs) in any function, incl. the agent
+rsync -a --exclude issuer_keys --exclude dkim_keys --exclude '*.pem' --exclude '*.jwk' data "$OUT/"
 cp infra/lambda_src/*.py "$OUT"/
 find "$OUT" -name "__pycache__" -prune -exec rm -rf {} +  # keep *.dist-info: importlib.metadata needs it
 # deterministic zip (sorted, fixed mtime) so CodeSha256 is reproducible
