@@ -34,8 +34,8 @@
       "role": "clerk",
       "subject_id": "mnd_3",
       "exp": "2026-10-19T12:05:00Z",
-      "text": "AIRGAP MANDATE m:3 n:91BC02\nmax/platba 80000 CZK\nmax/celkem 250000 CZK\nmax 20 plateb\njen existujici prijemci\nplati do 2026-10-20 18:00\npolicy 1f3a9c0e",
-      "text_sha256": "62e2bc318d3141e22a52ca5c6cc332ace9d62e015eb5b18bbe3d8547d874be2f",
+      "text": "AIRGAP MANDATE m:3 n:91BC02\nmax/payment 80000 CZK\nmax/total 250000 CZK\nmax 20 payments\nexisting payees only\nvalid until 2026-10-20 18:00\npolicy 1f3a9c0e",
+      "text_sha256": "e428b7d63e9c0110664cccabe5012b5c8d6b77258130ff9bc5c5b4c3f2acd064",
       "width": 32,
       "line_count": 7
     }

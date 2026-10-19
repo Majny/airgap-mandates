@@ -21,19 +21,19 @@
       "policy": {
         "signers": [
           {
-            "address": "0xdd2e1436e57144ba90c43c51c4932d5afd15f6f1",
-            "role": "jednatel",
+            "address": "0xb39c52ea48860b3f687339e6b8e3d5d964d6c59e",
+            "role": "director",
             "role_basis": "OR"
           },
           {
-            "address": "0xd1b9bc9943eaca857e6576c491f3de5d21758549",
-            "role": "ucetni",
-            "role_basis": "plna moc"
+            "address": "0x5440dbeba10e7ab24622759ab904c905ec341c62",
+            "role": "accountant",
+            "role_basis": "POA"
           },
           {
-            "address": "0x4aaf15ca6c8e0c74998a7187e83050412d1bb22a",
-            "role": "financni",
-            "role_basis": "plna moc"
+            "address": "0xfb551527fae66fac460afeaf3374f48a4ad036b1",
+            "role": "finance",
+            "role_basis": "POA"
           }
         ],
         "threshold": 2,
@@ -54,33 +54,33 @@
       {
         "nonce": "7D11E0",
         "purpose": "VENDOR_ATTEST",
-        "role": "jednatel",
+        "role": "director",
         "subject_id": "12345678#5",
         "exp": "2026-10-19T12:30:00Z",
-        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E0\nUCET CZ86 0100 0000\n     0000 9988 7766\nplatne od 2026-10-20\npodepisuje: jednatel (OR)\nkvorum 2/3",
-        "text_sha256": "eca8365ffda9690fb8d1424113cbec5b26c64798beaa960c0f65be3b3aeb94b0",
+        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E0\nACCT CZ86 0100 0000\n     0000 9988 7766\nvalid from 2026-10-20\nsigner: stat. director (OR)\nquorum 2/3",
+        "text_sha256": "a2d36cfd803971540b59a142adfa4ab42783c0a95e781498d9798b1e98c98ff4",
         "width": 32,
         "line_count": 7
       },
       {
         "nonce": "7D11E1",
         "purpose": "VENDOR_ATTEST",
-        "role": "ucetni",
+        "role": "accountant",
         "subject_id": "12345678#5",
         "exp": "2026-10-19T12:30:00Z",
-        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E1\nUCET CZ86 0100 0000\n     0000 9988 7766\nplatne od 2026-10-20\npodepisuje: ucetni (plna moc)\nkvorum 2/3",
-        "text_sha256": "d08449431798e2f6a5124bdf31d4e6eaa40d220bc53408dc3ca55f0989e60f8e",
+        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E1\nACCT CZ86 0100 0000\n     0000 9988 7766\nvalid from 2026-10-20\nsigner: accountant (POA)\nquorum 2/3",
+        "text_sha256": "a3b212d45dff5f6c2acef9125211f14eb3443bf346b882b02daa14e42a023cc9",
         "width": 32,
         "line_count": 7
       },
       {
         "nonce": "7D11E2",
         "purpose": "VENDOR_ATTEST",
-        "role": "financni",
+        "role": "finance",
         "subject_id": "12345678#5",
         "exp": "2026-10-19T12:30:00Z",
-        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E2\nUCET CZ86 0100 0000\n     0000 9988 7766\nplatne od 2026-10-20\npodepisuje: financni (plna moc)\nkvorum 2/3",
-        "text_sha256": "2dc2538985bf33ac2b4aa9650435aa67266866aff3e88297b8077618f8a753eb",
+        "text": "VENDOR ATTEST ACME s.r.o.\nICO 12345678 v:5 n:7D11E2\nACCT CZ86 0100 0000\n     0000 9988 7766\nvalid from 2026-10-20\nsigner: finance (POA)\nquorum 2/3",
+        "text_sha256": "7978c0d794eebbdb6c2fcd2e2e81b22b31aa703227b2221b0c7a3a9b3f55ec9b",
         "width": 32,
         "line_count": 7
       }

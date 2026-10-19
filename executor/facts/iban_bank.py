@@ -8,5 +8,5 @@ from typing import Any
 
 
 def bank_fact(iban: str, vendor_country: str) -> dict[str, Any]:
-    """WARN for foreign/EMI bank for a CZ vendor, e.g. 'banka: EMI Litva (fiktivni)'."""
+    """WARN for foreign/EMI bank for a CZ vendor, e.g. 'bank: EMI Lithuania (fict.)'."""
     raise NotImplementedError("TODO WS-E")

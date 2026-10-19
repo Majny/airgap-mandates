@@ -11,7 +11,7 @@
     "purpose": "CHG",
     "role": "clerk",
     "signer_address": "0xc40dc72b0228e5850d8b173ff861a48acfb4a15b",
-    "text_sha256": "6c7b43a905cd635d7445adc8a971ed5204cf69fdbf1791325c5711c5e4b0d99e",
+    "text_sha256": "49fcbf7ed00af62347540e4a5c8c2822e2ad1d701554b9db2b244e929844b067",
     "sig": "0x6b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e36b9951f9655f5aefc4a740e480fdd0e7d67c6135e111f06b3bd74766ef6a60e31b",
     "accepted": false,
     "error": "vendor_attestation_missing"

@@ -35,13 +35,13 @@ class Purpose(str, Enum):
 class Role(str, Enum):
     CLERK = "clerk"
     TREASURY = "treasury"
-    JEDNATEL = "jednatel"
-    UCETNI = "ucetni"
-    FINANCNI = "financni"
+    DIRECTOR = "director"
+    ACCOUNTANT = "accountant"
+    FINANCE = "finance"
 
 
 BANK_ROLES = frozenset({Role.CLERK, Role.TREASURY})
-VENDOR_ROLES = frozenset({Role.JEDNATEL, Role.UCETNI, Role.FINANCNI})
+VENDOR_ROLES = frozenset({Role.DIRECTOR, Role.ACCOUNTANT, Role.FINANCE})
 
 
 class ChangeState(str, Enum):
@@ -139,7 +139,7 @@ FACT_ORDER: list[str] = [
     "F-DKIM",
     "F-FIRSTSEEN",
     "F-BANK",
-    "F-DPH",
+    "F-VAT",
     "F-VOP",
     "F-DUP",
     "F-SPLIT",

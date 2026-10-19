@@ -14,19 +14,19 @@
       "policy": {
         "signers": [
           {
-            "address": "0xdd2e1436e57144ba90c43c51c4932d5afd15f6f1",
-            "role": "jednatel",
+            "address": "0xb39c52ea48860b3f687339e6b8e3d5d964d6c59e",
+            "role": "director",
             "role_basis": "OR"
           },
           {
-            "address": "0xd1b9bc9943eaca857e6576c491f3de5d21758549",
-            "role": "ucetni",
-            "role_basis": "plna moc"
+            "address": "0x5440dbeba10e7ab24622759ab904c905ec341c62",
+            "role": "accountant",
+            "role_basis": "POA"
           },
           {
-            "address": "0x4aaf15ca6c8e0c74998a7187e83050412d1bb22a",
-            "role": "financni",
-            "role_basis": "plna moc"
+            "address": "0xfb551527fae66fac460afeaf3374f48a4ad036b1",
+            "role": "finance",
+            "role_basis": "POA"
           }
         ],
         "threshold": 2,
@@ -38,14 +38,14 @@
       },
       "sigs": [
         {
-          "role": "jednatel",
-          "address": "0xdd2e1436e57144ba90c43c51c4932d5afd15f6f1",
+          "role": "director",
+          "address": "0xb39c52ea48860b3f687339e6b8e3d5d964d6c59e",
           "sig": "0x53accc333dc04657e052bb978473ba20ec1162b8ba1b96b21fc7edc30fa3c3b353accc333dc04657e052bb978473ba20ec1162b8ba1b96b21fc7edc30fa3c3b31b",
           "nonce": "7D11E0"
         },
         {
-          "role": "ucetni",
-          "address": "0xd1b9bc9943eaca857e6576c491f3de5d21758549",
+          "role": "accountant",
+          "address": "0x5440dbeba10e7ab24622759ab904c905ec341c62",
           "sig": "0xa4867dd06635e150eb7ccdb9a13586930877592cf20dfdedc62acfb5c60c27dba4867dd06635e150eb7ccdb9a13586930877592cf20dfdedc62acfb5c60c27db1b",
           "nonce": "7D11E1"
         }
@@ -61,19 +61,19 @@
       "policy_v": 1,
       "signers": [
         {
-          "address": "0xdd2e1436e57144ba90c43c51c4932d5afd15f6f1",
-          "role": "jednatel",
+          "address": "0xb39c52ea48860b3f687339e6b8e3d5d964d6c59e",
+          "role": "director",
           "role_basis": "OR"
         },
         {
-          "address": "0xd1b9bc9943eaca857e6576c491f3de5d21758549",
-          "role": "ucetni",
-          "role_basis": "plna moc"
+          "address": "0x5440dbeba10e7ab24622759ab904c905ec341c62",
+          "role": "accountant",
+          "role_basis": "POA"
         },
         {
-          "address": "0x4aaf15ca6c8e0c74998a7187e83050412d1bb22a",
-          "role": "financni",
-          "role_basis": "plna moc"
+          "address": "0xfb551527fae66fac460afeaf3374f48a4ad036b1",
+          "role": "finance",
+          "role_basis": "POA"
         }
       ],
       "threshold": 2,

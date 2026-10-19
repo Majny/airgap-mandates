@@ -33,7 +33,7 @@ FACT_ORDER = (
     "F-DKIM",
     "F-FIRSTSEEN",
     "F-BANK",
-    "F-DPH",
+    "F-VAT",
     "F-VOP",
     "F-DUP",
     "F-SPLIT",
@@ -183,11 +183,11 @@ def _currency(currency: str) -> str:
 
 
 def _count_noun(n: int) -> str:
-    if n == 1:
-        return "platba"
-    if 2 <= n <= 4:
-        return "platby"
-    return "plateb"
+    return "payment" if n == 1 else "payments"
+
+
+# CONTRACTS 5.2: vendor role id -> device label (unknown roles: sanitized id).
+ROLE_DISPLAY = {"director": "stat. director", "accountant": "accountant", "finance": "finance"}
 
 
 def _nonce(nonce: str) -> str:
@@ -281,7 +281,7 @@ def _fact_lines(facts: Sequence[Fact | Mapping[str, Any]], slots: int, width: in
     shown = ordered[: slots - 1]
     omitted = ordered[slots - 1 :]
     n_block = sum(1 for f in omitted if f.severity == "BLOCK")
-    overflow = _check_line(f"[F] +{len(omitted)} dalsi fakta ({n_block} BLOCK)", width)
+    overflow = _check_line(f"[F] +{len(omitted)} more facts ({n_block} BLOCK)", width)
     return [_fact_line(f, width) for f in shown] + [overflow]
 
 
@@ -334,11 +334,11 @@ def render_mandate(
     count = _posint(max_count, "max_count")
     lines = [
         _title(f"AIRGAP MANDATE m:{_posint(mandate_no, 'mandate_no')} n:{_nonce(nonce)}", w),
-        f"max/platba {format_amount(max_per_payment_minor, currency)}",
-        f"max/celkem {format_amount(max_total_minor, currency)}",
+        f"max/payment {format_amount(max_per_payment_minor, currency)}",
+        f"max/total {format_amount(max_total_minor, currency)}",
         f"max {count} {_count_noun(count)}",
-        "jen existujici prijemci",
-        f"plati do {_to_dt(valid_until).strftime('%Y-%m-%d %H:%M')}",
+        "existing payees only",
+        f"valid until {_to_dt(valid_until).strftime('%Y-%m-%d %H:%M')}",
         f"policy {ph[:8]}",
     ]
     return _finish(lines, w)
@@ -418,17 +418,17 @@ def render_vendor_attest(
     if not (1 <= t <= n):
         raise RenderError("threshold must be 1..signer_count")
     title_prefix = "VENDOR ATTEST "
-    role_line = f"podepisuje: {sanitize(signer_role)}"
+    role_line = f"signer: {ROLE_DISPLAY.get(signer_role, sanitize(signer_role))}"
     basis = sanitize(role_basis)
     if basis:
         role_line += f" ({basis})"
     lines = [
         title_prefix + _fit(sanitize(vendor_name), w - len(title_prefix)),
         f"ICO {_ico(ico)} v:{_posint(version, 'version')} n:{_nonce(nonce)}",
-        *format_iban_lines("UCET", iban, w),
-        f"platne od {_to_date(valid_from).isoformat()}",
+        *format_iban_lines("ACCT", iban, w),
+        f"valid from {_to_date(valid_from).isoformat()}",
         _fit(role_line, w),
-        f"kvorum {t}/{n}",
+        f"quorum {t}/{n}",
     ]
     return _finish(lines, w)
 
@@ -463,6 +463,7 @@ __all__ = [
     "DEFAULT_WIDTH",
     "MAX_LINES",
     "FACT_ORDER",
+    "ROLE_DISPLAY",
     "TEMPLATES",
     "Fact",
     "RenderError",

@@ -8,5 +8,5 @@ from typing import Any
 
 
 def attest_fact(vendor: dict[str, Any], iban: str, *, store: Any) -> dict[str, Any]:
-    """BLOCK if in-network and no valid quorum for iban, e.g. 'dodavatel 0/3'."""
+    """BLOCK if in-network and no valid quorum for iban, e.g. 'supplier 0/3'."""
     raise NotImplementedError("TODO WS-E")

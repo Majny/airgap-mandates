@@ -1,4 +1,4 @@
-"""Vendor signers (jednatel/ucetni/financni emulators) sign VENDOR_ATTEST challenges. CONTRACTS.md §5.2, §6.
+"""Vendor signers (director/accountant/finance emulators) sign VENDOR_ATTEST challenges. CONTRACTS.md §5.2, §6.
 
 Owner: WS-B.
 """

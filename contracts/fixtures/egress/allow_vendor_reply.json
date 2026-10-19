@@ -4,7 +4,7 @@
   "request": {
     "tool": "send_email",
     "target": "fakturace@acme.cz",
-    "content": "Dobry den, fakturu FV-2026-0412 jsme prijali. Dekujeme."
+    "content": "Hello, we received invoice FV-2026-0412. Thank you."
   },
   "response": {
     "decision": "allow",

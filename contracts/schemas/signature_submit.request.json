@@ -12,9 +12,9 @@
       "enum": [
         "clerk",
         "treasury",
-        "jednatel",
-        "ucetni",
-        "financni"
+        "director",
+        "accountant",
+        "finance"
       ]
     },
     "sig": {

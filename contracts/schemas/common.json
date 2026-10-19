@@ -45,9 +45,9 @@
       "enum": [
         "clerk",
         "treasury",
-        "jednatel",
-        "ucetni",
-        "financni"
+        "director",
+        "accountant",
+        "finance"
       ]
     },
     "purpose": {
@@ -154,9 +154,9 @@
           "enum": [
             "clerk",
             "treasury",
-            "jednatel",
-            "ucetni",
-            "financni"
+            "director",
+            "accountant",
+            "finance"
           ]
         },
         "subject_id": {
@@ -761,9 +761,9 @@
                 "enum": [
                   "clerk",
                   "treasury",
-                  "jednatel",
-                  "ucetni",
-                  "financni"
+                  "director",
+                  "accountant",
+                  "finance"
                 ]
               },
               "address": {
@@ -1000,9 +1000,9 @@
           "enum": [
             "clerk",
             "treasury",
-            "jednatel",
-            "ucetni",
-            "financni"
+            "director",
+            "accountant",
+            "finance"
           ]
         },
         "role_basis": {
@@ -1151,9 +1151,9 @@
                 "enum": [
                   "clerk",
                   "treasury",
-                  "jednatel",
-                  "ucetni",
-                  "financni"
+                  "director",
+                  "accountant",
+                  "finance"
                 ]
               },
               "address": {

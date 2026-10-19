@@ -8,5 +8,5 @@ from typing import Any
 
 
 def firstseen_fact(from_domain: str, *, store: Any, now: Any) -> dict[str, Any]:
-    """WARN if first seen < 72 h ago, e.g. 'domena poprve 2h'."""
+    """WARN if first seen < 72 h ago, e.g. 'domain first seen 2h'."""
     raise NotImplementedError("TODO WS-E")

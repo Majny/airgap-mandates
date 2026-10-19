@@ -5,7 +5,7 @@
     "nonce": "91BC02",
     "role": "clerk",
     "sig": "0x153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde153812ae5fea0b73a011bf28bd7cea93644437c3fe3260b7b2d7e1e2f9f46bde1b",
-    "displayed_text": "AIRGAP MANDATE m:3 n:91BC02\nmax/platba 80000 CZK\nmax/celkem 250000 CZK\nmax 20 plateb\njen existujici prijemci\nplati do 2026-10-20 18:00\npolicy 1f3a9c0e"
+    "displayed_text": "AIRGAP MANDATE m:3 n:91BC02\nmax/payment 80000 CZK\nmax/total 250000 CZK\nmax 20 payments\nexisting payees only\nvalid until 2026-10-20 18:00\npolicy 1f3a9c0e"
   },
   "response": {
     "nonce": "91BC02",

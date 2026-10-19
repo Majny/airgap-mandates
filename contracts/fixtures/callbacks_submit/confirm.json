@@ -22,7 +22,7 @@
         "kind": "F",
         "severity": "INFO",
         "label": "Sender domain vs registry",
-        "display_line": "domena acme.cz = registr",
+        "display_line": "domain acme.cz = registry",
         "evidence": {
           "from_domain": "acme.cz",
           "registry_domain": "acme.cz",
@@ -45,18 +45,18 @@
         "kind": "F",
         "severity": "INFO",
         "label": "Bank from IBAN",
-        "display_line": "banka: Komercni banka",
+        "display_line": "bank: Komercni banka",
         "evidence": {
           "country": "CZ",
           "bank_code": "0100"
         }
       },
       {
-        "id": "F-DPH",
+        "id": "F-VAT",
         "kind": "F",
         "severity": "WARN",
         "label": "Account published in VAT registry",
-        "display_line": "DPH ucet: NE",
+        "display_line": "VAT acct: NO",
         "evidence": {
           "account_published": false
         }

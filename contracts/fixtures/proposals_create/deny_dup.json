@@ -36,11 +36,11 @@
       "hints": [],
       "facts": [
         {
-          "id": "F-DPH",
+          "id": "F-VAT",
           "kind": "F",
           "severity": "INFO",
           "label": "Account published in VAT registry",
-          "display_line": "DPH ucet: ANO",
+          "display_line": "VAT acct: YES",
           "evidence": {
             "account_published": true
           }
@@ -50,7 +50,7 @@
           "kind": "F",
           "severity": "INFO",
           "label": "Bank from IBAN",
-          "display_line": "banka: Ceska sporitelna",
+          "display_line": "bank: Ceska sporitelna",
           "evidence": {
             "country": "CZ",
             "bank_code": "0800"
@@ -61,7 +61,7 @@
           "kind": "F",
           "severity": "BLOCK",
           "label": "Duplicate invoice",
-          "display_line": "duplicita FV-2026-0412",
+          "display_line": "duplicate FV-2026-0412",
           "evidence": {
             "matched": "prp_38"
           }
@@ -75,11 +75,11 @@
         ],
         "facts": [
           {
-            "id": "F-DPH",
+            "id": "F-VAT",
             "kind": "F",
             "severity": "INFO",
             "label": "Account published in VAT registry",
-            "display_line": "DPH ucet: ANO",
+            "display_line": "VAT acct: YES",
             "evidence": {
               "account_published": true
             }
@@ -89,7 +89,7 @@
             "kind": "F",
             "severity": "INFO",
             "label": "Bank from IBAN",
-            "display_line": "banka: Ceska sporitelna",
+            "display_line": "bank: Ceska sporitelna",
             "evidence": {
               "country": "CZ",
               "bank_code": "0800"
@@ -100,7 +100,7 @@
             "kind": "F",
             "severity": "BLOCK",
             "label": "Duplicate invoice",
-            "display_line": "duplicita FV-2026-0412",
+            "display_line": "duplicate FV-2026-0412",
             "evidence": {
               "matched": "prp_38"
             }
@@ -121,11 +121,11 @@
       ],
       "facts": [
         {
-          "id": "F-DPH",
+          "id": "F-VAT",
           "kind": "F",
           "severity": "INFO",
           "label": "Account published in VAT registry",
-          "display_line": "DPH ucet: ANO",
+          "display_line": "VAT acct: YES",
           "evidence": {
             "account_published": true
           }
@@ -135,7 +135,7 @@
           "kind": "F",
           "severity": "INFO",
           "label": "Bank from IBAN",
-          "display_line": "banka: Ceska sporitelna",
+          "display_line": "bank: Ceska sporitelna",
           "evidence": {
             "country": "CZ",
             "bank_code": "0800"
@@ -146,7 +146,7 @@
           "kind": "F",
           "severity": "BLOCK",
           "label": "Duplicate invoice",
-          "display_line": "duplicita FV-2026-0412",
+          "display_line": "duplicate FV-2026-0412",
           "evidence": {
             "matched": "prp_38"
           }

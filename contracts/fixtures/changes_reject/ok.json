@@ -2,7 +2,7 @@
   "endpoint": "POST /changes/{change_id}/reject",
   "status": 200,
   "request": {
-    "reason": "klerk: podvod"
+    "reason": "clerk: fraud"
   },
   "response": {
     "change_id": "chg_7",
@@ -33,7 +33,7 @@
         "kind": "F",
         "severity": "BLOCK",
         "label": "Vendor attestation for new IBAN",
-        "display_line": "dodavatel 0/3",
+        "display_line": "supplier 0/3",
         "evidence": {
           "signed": 0,
           "threshold": 2,
@@ -45,18 +45,18 @@
         "kind": "F",
         "severity": "WARN",
         "label": "Bank from IBAN",
-        "display_line": "banka: EMI Litva (fiktivni)",
+        "display_line": "bank: EMI Lithuania (fict.)",
         "evidence": {
           "country": "LT",
           "bank_code": "39990"
         }
       },
       {
-        "id": "F-DPH",
+        "id": "F-VAT",
         "kind": "F",
         "severity": "WARN",
         "label": "Account published in VAT registry",
-        "display_line": "DPH ucet: NE",
+        "display_line": "VAT acct: NO",
         "evidence": {
           "account_published": false
         }
@@ -77,7 +77,7 @@
         "kind": "F",
         "severity": "WARN",
         "label": "Domain first seen in inbox",
-        "display_line": "domena poprve 2h",
+        "display_line": "domain first seen 2h",
         "evidence": {
           "hours": 2
         }
@@ -87,7 +87,7 @@
         "kind": "H",
         "severity": "INFO",
         "label": "Agent stated reason",
-        "display_line": "agent: \"zmena banky, urgent\""
+        "display_line": "agent: \"bank change, urgent\""
       }
     ],
     "not_before": null,

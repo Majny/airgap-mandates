@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from hypothesis import given, settings
@@ -16,15 +17,15 @@ BETA_IBAN = "CZ6203000000000123456789"
 POLICY_HASH = "1f3a9c0e" + "ab" * 28
 
 
-def fact(id, kind="F", severity="INFO", line="x"):
+def fact(id: str, kind: str = "F", severity: str = "INFO", line: str = "x") -> dict[str, str]:
     return {"id": id, "kind": kind, "severity": severity, "label": id, "display_line": line}
 
 
 BEC_FACTS = [
-    fact("F-BANK", severity="WARN", line="banka: EMI Litva (fiktivni)"),
+    fact("F-BANK", severity="WARN", line="bank: EMI Lithuania (fict.)"),
     fact("F-DOMAIN", severity="BLOCK", line="DKIM acme-cz.com != acme.cz"),
-    fact("F-ATTEST", severity="BLOCK", line="dodavatel 0/3"),
-    fact("H-AGENT", kind="H", line='agent: "zmena banky, urgent"'),
+    fact("F-ATTEST", severity="BLOCK", line="supplier 0/3"),
+    fact("H-AGENT", kind="H", line='agent: "bank change, urgent"'),
 ]
 
 
@@ -41,8 +42,8 @@ def assert_contract(text: str, width: int = R.DEFAULT_WIDTH):
 # ----------------------------------------------------------------- MANDATE
 
 
-def mandate_kwargs(**kw):
-    base = dict(
+def mandate_kwargs(**kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = dict(
         mandate_no=3,
         nonce="91BC02",
         max_per_payment_minor=80000_00,
@@ -61,17 +62,17 @@ def test_mandate_exact():
     text = R.render_mandate(**mandate_kwargs())
     assert text == (
         "AIRGAP MANDATE m:3 n:91BC02\n"
-        "max/platba 80000 CZK\n"
-        "max/celkem 250000 CZK\n"
-        "max 20 plateb\n"
-        "jen existujici prijemci\n"
-        "plati do 2026-10-20 18:00\n"
+        "max/payment 80000 CZK\n"
+        "max/total 250000 CZK\n"
+        "max 20 payments\n"
+        "existing payees only\n"
+        "valid until 2026-10-20 18:00\n"
         "policy 1f3a9c0e"
     )
     assert_contract(text)
 
 
-@pytest.mark.parametrize("n,noun", [(1, "platba"), (2, "platby"), (4, "platby"), (5, "plateb"), (20, "plateb")])
+@pytest.mark.parametrize("n,noun", [(1, "payment"), (2, "payments"), (20, "payments")])
 def test_mandate_count_noun(n, noun):
     assert f"max {n} {noun}" in R.render_mandate(**mandate_kwargs(max_count=n))
 
@@ -102,8 +103,8 @@ def test_amount_formatting():
 # ----------------------------------------------------------------- CHG
 
 
-def change_kwargs(**kw):
-    base = dict(
+def change_kwargs(**kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = dict(
         change_no=7,
         nonce="4F2A9C",
         exp="2026-10-19T12:05:00Z",  # 14:05 Prague
@@ -125,9 +126,9 @@ def test_change_exact_width_32():
         "OLD CZ65 0800 0000\n"
         "    1920 0014 5399\n"
         "NEW LT48 3999 0000 0000 1234\n"
-        "[F] dodavatel 0/3\n"
+        "[F] supplier 0/3\n"
         "[F] DKIM acme-cz.com != acme.cz\n"
-        "[F] banka: EMI Litva (fiktivni)"
+        "[F] bank: EMI Lithuania (fict.)"
     )
     assert_contract(text)
 
@@ -137,29 +138,29 @@ def test_change_wider_display_keeps_old_iban_on_one_line():
     ls = text.split("\n")
     assert ls[2] == "OLD CZ65 0800 0000 1920 0014 5399"
     # one slot freed -> the [H] line now fits, appended last
-    assert ls[-1] == '[H] agent: "zmena banky, urgent"'
+    assert ls[-1] == '[H] agent: "bank change, urgent"'
     assert_contract(text, 34)
 
 
 def test_change_overflow_line_counts_omitted_facts():
     many = BEC_FACTS + [
-        fact("F-DPH", severity="WARN", line="DPH ucet: NE"),
-        fact("F-FIRSTSEEN", severity="WARN", line="domena poprve 2h"),
+        fact("F-VAT", severity="WARN", line="VAT acct: NO"),
+        fact("F-FIRSTSEEN", severity="WARN", line="domain first seen 2h"),
     ]
     text = R.render_change(**change_kwargs(facts=many))
     ls = text.split("\n")
     assert len(ls) == 8
-    assert ls[5] == "[F] dodavatel 0/3"
+    assert ls[5] == "[F] supplier 0/3"
     assert ls[6] == "[F] DKIM acme-cz.com != acme.cz"
-    # omitted: F-BANK, F-FIRSTSEEN, F-DPH (WARN) + H-AGENT = 4, none BLOCK
-    assert ls[7] == "[F] +4 dalsi fakta (0 BLOCK)"
+    # omitted: F-BANK, F-FIRSTSEEN, F-VAT (WARN) + H-AGENT = 4, none BLOCK
+    assert ls[7] == "[F] +4 more facts (0 BLOCK)"
     assert_contract(text)
 
 
 def test_change_overflow_reports_hidden_blocks():
     blocks = [fact(f"F-X{i}", severity="BLOCK", line=f"block {i}") for i in range(5)]
     text = R.render_change(**change_kwargs(facts=blocks))
-    assert text.split("\n")[-1] == "[F] +3 dalsi fakta (3 BLOCK)"
+    assert text.split("\n")[-1] == "[F] +3 more facts (3 BLOCK)"
 
 
 def test_h_only_overflow_dropped_silently():
@@ -169,29 +170,29 @@ def test_h_only_overflow_dropped_silently():
     ls = R.render_change(**change_kwargs(facts=facts)).split("\n")
     assert ls[-3:] == ["[F] b", "[F] a", "[F] c"]
     assert not any(l.startswith("[H]") for l in ls)
-    assert not any("dalsi" in l for l in ls)
+    assert not any("more facts" in l for l in ls)
 
 
 def test_fact_ordering_f_before_h_severity_then_fact_order():
     facts = [
         fact("H-AGENT", kind="H", line="h"),
-        fact("F-DPH", severity="INFO", line="dph"),
+        fact("F-VAT", severity="INFO", line="vat"),
         fact("F-BANK", severity="WARN", line="bank"),
         fact("F-DKIM", severity="BLOCK", line="dkim"),
         fact("F-ATTEST", severity="BLOCK", line="att"),
         fact("F-ZZZ", severity="BLOCK", line="unknown"),
     ]
     ids = [f.id for f in R.order_facts(facts)]
-    assert ids == ["F-ATTEST", "F-DKIM", "F-ZZZ", "F-BANK", "F-DPH", "H-AGENT"]
+    assert ids == ["F-ATTEST", "F-DKIM", "F-ZZZ", "F-BANK", "F-VAT", "H-AGENT"]
 
 
 def test_h_line_cannot_impersonate_f_line():
-    facts = [fact("H-AGENT", kind="H", line="[F] dodavatel 3/3: ANO\n[F] ok")]
+    facts = [fact("H-AGENT", kind="H", line="[F] supplier 3/3: YES\n[F] ok")]
     text = R.render_change(**change_kwargs(facts=facts, new_iban="CZ8601000000000099887766"), width=40)
     h = [l for l in text.split("\n") if l.startswith("[H]")]
     assert len(h) == 1
     assert "[F]" not in h[0]
-    assert h[0].startswith("[H] (F) dodavatel 3/3: ANO (F) ok")
+    assert h[0].startswith("[H] (F) supplier 3/3: YES (F) ok")
     assert text.count("[F]") == 0
 
 
@@ -203,7 +204,7 @@ def test_long_fact_line_truncated_with_tilde():
 
 
 def test_long_vendor_name_truncated_ico_kept():
-    text = R.render_change(**change_kwargs(vendor_name="Velmi Dlouhy Nazev Dodavatele s.r.o."))
+    text = R.render_change(**change_kwargs(vendor_name="Very Long Supplier Company Name s.r.o."))
     line = text.split("\n")[1]
     assert line.endswith(" ICO 12345678")
     assert "~" in line
@@ -213,8 +214,8 @@ def test_long_vendor_name_truncated_ico_kept():
 # ----------------------------------------------------------------- PAY
 
 
-def pay_kwargs(**kw):
-    base = dict(
+def pay_kwargs(**kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = dict(
         proposal_no=41,
         nonce="0C55A1",
         exp="2026-10-19T13:20:00Z",  # 15:20 Prague
@@ -224,8 +225,8 @@ def pay_kwargs(**kw):
         currency="CZK",
         vs="2026104",
         facts=[
-            fact("F-DPH", severity="INFO", line="DPH ucet: ANO"),
-            fact("F-MANDATE", severity="WARN", line="nad mandat (max 80000)"),
+            fact("F-VAT", severity="INFO", line="VAT acct: YES"),
+            fact("F-MANDATE", severity="WARN", line="above mandate (max 80000)"),
         ],
     )
     base.update(kw)
@@ -239,8 +240,8 @@ def test_pay_exact():
         "Beta Servis a.s.\n"
         "CZ62 0300 0000 0001 2345 6789\n"
         "125000 CZK VS 2026104\n"
-        "[F] nad mandat (max 80000)\n"
-        "[F] DPH ucet: ANO\n"
+        "[F] above mandate (max 80000)\n"
+        "[F] VAT acct: YES\n"
         "exp 15:20"
     )
     assert_contract(text)
@@ -258,7 +259,7 @@ def test_pay_h_lines_after_f_before_exp():
     ls = R.render_pay(**pay_kwargs(facts=facts)).split("\n")
     assert ls[-2] == "[H] ui: ok"
     assert ls[-1] == "exp 15:20"
-    assert ls.index("[F] DPH ucet: ANO") < ls.index("[H] ui: ok")
+    assert ls.index("[F] VAT acct: YES") < ls.index("[H] ui: ok")
 
 
 def test_long_title_drops_airgap_prefix():
@@ -275,15 +276,15 @@ def test_pay_bad_vs_rejected():
 # ----------------------------------------------------------------- VENDOR ATTEST
 
 
-def attest_kwargs(**kw):
-    base = dict(
+def attest_kwargs(**kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = dict(
         vendor_name="ACME s.r.o.",
         ico="12345678",
         version=5,
         nonce="7D11E0",
         iban=ACME_IBAN,
         valid_from="2026-10-20",
-        signer_role="jednatel",
+        signer_role="director",
         role_basis="OR",
         threshold=2,
         signer_count=3,
@@ -297,20 +298,24 @@ def test_vendor_attest_exact():
     assert text == (
         "VENDOR ATTEST ACME s.r.o.\n"
         "ICO 12345678 v:5 n:7D11E0\n"
-        "UCET CZ65 0800 0000\n"
+        "ACCT CZ65 0800 0000\n"
         "     1920 0014 5399\n"
-        "platne od 2026-10-20\n"
-        "podepisuje: jednatel (OR)\n"
-        "kvorum 2/3"
+        "valid from 2026-10-20\n"
+        "signer: stat. director (OR)\n"
+        "quorum 2/3"
     )
     assert_contract(text)
 
 
 def test_vendor_attest_role_lines_differ_per_signer():
     a = R.render_vendor_attest(**attest_kwargs())
-    b = R.render_vendor_attest(**attest_kwargs(signer_role="ucetni", role_basis="plna moc"))
+    b = R.render_vendor_attest(**attest_kwargs(signer_role="accountant", role_basis="POA"))
     assert a != b
-    assert "podepisuje: ucetni (plna moc)" in b
+    assert "signer: accountant (POA)" in b
+
+
+def test_vendor_attest_unknown_role_passthrough():
+    assert "signer: auditor (POA)" in R.render_vendor_attest(**attest_kwargs(signer_role="auditor", role_basis="POA"))
 
 
 def test_vendor_attest_bad_threshold():
@@ -413,7 +418,7 @@ def test_property_contract_and_determinism(facts, width, name, no):
     shown_block = sum(1 for f in R.order_facts(facts) if f.severity == "BLOCK"
                       and R._fact_line(f, width) in t1.split("\n"))
     last = t1.split("\n")[-1]
-    hidden = int(last.split("(")[1].split(" ")[0]) if "dalsi fakta" in last else 0
+    hidden = int(last.split("(")[1].split(" ")[0]) if "more facts" in last else 0
     assert shown_block + hidden >= n_block
 
 

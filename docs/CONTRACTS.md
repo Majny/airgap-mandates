@@ -8,7 +8,7 @@ examples: `contracts/fixtures/<endpoint>/*.json`. `tests/test_contracts.py` vali
 Conventions used everywhere:
 
 - JSON field names: `snake_case`. Enums: `UPPER_SNAKE` for states/kinds, lowercase for decisions/roles.
-- Money: **integer minor units** (`amount_minor`, haléře / cents). Never floats anywhere (API, DB, audit).
+- Money: **integer minor units** (`amount_minor`, hellers / cents). Never floats anywhere (API, DB, audit).
 - Currency: `"CZK"` or `"EUR"`.
 - Timestamps in JSON/DB: ISO 8601 UTC with `Z`, millisecond precision optional
   (`2026-10-19T12:05:00Z`). Dates: `YYYY-MM-DD`. Display times: `Europe/Prague` local (`AIRGAP_TZ`).
@@ -35,7 +35,7 @@ executor/                    trusted side (Lambda behind API Gateway; local: uvi
   canonical.py      WS-B     canonical_json() (§7.1)
   render.py         WS-A     canonical display renderer (§5) — IMPLEMENTED, frozen API
   store/            WS-A     Store interface (§3.3), memory.py (in-memory), dynamo.py (boto3; moto in tests)
-  facts/            WS-E     M1: dkim.py domain.py firstseen.py iban_bank.py dph.py vop.py attest_fact.py, compute.py
+  facts/            WS-E     M1: dkim.py domain.py firstseen.py iban_bank.py vat.py vop.py attest_fact.py, compute.py
   policy/           WS-E     M4: rules.py (POLICY + policy_hash), mandate.py, invariants.py, decide.py (pure)
   change/           WS-A     M2: machine.py (state machine §6)
   attest/           WS-B     M3: attestation.py, policy.py (vendor key policies), or_registry.py, tlog.py
@@ -67,7 +67,7 @@ Workstreams: **WS-A** executor+crypto (M0, M2, M5) · **WS-B** attestation + tra
 **WS-E** data + registries + invariants (M1, M4) · **WS-F** UI + vendor portal.
 
 Hard rules: no LLM in `executor/`. No blockchain. Synthetic data only. Fraudster IBAN is a fictitious
-Lithuanian EMI: `LT483999000000001234` (bank code `39990`, "EMI Litva (fiktivni)") — never a real institution.
+Lithuanian EMI: `LT483999000000001234` (bank code `39990`, "EMI Lithuania (fict.)") — never a real institution.
 Canonical demo data: ACME s.r.o., ICO `12345678`, domain `acme.cz`, IBAN `CZ6508000000192000145399`;
 lookalike `acme-cz.com`; Beta Servis a.s., ICO `87654321`, IBAN `CZ6203000000000123456789`.
 
@@ -92,14 +92,14 @@ lookalike `acme-cz.com`; Beta Servis a.s., ICO `87654321`, IBAN `CZ6203000000000
 Fact ids (F, owner WS-E unless noted) — this order is also the display tiebreak order (§5.4):
 `F-MANDATE` (policy: over mandate) · `F-ATTEST` (WS-B: vendor attestation k/n) · `F-CALLBACK` (WS-A) ·
 `F-DOMAIN` (domain vs registry, lookalike) · `F-DKIM` · `F-FIRSTSEEN` · `F-BANK` (bank from IBAN) ·
-`F-DPH` (account published in ADIS / unreliable payer) · `F-VOP` · `F-DUP` · `F-SPLIT` · `F-Z`.
+`F-VAT` (account published in ADIS / unreliable payer) · `F-VOP` · `F-DUP` · `F-SPLIT` · `F-Z`.
 H ids: `H-AGENT` (agent's stated reason), `H-UI` (anything else from host). Executor creates H facts from
 request `hints[]`; display_line = `agent: "<sanitized text>"`.
 
 Default severities (WS-E may tune, must keep BLOCK semantics):
 F-DOMAIN lookalike → BLOCK; F-DKIM fail → BLOCK; F-ATTEST in-network & no valid quorum for new IBAN → BLOCK;
 F-CALLBACK off-network & not confirmed → BLOCK; F-BANK foreign/EMI for CZ vendor → WARN;
-F-DPH account not published → WARN, unreliable payer → BLOCK; F-FIRSTSEEN < 72 h → WARN; F-VOP NMTC → BLOCK, CMTC → WARN.
+F-VAT account not published → WARN, unreliable payer → BLOCK; F-FIRSTSEEN < 72 h → WARN; F-VOP NMTC → BLOCK, CMTC → WARN.
 
 ### 2.2 Decision
 ```json
@@ -126,7 +126,7 @@ F-DPH account not published → WARN, unreliable payer → BLOCK; F-FIRSTSEEN < 
  "text_sha256": "<64 hex of sha256(text ascii)>", "width": 32, "line_count": 8,
  "used": false, "created_at": "2026-10-19T12:00:00Z"}
 ```
-`purpose`: `MANDATE` | `CHG` | `PAY` | `VENDOR_ATTEST`. `role`: `clerk` | `treasury` | `jednatel` | `ucetni` | `financni`.
+`purpose`: `MANDATE` | `CHG` | `PAY` | `VENDOR_ATTEST`. `role`: `clerk` | `treasury` | `director` | `accountant` | `finance`.
 ChallengeRef = same object; `used`/`created_at` optional.
 
 ### 2.4 Error body
@@ -302,18 +302,19 @@ Shared, deterministic, pure. Executor renders; host has a copy for preview only 
 - No hashes except `policy` (first 8 lowercase hex of `policy_hash`). Nonce shown as `n:XXXXXX`.
 - Times: `HH:MM` in `AIRGAP_TZ` (Europe/Prague). Dates: `YYYY-MM-DD`. Datetime: `YYYY-MM-DD HH:MM` local.
 - Amounts: integer major units if `minor % 100 == 0` (`125000 CZK`), else `125000.50 CZK`. No thousands separators.
-- Count noun (Czech, ASCII): 1 → `platba`, 2–4 → `platby`, else `plateb`.
+- All device text is English ASCII. Count noun: 1 → `payment`, else `payments`.
+- Vendor role labels on device: `director` → `stat. director`, `accountant` → `accountant`, `finance` → `finance` (`render.ROLE_DISPLAY`); `role_basis`: `OR` (Commercial Register) or `POA` (power of attorney).
 
 ### 5.2 Templates (width 32 shown)
 
 MANDATE (`render_mandate`):
 ```
 AIRGAP MANDATE m:3 n:91BC02
-max/platba 80000 CZK
-max/celkem 250000 CZK
-max 20 plateb
-jen existujici prijemci
-plati do 2026-10-20 18:00
+max/payment 80000 CZK
+max/total 250000 CZK
+max 20 payments
+existing payees only
+valid until 2026-10-20 18:00
 policy 1f3a9c0e
 ```
 CHG (`render_change`) — title has exp; OLD wraps at width 32 (CZ IBAN + `OLD ` = 33 chars):
@@ -331,19 +332,19 @@ AIRGAP PAY #41 n:0C55A1
 Beta Servis a.s.
 CZ62 0300 0000 0001 2345 6789
 125000 CZK VS 2026104
-[F] nad mandat (max 80000)
-[F] DPH ucet: ANO
+[F] above mandate (max 80000)
+[F] VAT acct: YES
 exp 15:20
 ```
 VENDOR ATTEST (`render_vendor_attest`) — one challenge per signer role (role line differs):
 ```
 VENDOR ATTEST ACME s.r.o.
 ICO 12345678 v:5 n:7D11E0
-UCET CZ65 0800 0000
+ACCT CZ65 0800 0000
      1920 0014 5399
-platne od 2026-10-20
-podepisuje: jednatel (OR)
-kvorum 2/3
+valid from 2026-10-20
+signer: stat. director (OR)
+quorum 2/3
 ```
 
 ### 5.3 Fact lines
@@ -354,7 +355,7 @@ Fact slots = `8 - (fixed lines of the template)`. CHG at width 32 with a CZ old 
 Sort key: `kind` (F before H) → severity (BLOCK, WARN, INFO) → position of `id` in `FACT_ORDER` (§2.1; unknown ids after, lexicographic) → `display_line`.
 [H] lines therefore always come after all [F] lines. If not all facts fit:
 - If only H facts are left over, they are dropped silently.
-- If any F fact is left over, the last available slot becomes `[F] +N dalsi fakta (B BLOCK)` where N = number of
+- If any F fact is left over, the last available slot becomes `[F] +N more facts (B BLOCK)` where N = number of
   omitted facts (F+H) and B = omitted BLOCK count.
 Dropping never changes the decision; the full fact list is in the payload and the audit log.
 
@@ -384,10 +385,10 @@ Facts accept dicts (§2.1) or `render.Fact`. `nonces.params` stores exactly the 
 - Bank roles enrolled in `enrolled_signers` from `data/enrollment.json` by `tools/enroll.py` (appends `enroll` leaf):
 ```json
 {"version": 1, "signers": [
-  {"address": "0x…", "role": "clerk", "label": "Klerk (Trezor Safe 5)", "device": "trezor", "derivation_path": "m/44'/60'/0'/0/0"},
+  {"address": "0x…", "role": "clerk", "label": "Clerk (Trezor Safe 5)", "device": "trezor", "derivation_path": "m/44'/60'/0'/0/0"},
   {"address": "0x…", "role": "treasury", "label": "Treasury (emulator)", "device": "emulator", "derivation_path": "m/44'/60'/0'/0/0"}]}
 ```
-- Vendor roles (`jednatel`, `ucetni`, `financni`) live in `vendor_policies` (§3.1); initial policy created at enrollment from `or_snapshot.json`.
+- Vendor roles (`director`, `accountant`, `finance`) live in `vendor_policies` (§3.1); initial policy created at enrollment from `or_snapshot.json`.
 - Seeds: never in the repo (`*.seed` is git-ignored). Emulator seeds are generated locally.
 
 ### 6.1 Payee-change state machine (`executor/change/machine.py`)
@@ -516,7 +517,7 @@ Normalized invoice no: uppercase, strip all non-alphanumerics, strip leading zer
 | `AIRGAP_RENDER_WIDTH` | `32` | display width (§5) |
 | `AIRGAP_TZ` | `Europe/Prague` | display timezone |
 | `AIRGAP_CHALLENGE_TTL_SECONDS` | `300` | challenge exp |
-| `AIRGAP_COOLING_SECONDS` | `90` | change cooling-off (UI: "zkraceno z 24 h") |
+| `AIRGAP_COOLING_SECONDS` | `90` | change cooling-off (UI: "shortened from 24 h") |
 | `AIRGAP_CHANGE_TTL_SECONDS` | `3600` | change expiry |
 | `AIRGAP_CALLBACK_CODE_TTL_SECONDS` | `600` | callback code expiry |
 | `AIRGAP_STH_EVERY_N_LEAVES` | `10` | STH cadence |

@@ -33,7 +33,7 @@ MINOR = {"type": "integer", "minimum": 0}
 POSINT = {"type": "integer", "minimum": 1}
 NNINT = {"type": "integer", "minimum": 0}
 CURRENCY = {"enum": ["CZK", "EUR"]}
-ROLE = {"enum": ["clerk", "treasury", "jednatel", "ucetni", "financni"]}
+ROLE = {"enum": ["clerk", "treasury", "director", "accountant", "finance"]}
 PURPOSE = {"enum": ["MANDATE", "CHG", "PAY", "VENDOR_ATTEST"]}
 CHANGE_STATE = {"enum": ["REQUESTED", "FACTS_DONE", "ATTESTATION_CHECK", "TRIPWIRE_SENT", "CALLBACK_PENDING",
                          "CALLBACK_CONFIRMED", "CALLBACK_DENIED", "COOLING", "SIG_CLERK", "SIG_TREASURY",
@@ -361,7 +361,7 @@ def _h(seed: str) -> str:
 
 
 CLERK, TREASURY = _addr("clerk"), _addr("treasury")
-JED, UCT, FIN = _addr("acme-jednatel"), _addr("acme-ucetni"), _addr("acme-financni")
+JED, UCT, FIN = _addr("acme-director"), _addr("acme-accountant"), _addr("acme-finance")
 POLICY_HASH = "1f3a9c0e" + _h("policy")[8:]
 ACME_IBAN, FRAUD_IBAN, BETA_IBAN = "CZ6508000000192000145399", "LT483999000000001234", "CZ6203000000000123456789"
 NEW_LEGIT_IBAN = "CZ8601000000000099887766"
@@ -405,7 +405,7 @@ ACTIVE_MANDATE = mandate("ACTIVE", signer_address=CLERK, activated_at="2026-10-1
 
 VENDOR_ACME = {"vendor_id": "ven_12345678", "ico": "12345678", "name": "ACME s.r.o.", "domain": "acme.cz",
                "iban": ACME_IBAN, "bic": "GIBACZPX", "country": "CZ", "phone": "+420 200 000 001",
-               "contact_email": "ucetni@acme.cz", "registered_since": "2023-02-01", "in_network": True,
+               "contact_email": "accounting@acme.cz", "registered_since": "2023-02-01", "in_network": True,
                "iban_history": [{"iban": ACME_IBAN, "from": "2023-02-01", "to": None, "change_id": None}]}
 VENDOR_BETA = {"vendor_id": "ven_87654321", "ico": "87654321", "name": "Beta Servis a.s.", "domain": "betaservis.cz",
                "iban": BETA_IBAN, "country": "CZ", "phone": "+420 200 000 002",
@@ -420,44 +420,44 @@ INVOICE_BIG = {"invoice_no": "2026104", "issue_date": "2026-10-16", "vendor_ico"
                "vs": "2026104"}
 INVOICE_DUP = dict(INVOICE_OK, invoice_no="FV2026412", email_id="eml_0f1e2d3c4b5a6978")
 
-F_DPH_OK = fact("F-DPH", "INFO", "DPH ucet: ANO", "Account published in VAT registry", account_published=True)
-F_OVER = fact("F-MANDATE", "WARN", "nad mandat (max 80000)", "Above mandate limit",
+F_VAT_OK = fact("F-VAT", "INFO", "VAT acct: YES", "Account published in VAT registry", account_published=True)
+F_OVER = fact("F-MANDATE", "WARN", "above mandate (max 80000)", "Above mandate limit",
               amount_minor=12500000, max_per_payment_minor=8000000)
 
 PAY_PARAMS = dict(proposal_no=41, nonce="0C55A1", exp="2026-10-19T13:20:00Z", payee_name="Beta Servis a.s.",
-                  iban=BETA_IBAN, amount_minor=12500000, currency="CZK", vs="2026104", facts=[F_OVER, F_DPH_OK])
+                  iban=BETA_IBAN, amount_minor=12500000, currency="CZK", vs="2026104", facts=[F_OVER, F_VAT_OK])
 PAY_CH = challenge_ref("PAY", "clerk", "prp_41", "0C55A1", "2026-10-19T13:20:00Z", "PAY", PAY_PARAMS)
 
 BEC_FACTS = [
     fact("F-DOMAIN", "BLOCK", "acme-cz.com != acme.cz", "Sender domain vs registry",
          from_domain="acme-cz.com", registry_domain="acme.cz", distance=1),
-    fact("F-ATTEST", "BLOCK", "dodavatel 0/3", "Vendor attestation for new IBAN", signed=0, threshold=2, signers=3),
-    fact("F-BANK", "WARN", "banka: EMI Litva (fiktivni)", "Bank from IBAN", country="LT", bank_code="39990"),
-    fact("F-DPH", "WARN", "DPH ucet: NE", "Account published in VAT registry", account_published=False),
+    fact("F-ATTEST", "BLOCK", "supplier 0/3", "Vendor attestation for new IBAN", signed=0, threshold=2, signers=3),
+    fact("F-BANK", "WARN", "bank: EMI Lithuania (fict.)", "Bank from IBAN", country="LT", bank_code="39990"),
+    fact("F-VAT", "WARN", "VAT acct: NO", "Account published in VAT registry", account_published=False),
     fact("F-DKIM", "INFO", "DKIM ok d=acme-cz.com", "DKIM signature", d="acme-cz.com", valid=True),
-    fact("F-FIRSTSEEN", "WARN", "domena poprve 2h", "Domain first seen in inbox", hours=2),
-    fact("H-AGENT", "INFO", 'agent: "zmena banky, urgent"', "Agent stated reason", kind="H"),
+    fact("F-FIRSTSEEN", "WARN", "domain first seen 2h", "Domain first seen in inbox", hours=2),
+    fact("H-AGENT", "INFO", 'agent: "bank change, urgent"', "Agent stated reason", kind="H"),
 ]
 CHG_PARAMS = dict(change_no=7, nonce="4F2A9C", exp="2026-10-19T12:05:00Z", vendor_name="ACME s.r.o.",
                   vendor_ico="12345678", old_iban=ACME_IBAN, new_iban=FRAUD_IBAN, facts=BEC_FACTS)
 CHG_CH = challenge_ref("CHG", "clerk", "chg_7", "4F2A9C", "2026-10-19T12:05:00Z", "CHG", CHG_PARAMS)
 
 LEGIT_FACTS = [
-    fact("F-ATTEST", "INFO", "dodavatel 2/3: ANO", "Vendor attestation for new IBAN", signed=2, threshold=2,
+    fact("F-ATTEST", "INFO", "supplier 2/3: YES", "Vendor attestation for new IBAN", signed=2, threshold=2,
          signers=3),
-    fact("F-DOMAIN", "INFO", "domena acme.cz = registr", "Sender domain vs registry", from_domain="acme.cz",
+    fact("F-DOMAIN", "INFO", "domain acme.cz = registry", "Sender domain vs registry", from_domain="acme.cz",
          registry_domain="acme.cz", distance=0),
     fact("F-DKIM", "INFO", "DKIM ok d=acme.cz", "DKIM signature", d="acme.cz", valid=True),
-    fact("F-BANK", "INFO", "banka: Komercni banka", "Bank from IBAN", country="CZ", bank_code="0100"),
-    fact("F-DPH", "WARN", "DPH ucet: NE", "Account published in VAT registry", account_published=False),
+    fact("F-BANK", "INFO", "bank: Komercni banka", "Bank from IBAN", country="CZ", bank_code="0100"),
+    fact("F-VAT", "WARN", "VAT acct: NO", "Account published in VAT registry", account_published=False),
 ]
 CHG8_PARAMS = dict(change_no=8, nonce="A0B1C2", exp="2026-10-19T12:10:00Z", vendor_name="ACME s.r.o.",
                    vendor_ico="12345678", old_iban=ACME_IBAN, new_iban=NEW_LEGIT_IBAN, facts=LEGIT_FACTS)
 CHG8_CH = challenge_ref("CHG", "clerk", "chg_8", "A0B1C2", "2026-10-19T12:10:00Z", "CHG", CHG8_PARAMS)
 
-ATT_POLICY = {"signers": [{"address": JED, "role": "jednatel", "role_basis": "OR"},
-                          {"address": UCT, "role": "ucetni", "role_basis": "plna moc"},
-                          {"address": FIN, "role": "financni", "role_basis": "plna moc"}],
+ATT_POLICY = {"signers": [{"address": JED, "role": "director", "role_basis": "OR"},
+                          {"address": UCT, "role": "accountant", "role_basis": "POA"},
+                          {"address": FIN, "role": "finance", "role_basis": "POA"}],
               "threshold": 2, "policy_v": 1}
 
 
@@ -468,7 +468,8 @@ def att_challenge(role, basis, nonce):
                          params)
 
 
-def attestation(status, sigs, leaf_index=None, commitment=None):
+def attestation(status: str, sigs: list[dict], leaf_index: int | None = None,
+                commitment: str | None = None) -> dict:
     return {"type": "vendor_account_attestation", "v": 5, "ico": "12345678", "name": "ACME s.r.o.",
             "iban": NEW_LEGIT_IBAN, "valid_from": "2026-10-20", "supersedes": 4, "policy": ATT_POLICY,
             "proofs": {"or_extract_sha256": _h("or-acme"), "penny_nonce": "PX-91-4421"}, "sigs": sigs,
@@ -488,14 +489,16 @@ TX = {"tx_id": "tx_38", "proposal_id": "prp_38", "vendor_id": "ven_12345678", "i
       "executed_at": "2026-10-19T12:02:03Z"}
 
 
-def proposal(no, status, invoice, facts, decision, challenge_nonce=None, tx_id=None, hints=()):
+def proposal(no: int, status: str, invoice: dict, facts: list[dict], decision: dict,
+             challenge_nonce: str | None = None, tx_id: str | None = None, hints: tuple | list = ()) -> dict:
     return {"proposal_id": f"prp_{no}", "proposal_no": no, "status": status,
             "vendor_id": "ven_" + invoice["vendor_ico"], "invoice": invoice, "hints": list(hints),
             "facts": facts, "decision": decision, "challenge_nonce": challenge_nonce, "tx_id": tx_id,
             "created_at": "2026-10-19T12:02:00Z"}
 
 
-def decision(d, rule_ids, facts, challenge=None, mandate_id="mnd_3"):
+def decision(d: str, rule_ids: list[str], facts: list[dict], challenge: dict | None = None,
+             mandate_id: str | None = "mnd_3") -> dict:
     out = {"decision": d, "rule_ids": rule_ids, "facts": facts, "mandate_id": mandate_id,
            "policy_hash": POLICY_HASH}
     if challenge:
@@ -503,11 +506,11 @@ def decision(d, rule_ids, facts, challenge=None, mandate_id="mnd_3"):
     return out
 
 
-F_ACME_OK = [F_DPH_OK, fact("F-BANK", "INFO", "banka: Ceska sporitelna", "Bank from IBAN", country="CZ",
+F_ACME_OK = [F_VAT_OK, fact("F-BANK", "INFO", "bank: Ceska sporitelna", "Bank from IBAN", country="CZ",
                             bank_code="0800")]
 DEC_ALLOW = decision("allow", [], F_ACME_OK)
-DEC_CH = decision("challenge", ["F-MANDATE", "I-PER"], [F_OVER, F_DPH_OK], PAY_CH)
-F_DUP = fact("F-DUP", "BLOCK", "duplicita FV-2026-0412", "Duplicate invoice", matched="prp_38")
+DEC_CH = decision("challenge", ["F-MANDATE", "I-PER"], [F_OVER, F_VAT_OK], PAY_CH)
+F_DUP = fact("F-DUP", "BLOCK", "duplicate FV-2026-0412", "Duplicate invoice", matched="prp_38")
 DEC_DENY = decision("deny", ["F-DUP", "I-DUP"], F_ACME_OK + [F_DUP])
 
 
@@ -545,7 +548,7 @@ def err(code, msg, **details):
     return e
 
 
-def ev(seq, type_, subject_id, data, actor="executor", log_id="audit", ts="2026-10-19T12:02:03.120Z"):
+def ev(seq: int, type_: str, subject_id: str | None, data: dict, actor: str = "executor", log_id: str = "audit", ts: str = "2026-10-19T12:02:03.120Z") -> dict:
     return {"v": 1, "log_id": log_id, "seq": seq, "ts": ts, "type": type_, "actor": actor,
             "subject_id": subject_id, "data": data}
 
@@ -594,9 +597,9 @@ FIXTURES_SPEC = {
          {"proposal": proposal(38, "EXECUTED", INVOICE_OK, F_ACME_OK, DEC_ALLOW, tx_id="tx_38"),
           "decision": DEC_ALLOW, "tx": TX}),
         ("challenge", "POST /proposals", 201,
-         {"invoice": INVOICE_BIG, "hints": [{"source": "agent", "text": "servisni smlouva Q4"}]},
-         {"proposal": proposal(41, "PENDING_SIG", INVOICE_BIG, [F_OVER, F_DPH_OK], DEC_CH, challenge_nonce="0C55A1",
-                               hints=[{"source": "agent", "text": "servisni smlouva Q4"}]),
+         {"invoice": INVOICE_BIG, "hints": [{"source": "agent", "text": "service contract Q4"}]},
+         {"proposal": proposal(41, "PENDING_SIG", INVOICE_BIG, [F_OVER, F_VAT_OK], DEC_CH, challenge_nonce="0C55A1",
+                               hints=[{"source": "agent", "text": "service contract Q4"}]),
           "decision": DEC_CH, "tx": None}),
         ("deny_dup", "POST /proposals", 201, {"invoice": INVOICE_DUP},
          {"proposal": proposal(42, "DENIED", INVOICE_DUP, F_ACME_OK + [F_DUP], DEC_DENY),
@@ -605,13 +608,13 @@ FIXTURES_SPEC = {
     "changes_create": [
         ("bec_lookalike_deny", "POST /changes", 201,
          {"vendor_ico": "12345678", "new_iban": FRAUD_IBAN, "email_id": "eml_9a8b7c6d5e4f3021",
-          "hints": [{"source": "agent", "text": "zmena banky, urgent"}]},
-         {"change": CHG7, "decision": decision("deny", ["F-ATTEST", "F-BANK", "F-DOMAIN", "F-DPH", "F-FIRSTSEEN"],
+          "hints": [{"source": "agent", "text": "bank change, urgent"}]},
+         {"change": CHG7, "decision": decision("deny", ["F-ATTEST", "F-BANK", "F-DOMAIN", "F-VAT", "F-FIRSTSEEN"],
                                                BEC_FACTS, CHG_CH, mandate_id=None)}),
         ("legit_challenge", "POST /changes", 201,
          {"vendor_ico": "12345678", "new_iban": NEW_LEGIT_IBAN, "email_id": "eml_1122334455667788"},
          {"change": change(8, "COOLING", NEW_LEGIT_IBAN, LEGIT_FACTS, CHG8_CH, not_before="2026-10-19T12:01:30Z"),
-          "decision": decision("challenge", ["F-DPH"], LEGIT_FACTS, CHG8_CH, mandate_id=None)}),
+          "decision": decision("challenge", ["F-VAT"], LEGIT_FACTS, CHG8_CH, mandate_id=None)}),
     ],
     "changes_get": [
         ("sig_clerk", "GET /changes/{change_id}", 200, None, CHG8_SIG_CLERK),
@@ -619,7 +622,7 @@ FIXTURES_SPEC = {
         ("missing", "GET /changes/{change_id}", 404, None, err("not_found", "change chg_99 not found")),
     ],
     "changes_reject": [
-        ("ok", "POST /changes/{change_id}/reject", 200, {"reason": "klerk: podvod"},
+        ("ok", "POST /changes/{change_id}/reject", 200, {"reason": "clerk: fraud"},
          dict(CHG7, state="REJECTED", pending_challenge=None)),
         ("terminal", "POST /changes/{change_id}/reject", 409, {"reason": "x"},
          err("state_conflict", "change chg_8 is ACTIVE", state="ACTIVE")),
@@ -669,16 +672,16 @@ FIXTURES_SPEC = {
          {"action": "propose", "ico": "12345678", "iban": NEW_LEGIT_IBAN, "valid_from": "2026-10-20",
           "supersedes": 4, "penny_nonce": "PX-91-4421"},
          {"attestation": attestation("PENDING_SIGS", []),
-          "challenges": [att_challenge("jednatel", "OR", "7D11E0"), att_challenge("ucetni", "plna moc", "7D11E1"),
-                         att_challenge("financni", "plna moc", "7D11E2")]}),
+          "challenges": [att_challenge("director", "OR", "7D11E0"), att_challenge("accountant", "POA", "7D11E1"),
+                         att_challenge("finance", "POA", "7D11E2")]}),
         ("revoke_unknown", "POST /attestations", 404, {"action": "revoke", "ico": "12345678", "revokes_v": 9},
          err("not_found", "attestation 12345678#9 not found")),
     ],
     "attestations_get": [
         ("published", "GET /attestations/{ico}", 200, None, {
             "attestation": attestation("PUBLISHED", [
-                {"role": "jednatel", "address": JED, "sig": _sig("jed"), "nonce": "7D11E0"},
-                {"role": "ucetni", "address": UCT, "sig": _sig("uct"), "nonce": "7D11E1"}],
+                {"role": "director", "address": JED, "sig": _sig("jed"), "nonce": "7D11E0"},
+                {"role": "accountant", "address": UCT, "sig": _sig("uct"), "nonce": "7D11E1"}],
                 leaf_index=5, commitment=_h("commit5")),
             "policy": {"ico": "12345678", "policy_v": 1, "signers": ATT_POLICY["signers"], "threshold": 2,
                        "status": "ACTIVE", "or_extract_sha256": _h("or-acme"), "created_at": "2026-10-19T11:00:00Z"},
@@ -688,7 +691,7 @@ FIXTURES_SPEC = {
     "egress": [
         ("allow_vendor_reply", "POST /egress", 200,
          {"tool": "send_email", "target": "fakturace@acme.cz",
-          "content": "Dobry den, fakturu FV-2026-0412 jsme prijali. Dekujeme."},
+          "content": "Hello, we received invoice FV-2026-0412. Thank you."},
          {"decision": "allow", "rule_ids": [], "findings": []}),
         ("block_exfil", "POST /egress", 403,
          {"tool": "send_email", "target": "exfil@evil.example",

@@ -48,11 +48,11 @@
             "subject_id": "prp_38",
             "facts": [
               {
-                "id": "F-DPH",
+                "id": "F-VAT",
                 "kind": "F",
                 "severity": "INFO",
                 "label": "Account published in VAT registry",
-                "display_line": "DPH ucet: ANO",
+                "display_line": "VAT acct: YES",
                 "evidence": {
                   "account_published": true
                 }
@@ -62,7 +62,7 @@
                 "kind": "F",
                 "severity": "INFO",
                 "label": "Bank from IBAN",
-                "display_line": "banka: Ceska sporitelna",
+                "display_line": "bank: Ceska sporitelna",
                 "evidence": {
                   "country": "CZ",
                   "bank_code": "0800"

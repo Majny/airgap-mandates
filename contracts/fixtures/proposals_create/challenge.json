@@ -15,7 +15,7 @@
     "hints": [
       {
         "source": "agent",
-        "text": "servisni smlouva Q4"
+        "text": "service contract Q4"
       }
     ]
   },
@@ -38,7 +38,7 @@
       "hints": [
         {
           "source": "agent",
-          "text": "servisni smlouva Q4"
+          "text": "service contract Q4"
         }
       ],
       "facts": [
@@ -47,18 +47,18 @@
           "kind": "F",
           "severity": "WARN",
           "label": "Above mandate limit",
-          "display_line": "nad mandat (max 80000)",
+          "display_line": "above mandate (max 80000)",
           "evidence": {
             "amount_minor": 12500000,
             "max_per_payment_minor": 8000000
           }
         },
         {
-          "id": "F-DPH",
+          "id": "F-VAT",
           "kind": "F",
           "severity": "INFO",
           "label": "Account published in VAT registry",
-          "display_line": "DPH ucet: ANO",
+          "display_line": "VAT acct: YES",
           "evidence": {
             "account_published": true
           }
@@ -76,18 +76,18 @@
             "kind": "F",
             "severity": "WARN",
             "label": "Above mandate limit",
-            "display_line": "nad mandat (max 80000)",
+            "display_line": "above mandate (max 80000)",
             "evidence": {
               "amount_minor": 12500000,
               "max_per_payment_minor": 8000000
             }
           },
           {
-            "id": "F-DPH",
+            "id": "F-VAT",
             "kind": "F",
             "severity": "INFO",
             "label": "Account published in VAT registry",
-            "display_line": "DPH ucet: ANO",
+            "display_line": "VAT acct: YES",
             "evidence": {
               "account_published": true
             }
@@ -101,8 +101,8 @@
           "role": "clerk",
           "subject_id": "prp_41",
           "exp": "2026-10-19T13:20:00Z",
-          "text": "AIRGAP PAY #41 n:0C55A1\nBeta Servis a.s.\nCZ62 0300 0000 0001 2345 6789\n125000 CZK VS 2026104\n[F] nad mandat (max 80000)\n[F] DPH ucet: ANO\nexp 15:20",
-          "text_sha256": "b3d7d74e3749247b3228fcd86c1f9678ff16c2b3ad24009142854b94c7b65bd8",
+          "text": "AIRGAP PAY #41 n:0C55A1\nBeta Servis a.s.\nCZ62 0300 0000 0001 2345 6789\n125000 CZK VS 2026104\n[F] above mandate (max 80000)\n[F] VAT acct: YES\nexp 15:20",
+          "text_sha256": "4755549e05d06edd452b6772552f63a5cd097d84db9e810c54bc23cc3d2c8211",
           "width": 32,
           "line_count": 7
         }
@@ -123,18 +123,18 @@
           "kind": "F",
           "severity": "WARN",
           "label": "Above mandate limit",
-          "display_line": "nad mandat (max 80000)",
+          "display_line": "above mandate (max 80000)",
           "evidence": {
             "amount_minor": 12500000,
             "max_per_payment_minor": 8000000
           }
         },
         {
-          "id": "F-DPH",
+          "id": "F-VAT",
           "kind": "F",
           "severity": "INFO",
           "label": "Account published in VAT registry",
-          "display_line": "DPH ucet: ANO",
+          "display_line": "VAT acct: YES",
           "evidence": {
             "account_published": true
           }
@@ -148,8 +148,8 @@
         "role": "clerk",
         "subject_id": "prp_41",
         "exp": "2026-10-19T13:20:00Z",
-        "text": "AIRGAP PAY #41 n:0C55A1\nBeta Servis a.s.\nCZ62 0300 0000 0001 2345 6789\n125000 CZK VS 2026104\n[F] nad mandat (max 80000)\n[F] DPH ucet: ANO\nexp 15:20",
-        "text_sha256": "b3d7d74e3749247b3228fcd86c1f9678ff16c2b3ad24009142854b94c7b65bd8",
+        "text": "AIRGAP PAY #41 n:0C55A1\nBeta Servis a.s.\nCZ62 0300 0000 0001 2345 6789\n125000 CZK VS 2026104\n[F] above mandate (max 80000)\n[F] VAT acct: YES\nexp 15:20",
+        "text_sha256": "4755549e05d06edd452b6772552f63a5cd097d84db9e810c54bc23cc3d2c8211",
         "width": 32,
         "line_count": 7
       }
