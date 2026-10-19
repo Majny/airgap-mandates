@@ -64,3 +64,15 @@ teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
 checkpoint-now:  ## invoke airgap-checkpointer once (signed checkpoint + W1 cosign now, for the demo beat)
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} aws lambda invoke --region eu-central-1 --function-name airgap-checkpointer \
 	  --cli-binary-format raw-in-base64-out --payload '{"action":"tick","log_id":"audit"}' /dev/stdout
+
+.PHONY: demo-bundle offline-demo
+
+# Built once while online; never touches the network afterwards (GOPROXY=off: a cold module cache fails fast).
+.local/bin/noteverify: tools/noteverify/main.go tools/noteverify/go.mod tools/noteverify/go.sum
+	cd tools/noteverify && CGO_ENABLED=0 GOPROXY=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -o ../../.local/bin/noteverify .
+
+demo-bundle:  ## pre-seal the offline demo bundle into docs/audit/demo (refuses unless it verifies green)
+	$(PY) -m tools.demo_bundle
+
+offline-demo: .local/bin/noteverify  ## "Wi-Fi off" stage check of docs/audit/demo (build noteverify while online)
+	bash tools/offline_demo.sh docs/audit/demo

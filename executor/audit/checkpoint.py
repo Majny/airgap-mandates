@@ -32,7 +32,7 @@ def _b64(data: bytes) -> str:
 def _unb64(text: str) -> bytes:
     try:
         raw = base64.b64decode(text, validate=True)
-    except binascii.Error as exc:
+    except (binascii.Error, ValueError) as exc:  # ValueError: non-ASCII input
         raise NoteError(f"bad base64: {text!r}") from exc
     if _b64(raw) != text:
         raise NoteError(f"non-canonical base64: {text!r}")

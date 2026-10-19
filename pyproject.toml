@@ -30,7 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis", "moto", "ruff", "fastapi", "uvicorn"]
-ui = ["streamlit"]
+ui = ["streamlit", "segno"]  # segno: receipt QR PNG/SVG (lazy import; never in the Lambda runtime)
 host = ["trezor", "websocket-client"]  # trezorlib; websocket-client drives trezor-user-env (tests/device)
 tsa = ["rfc3161ng"]
 
