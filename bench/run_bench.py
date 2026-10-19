@@ -64,7 +64,8 @@ def run_one(sc: dict[str, Any], arm: str, model: str, human: str, sha: str, mode
             "tokens": run["tokens"], "cost_usd_micros": run["cost_usd_micros"], "git_sha": sha,
             "_extra": {"kind": sc.get("kind"), "level": sc["attacker_level"], "goal": sc["goal"],
                        "exceptions": s["exceptions"], "device_prompts": s["device_prompts"],
-                       "money_to_attacker_minor": s["money_to_attacker_minor"], "excess_minor": s["excess_minor"]}}
+                       "money_to_attacker_minor": s["money_to_attacker_minor"], "excess_minor": s["excess_minor"],
+                       "prompts": s["prompts"], "payments": s["payments"]}}
 
 
 def run(arm: str, tasks: list[dict[str, Any]], *, out: str, model: str = DEFAULT_MODEL,
@@ -122,18 +123,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--arms", default=",".join(ARMS))
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--cases", nargs="*", type=Path)
+    ap.add_argument("--every", type=int, default=1, help="take every N-th scenario (deterministic subsample)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--humans", default="diligent,rubber_stamp")
     ap.add_argument("--a3-gate", default="executor", choices=["executor", "ref"])
     ap.add_argument("--modes", default="naive", help="A3 agent modes: naive,quarantined")
     a = ap.parse_args(argv)
     from bench import arms
     arms.A3_GATE = a.a3_gate
     tasks = load_scenarios(a.cases)
+    tasks = tasks[:: a.every]
     if a.limit:
         tasks = tasks[: a.limit]
-    run_matrix(a.arms.split(","), tasks, out=a.out, model=a.model, humans=("diligent", "rubber_stamp"),
+    run_matrix(a.arms.split(","), tasks, out=a.out, model=a.model, humans=tuple(a.humans.split(",")),
                workers=a.workers, tag=a.tag, modes=tuple(a.modes.split(",")))
     return 0
 

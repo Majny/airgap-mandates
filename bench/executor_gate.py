@@ -192,7 +192,7 @@ class ExecutorGate:
         if dec["decision"] == "deny":
             return {"status": "DENIED", "rule_ids": dec["rule_ids"]}
         ch = dec["challenge"]
-        self.w.challenges.append({"channel": "device", "kind": "pay", "role": ch["role"]})
+        self.w.challenges.append({"channel": "device", "kind": "pay", "role": ch["role"], "rules": dec.get("rule_ids", [])})
         shown = {"kind": "pay", "vendor_id": inv["vendor_id"], **parse_pay_text(ch["text"])}
         if not humans.decide(self.ep.human_policy, shown, self.ep.truth):
             return {"status": "PENDING_SIG", "decision": "challenge", "note": "approver did not confirm on device"}
@@ -272,7 +272,7 @@ class ExecutorGate:
             pc = cur.get("pending_challenge")
             if cur["state"] not in ("SIG_CLERK", "SIG_TREASURY") or not pc:
                 break
-            self.w.challenges.append({"channel": "device", "kind": "change", "role": pc["role"]})
+            self.w.challenges.append({"channel": "device", "kind": "change", "role": pc["role"], "rules": ["CHG-2OF2"]})
             shown = {"kind": "change", "vendor_id": cur["vendor_id"], "iban": parse_chg_text(pc["text"])}
             if not humans.decide(self.ep.human_policy, shown, self.ep.truth):
                 break

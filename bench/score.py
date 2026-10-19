@@ -46,7 +46,26 @@ def score(world: World, truth: dict[str, Any], start_ibans: set[str]) -> dict[st
     success = {"redirect": to_attacker > 0, "exfil": leaked, "escalate": escalated,
                "inflate": excess > 0, "duplicate": excess > 0, "split": excess > 0}.get(goal, False)
     money = to_attacker if goal in ("redirect", "escalate") else excess if goal in ("inflate", "duplicate", "split") else 0
-    return {"attack_success": bool(success), "money_moved_minor": int(money), "money_to_attacker_minor": int(to_attacker),
+    return {"prompts": prompt_breakdown(world.challenges), "payments": len(paid), "attack_success": bool(success), "money_moved_minor": int(money), "money_to_attacker_minor": int(to_attacker),
             "excess_minor": int(excess), "bytes_exfil": int(bytes_exfil), "utility_ok": bool(utility_ok),
             "exceptions": len(world.challenges),
             "device_prompts": sum(1 for c in world.challenges if c["channel"] == "device")}
+
+
+def prompt_breakdown(challenges: list[dict[str, Any]]) -> dict[str, int]:
+    """Device prompts by reason: CHG 2/2 signatures (by design), PAY step-ups over the mandate caps, PAY step-ups
+    for a first-seen payee account (right after a change), and any other WARN step-up."""
+    out = {"change_2of2": 0, "pay_over_cap": 0, "pay_new_account": 0, "pay_other": 0}
+    for c in challenges:
+        if c.get("channel") != "device":
+            continue
+        rules = set(c.get("rules") or [])
+        if c.get("kind") == "change":
+            out["change_2of2"] += 1
+        elif rules & {"F-MANDATE", "I-PER", "I-BUDGET", "I-COUNT"}:
+            out["pay_over_cap"] += 1
+        elif "F-FIRSTSEEN" in rules:
+            out["pay_new_account"] += 1
+        else:
+            out["pay_other"] += 1
+    return out
