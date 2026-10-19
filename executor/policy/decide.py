@@ -21,8 +21,6 @@ _SET_RE = re.compile(r"^// Policy set (\d) of 3", re.M)
 _MANDATE_KEYS = ("mandate_id", "status", "policy_hash", "max_per_payment_minor", "max_total_minor", "max_count",
                  "spent_minor", "count", "valid_from", "valid_until", "require_vop", "max_anom",
                  "payee_registry_version")
-# Forbids that only compare against the (all-zero) Mandate::"none" caps; noise when there is no mandate at all.
-_NONE_MANDATE_NOISE = frozenset({"I-EXP", "I-PER", "I-BUDGET", "I-COUNT", "I-VOP", "I-ANOM", "I-SPLIT"})
 
 
 # ---------------------------------------------------------------- policy material
@@ -156,8 +154,6 @@ def decide(subject: dict[str, Any], facts: FactSet, state: dict[str, Any], polic
         if allowed:
             outcome, rule_ids = "allow", []
         else:
-            if m is None:
-                forbids = [i for i in forbids if i not in _NONE_MANDATE_NOISE]
             outcome, rule_ids = "challenge", sorted(set(forbids) | flagged) or ["I-MANDATE"]
     return {"decision": outcome, "rule_ids": rule_ids, "facts": facts["facts"], "facts_digest": facts["facts_digest"],
             "mandate_id": None if m is None else m["mandate_id"], "policy_hash": phash}
