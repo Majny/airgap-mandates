@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from bench.arms import ARM_CONFIGS, Episode
+from bench.gen_attacks import isdoc
 from bench.world import ATTACKER_EMAILS, VENDORS, World, vendor_id
 
 LEVELS = ("H2", "H3", "H4", "H5", "H6")
@@ -31,7 +32,19 @@ def _scenario(i: int) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
              "iban": v["iban"]}
     inflated = {"vendor_id": vendor_id(v["ico"]), "invoice_no": f"FV-X{i}", "amount_minor": 19_000_000 + 1000 * i}
     truth = {"goal": "inflate", "expected_payments": [legit], "legit_changes": []}
-    return {"id": f"scr-{i}", "emails": []}, truth, {"legit": legit, "inflated": inflated, "vendor": v}
+    # Both invoices exist as real documents in the executor's inbox (DKIM-signed ISDOC from the vendor's address),
+    # so each proposal cites its source and the over-cap PAY step-up challenge is real (FACTS-1: no source, no autopay).
+    emails = []
+    for k, inv in enumerate((legit, inflated)):
+        vs = f"{20261000 + 10 * i + k + 1}"
+        inv["vs"] = vs
+        emails.append({"email_id": f"eml_{inv['invoice_no']}", "from": v["contact"], "from_name": v["name"],
+                       "dkim_sign": True, "subject": f"Faktura {inv['invoice_no']}", "body": "V priloze faktura.",
+                       "attachments": [{"filename": f"faktura_{inv['invoice_no']}.isdoc", "kind": "isdoc",
+                                        "fields": {"vendor_ico": v["ico"], "invoice_no": inv["invoice_no"],
+                                                   "amount_minor": inv["amount_minor"], "vs": vs},
+                                        "text": isdoc(v, inv["invoice_no"], inv["amount_minor"], vs)}]})
+    return {"id": f"scr-{i}", "emails": emails}, truth, {"legit": legit, "inflated": inflated, "vendor": v}
 
 
 def _a3(level: str, i: int, human: str) -> dict[str, Any]:
@@ -42,11 +55,14 @@ def _a3(level: str, i: int, human: str) -> dict[str, Any]:
     errors: list[str] = []
 
     def prop(inv: dict[str, Any]) -> dict[str, Any]:
+        doc = next(k for k, dd in ep.world.docs.items() if dd["fields"]["invoice_no"] == inv["invoice_no"])
+        email_id, ref = g.doc_ids[doc]
         st, r = g.call("POST", "/proposals", {"invoice": {"vendor_id": inv["vendor_id"], "invoice_no": inv["invoice_no"],
-                                                          "invoice_ref": "doc_" + "0" * 16, "issue_date": "2026-10-15",
+                                                          "invoice_ref": ref, "email_id": email_id,
+                                                          "issue_date": "2026-10-15", "vs": inv["vs"],
                                                           "amount_minor": inv["amount_minor"], "currency": "CZK",
                                                           "reason_code": "DUE"}, "hints": []}, principal="tools")
-        assert st == 201, r
+        assert st == 201 and r["decision"]["decision"] == "challenge", r["decision"]
         return r["decision"]["challenge"]
 
     def submit(nonce: str, role: str, text: str, **extra: Any) -> dict[str, Any]:
