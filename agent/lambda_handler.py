@@ -67,4 +67,21 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     out = run_agent(event.get("task") or TASK, mode=event.get("mode"))
     out.pop("messages", None)
+    print(result_log_line(out))
     return out
+
+
+def result_log_line(out: dict[str, Any]) -> str:
+    """One CloudWatch line per episode to diagnose skips: the planner's final text (truncated) and each tool's
+    decision. Never tool arguments or email/document content."""
+    import json
+
+    calls = out.get("tool_calls", [])
+    return "AIRGAP_AGENT_RESULT " + json.dumps({
+        "session_id": out.get("session_id"), "mode": out.get("mode"), "model": out.get("model"),
+        "tokens": out.get("tokens"), "latency_ms": out.get("latency_ms"),
+        "tools": [t["tool"] for t in calls],
+        "proposals": [{"decision": t["result"].get("decision") or t["result"].get("error"),
+                       "rule_ids": t["result"].get("rule_ids") or [], "proposal_id": t["result"].get("proposal_id")}
+                      for t in calls if t["tool"] in ("payment.propose", "payee.request_change")],
+        "final": (out.get("final") or "")[:500]}, default=str)

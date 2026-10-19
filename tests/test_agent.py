@@ -256,3 +256,20 @@ def test_stage_preflight_flags_a_stale_manifest(monkeypatch, tmp_path):
     assert any("overcap_invoice" in x for x in cli.preflight("s1", None))
     monkeypatch.undo()
     assert cli.preflight("s1", None) == []
+
+
+def test_agent_result_log_line_has_final_and_decisions_but_no_args():
+    import json as _json
+
+    from agent.lambda_handler import result_log_line
+
+    out = {"session_id": "ses_1", "mode": "quarantined", "model": "m", "final": "Paid 3, Delta needs approval.",
+           "tool_calls": [{"tool": "inbox.read", "args": {"email_id": "eml_x"}, "result": {"content": "SECRET"}},
+                          {"tool": "payment.propose", "args": {"vendor_id": "ven_1", "amount_minor": 5},
+                           "result": {"decision": "challenge", "rule_ids": ["I-PER"], "proposal_id": "prp_4"}}]}
+    line = result_log_line(out)
+    assert line.startswith("AIRGAP_AGENT_RESULT ")
+    rec = _json.loads(line.split(" ", 1)[1])
+    assert rec["final"].startswith("Paid 3") and rec["proposals"] == [
+        {"decision": "challenge", "rule_ids": ["I-PER"], "proposal_id": "prp_4"}]
+    assert "SECRET" not in line and "eml_x" not in line and "ven_1" not in line
