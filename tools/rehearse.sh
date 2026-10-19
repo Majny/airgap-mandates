@@ -3,10 +3,12 @@
 # -> S2 -> S3 -> S5 (Wi-Fi off). Pauses between beats, times each beat, logs to .local/rehearsal/<ts>.log.
 # Env: AWS_PROFILE (default hackathon), API (default from infra/evidence/post_deploy.json),
 #      RESET=0 skips the AWS reset (S1 then fails if it already ran), PREFLIGHT=0 skips preflight,
-#      YES=1 skips the confirmations. Owner: orchestrator.
+#      YES=1 skips the confirmations, UI=0 does not start the ops console (http://localhost:8501).
+# Owner: orchestrator.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export AWS_PROFILE=${AWS_PROFILE:-hackathon}
+export PYTHONUNBUFFERED=1  # stdout goes through tee: without this the device prompts show up only at the end
 PY=.venv/bin/python
 API=${API:-$($PY -c "import json;print(json.load(open('infra/evidence/post_deploy.json'))['api_url'])")}
 LOG=.local/rehearsal/$(date +%Y%m%d-%H%M%S).log
@@ -29,6 +31,14 @@ summary() {
 }
 
 echo "AirGap rehearsal -> $API (profile $AWS_PROFILE)"
+if [ "${UI:-1}" = 1 ]; then
+  AIRGAP_EXECUTOR_URL=$API .venv/bin/streamlit run host/ui.py --server.headless true --server.port 8501 \
+    >.local/rehearsal/ui.log 2>&1 &
+  UI_PID=$!
+  trap 'kill $UI_PID 2>/dev/null || true' EXIT
+  sleep 3; open http://localhost:8501 2>/dev/null || true
+  echo "ops console: http://localhost:8501 (log .local/rehearsal/ui.log)"
+fi
 [ "${PREFLIGHT:-1}" = 0 ] || beat "preflight" $PY -m tools.preflight
 
 if [ "${RESET:-1}" = 1 ]; then
