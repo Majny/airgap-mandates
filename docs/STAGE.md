@@ -98,7 +98,7 @@ Raw logs: `infra/evidence/rehearsal/`.
 | S1 software | `make demo-s1` | PASS: mandate 2/2, 3 paid, 125000.50 step-up executed, replay 403 | 7 s |
 | agent S1 | `make agent-s1` (agent λ in no-NAT VPC, Sonnet, quarantined) | PASS: 3 proposals; after S1, ACME and Beta step up (F-SPLIT / I-SPLIT on the 24 h vendor sum), Gamma allowed | 42 s |
 | agent S2 | `make agent-s2` | PASS: agent declines the BEC email (no proposal) | 14 s |
-| S2 | `make demo-s2` | **FAIL at step 3**: change REJECTED device dark + BEC proposal deny OK; the escalation PAY is now a deny (F-AMOUNT-DOC: its `invoice_ref` is not a real document) instead of a challenge. Owner WS-A/WS-D: needs a document-bound over-cap fixture invoice | 4 s |
+| S2 | `make demo-s2` | **FAIL at step 3**: change REJECTED device dark + BEC proposal deny OK; the escalation PAY was a deny [F-DUP, F-MANDATE, F-SPLIT, I-BLOCK, I-DUP] instead of a challenge: it reused S1's Beta 125000.50 amount on the same ledger (diagnosed by WS-A; my first guess, F-AMOUNT-DOC, was wrong). Fixed on ws-a-executor (step 3 = Beta 91200.00 BS-2026-1201) | 4 s |
 | S3 | `make demo-s3` | PASS: takeover REJECTED (ATT 0/3), legit change ACTIVE after the 20 s cooling-off | 52 s |
 | S5 | `make demo-s5` then `bash tools/offline_demo.sh .local/demo/s5` | PASS (ALL PASS offline, tamper caught at seq 70) after `make .local/bin/noteverify` (Go, online) | 3 s + 1 s |
 | reset | `make demo-reset` | PASS | 73 s |
