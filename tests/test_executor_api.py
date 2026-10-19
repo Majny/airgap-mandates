@@ -175,3 +175,13 @@ def test_s12_every_decision_leaf_replays():
         assert ok, (e["data"], got)
     tampered = {**leaves[0], "data": {**leaves[0]["data"], "decision": "deny"}}
     assert D.replay_decision(tampered, rules.policy_material())[0] is False
+
+
+def test_e2e_script_runs():
+    from datetime import datetime, timezone
+
+    from executor import e2e
+
+    call, clerk, treasury = e2e.in_process()
+    out = e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc), log=lambda s: None)
+    assert len(out["tx_ids"]) == 4
