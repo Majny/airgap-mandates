@@ -61,6 +61,12 @@ deploy:  ## deploy to AWS eu-central-1 (the demo runs here; WS-E): build zip, cd
 teardown:  ## tear down AWS resources incl. Object Lock governance bypass (WS-E)
 	infra/teardown.sh
 
+agent-s1:  ## agent beat S1 on AWS (agent λ in the no-NAT VPC, quarantined, Sonnet): 3 legit invoices
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s1
+
+agent-s2:  ## agent beat S2 on AWS: lookalike BEC email (expect no payment)
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m agent run --scenario s2
+
 checkpoint-now:  ## invoke airgap-checkpointer once (signed checkpoint + W1 cosign now, for the demo beat)
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} aws lambda invoke --region eu-central-1 --function-name airgap-checkpointer \
 	  --cli-binary-format raw-in-base64-out --payload '{"action":"tick","log_id":"audit"}' /dev/stdout
