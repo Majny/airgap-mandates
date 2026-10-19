@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from fractions import Fraction
 from typing import Any
 
+from executor.docs.extract import invoice_no_ref
 from executor.policy.rules import PARAMS
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -42,6 +43,13 @@ def _day(v: Any) -> date:
     return v if isinstance(v, date) and not isinstance(v, datetime) else date.fromisoformat(str(v)[:10])
 
 
+# ---------------------------------------------------------------- mandate currency
+
+def mandate_covers_currency(mandate: dict[str, Any] | None, invoice: dict[str, Any]) -> bool:
+    """A mandate's caps are in its own currency; an invoice in another one is outside it (no FX in v1: red-team F1)."""
+    return mandate is None or str(mandate.get("currency") or "CZK") == str(invoice.get("currency") or "CZK")
+
+
 # ---------------------------------------------------------------- I-DUP
 
 def normalize_invoice_no(invoice_no: str) -> str:
@@ -70,6 +78,11 @@ def find_duplicate(invoice: dict[str, Any], proposals: list[dict[str, Any]], *,
             continue
         inv = p.get("invoice") or {}
         if normalize_invoice_no(inv.get("invoice_no", "")) == norm:
+            return p.get("proposal_id")
+        # the same source document, or a number and its `inv_` reference (both match the document: red-team F2)
+        if invoice.get("invoice_ref") and inv.get("invoice_ref") == invoice["invoice_ref"]:
+            return p.get("proposal_id")
+        if invoice_no_ref(inv.get("invoice_no")) == invoice_no_ref(invoice["invoice_no"]):
             return p.get("proposal_id")
         prior = int(inv.get("amount_minor", 0))
         if (abs(amount - prior) * 10000 <= prm["dup_amount_bp"] * prior and inv.get("issue_date")
