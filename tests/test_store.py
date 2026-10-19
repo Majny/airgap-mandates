@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from executor.config import Settings
-from executor.store import (MISSING, AnyOf, IncrementBounded, Put, TxConflict, UpdateIf, ensure_head, get_store,
+from executor.store import (MISSING, AnyOf, IdempotencyMismatch, IncrementBounded, Put, TxConflict, UpdateIf, ensure_head, get_store,
                             next_seq, shims, tx_execute)
 
 
@@ -172,7 +172,8 @@ def test_transact_token_idempotency(store, request):
     assert store.transact(ops, client_request_token="tok1")  # same token + same ops: success, not re-applied
     assert store.scan("ledger") == [{"tx_id": "t1"}]
     other = [Put("ledger", {"tx_id": "t2"}, if_absent_key="tx_id")]
-    assert not store.transact(other, client_request_token="tok1")
+    with pytest.raises(IdempotencyMismatch):
+        store.transact(other, client_request_token="tok1")
     assert store.get("ledger", {"tx_id": "t2"}) is None
 
 
@@ -246,3 +247,32 @@ def test_tx_execute_conflicts_write_nothing(store, case):
     with pytest.raises(TxConflict):
         tx_execute(store, expected_seq=expected, **_args())
     assert _snapshot(store) == before
+
+
+def test_tx_execute_after_table_reset_reuses_tx_id_without_token_mismatch():
+    """AWS rehearsal finding (WS-E): after a table reset tx_ids repeat (mnd_1|prp_1) within DynamoDB's ~10 min token
+    window. The token is salted with the leaf hash, so the rerun is a new transaction, not a parameter mismatch."""
+    from executor.config import Settings
+    from executor.store import request_token
+    from executor.store.memory import MemoryStore
+
+    store = MemoryStore(Settings())
+
+    def run(ts: str) -> int:
+        ensure_head(store)
+        leaf = {"v": 2, "log_id": "audit", "ts": ts, "type": "execution", "actor": "executor", "subject_id": "prp_1",
+                "data": {"tx_id": "tx_aaa77024e314701a"}, "policy_hash": None, "inputs_digest": None,
+                "facts_digest": None, "hints_digest": None}
+        row = {"tx_id": "tx_aaa77024e314701a", "proposal_id": "prp_1", "vendor_id": "v", "iban": "CZ1", "amount_minor": 1,
+               "currency": "CZK", "authorization": {"kind": "stepup", "nonce": "00000000"},
+               "executed_at": ts, "rail": {"status": "PENDING", "xml_c14n_sha256": None}}
+        return tx_execute(store, leaf_event=leaf, expected_seq=0, ledger_row=row, proposal_id="prp_1",
+                          mandate_debit=None)
+
+    assert run("2026-10-19T12:00:00.000Z") == 0
+    tokens = dict(store._tokens)
+    store.__init__(Settings())  # table reset; DynamoDB would still remember the token
+    store._tokens = tokens
+    assert run("2026-10-19T12:04:00.000Z") == 0
+    assert request_token("tx_a", "ab" * 32) != request_token("tx_a", "cd" * 32)
+    assert len(request_token("tx_" + "f" * 16, "ab" * 32)) <= 36

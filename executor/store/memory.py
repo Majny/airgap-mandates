@@ -140,7 +140,11 @@ class MemoryStore:
                 self._tokens = {t: v for t, v in self._tokens.items() if now - v[0] < TOKEN_TTL_SECONDS}
                 seen = self._tokens.get(client_request_token)
                 if seen is not None:
-                    return seen[1] == fingerprint
+                    if seen[1] != fingerprint:
+                        from executor.store import IdempotencyMismatch
+
+                        raise IdempotencyMismatch(f"ClientRequestToken {client_request_token} reused with other ops")
+                    return True
             if not all(self._check_op(op) for op in ops):
                 return False
             for op in ops:

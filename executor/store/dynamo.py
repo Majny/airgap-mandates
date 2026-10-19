@@ -274,7 +274,9 @@ class DynamoStore:
         except ClientError as err:
             code = self._code(err)
             if code == "IdempotentParameterMismatchException":
-                return False
+                from executor.store import IdempotencyMismatch
+
+                raise IdempotencyMismatch(f"ClientRequestToken {client_request_token} reused with other parameters") from err
             if code == "TransactionCanceledException":
                 reasons = err.response.get("CancellationReasons") or []
                 if any(r.get("Code") == "ConditionalCheckFailed" for r in reasons):
