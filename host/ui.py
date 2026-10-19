@@ -39,6 +39,39 @@ def api(path: str, **query: Any) -> tuple[int, Any]:
     return r.status_code, (r.json() if "json" in ct else r.text)
 
 
+def export_bundle() -> dict[str, Any] | None:
+    code, b = api("/audit/export", log_id="audit", from_seq=0)
+    return b if code == 200 and isinstance(b, dict) else None
+
+
+def device_labels(bundle: dict[str, Any] | None) -> dict[str, str]:
+    """address -> GENUINE | EMULATOR, from the `enroll` leaves (set by the enrolment tool, never by the host)."""
+    out: dict[str, str] = {}
+    for leaf in (bundle or {}).get("leaves", []):
+        ev = leaf.get("event") or {}
+        if ev.get("type") == "enroll":
+            d = ev.get("data") or {}
+            out[str(d.get("address", "")).lower()] = d.get("device") or "UNKNOWN"
+    return out
+
+
+def emulator_only() -> bool:
+    """WS-C fallback mode: the clerk signs on the emulator (AIRGAP_TREZOR_PATH=udp:...)."""
+    try:
+        from host import signer
+        fn = getattr(signer, "emulator_only", None)
+        if fn is not None:
+            return bool(fn())
+    except Exception:  # noqa: BLE001 - signer extras (trezorlib) may be missing on a UI-only laptop
+        pass
+    return os.environ.get("AIRGAP_TREZOR_PATH", "").startswith("udp:")
+
+
+def device_chip(label: str) -> str:
+    colour = {"GENUINE": "#067647", "EMULATOR": "#b54708"}.get(label, "#475467")
+    return f'<span class="fact" style="background:{colour}">{label}</span>'
+
+
 def view(v: dict[str, Any]) -> dict[str, Any]:
     """Everything the host shows passes here; a compromised host rewrites it."""
     return compromised.lie(v) if compromised.is_compromised() else v
@@ -100,6 +133,25 @@ def tab_changes(st: Any) -> None:
             st.markdown(fact_chips(v.get("facts", [])), unsafe_allow_html=True)
 
 
+def tab_approvals(st: Any) -> None:
+    bundle = export_bundle()
+    if bundle is None:
+        st.info("audit export unavailable")
+        return
+    labels = device_labels(bundle)
+    sigs = [leaf for leaf in bundle.get("leaves", []) if (leaf.get("event") or {}).get("type") == "signature"]
+    if not sigs:
+        st.caption("no approvals yet")
+    for leaf in reversed(sigs[-30:]):
+        ev = leaf["event"]
+        d = ev.get("data") or {}
+        addr = str(d.get("signer_address") or "").lower()
+        label = labels.get(addr, "NOT ENROLLED" if addr else "-")
+        outcome = "accepted" if d.get("accepted") else f"rejected: {d.get('error')}"
+        st.markdown(f"seq {leaf['seq']} · **{d.get('purpose')}** · {d.get('role')} · `{addr[:10]}…` "
+                    f"{device_chip(label)} · {outcome} · `{ev.get('subject_id')}`", unsafe_allow_html=True)
+
+
 def tab_receipts(st: Any) -> None:
     tx_id = st.text_input("tx_id")
     if not tx_id:
@@ -108,15 +160,27 @@ def tab_receipts(st: Any) -> None:
     if code != 200:
         st.warning(r)
         return
-    payload = json.dumps(r, separators=(",", ":"))
-    import streamlit.components.v1 as components  # QR rendered client-side; offline fallback = the JSON below
-    components.html(f"""<div id="qr"></div><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
-    </script><script>new QRCode(document.getElementById("qr"), {{text: {json.dumps(payload[:2900])}, width: 320,
-    height: 320, correctLevel: QRCode.CorrectLevel.L}});</script>""", height=340)
+    try:
+        from executor.audit.receipt import qr_payload, receipt_qr_svg
+        st.markdown(receipt_qr_svg(r, scale=6), unsafe_allow_html=True)
+        st.caption("If a phone cannot scan it, verify this text offline: python -m tools.verify_audit --receipt <file>")
+        st.code(qr_payload(r), language="text")
+    except (ImportError, NotImplementedError) as exc:
+        st.info(f"receipt QR unavailable ({exc}); install the [ui] extra (segno)")
     st.json(r, expanded=False)
 
 
 def tab_audit(st: Any) -> None:
+    bundle = export_bundle()
+    try:
+        from witness.supervisor import render_html
+        import streamlit.components.v1 as components
+        st.warning("Rendered by the host. Under a compromised host (H1) this view can lie. "
+                   "Verify offline: python -m witness.supervisor bundle.json")
+        if bundle is not None:
+            components.html(render_html(bundle, allow_uncovered_tail=True), height=620, scrolling=True)
+    except ImportError:
+        st.info("supervisor view not merged on this branch yet (WS-B witness.supervisor)")
     code, note = api("/checkpoint", log_id="audit")
     st.markdown("**Latest checkpoint (C2SP signed note)**")
     st.code(note if code == 200 else f"unavailable: {note}", language="text")
@@ -167,8 +231,12 @@ def main() -> None:
             st.caption(f"deployment {health.get('deployment')} · policy {str(health.get('policy_hash'))[:16]}")
         if st.button("refresh"):
             st.rerun()
-    tabs = st.tabs(["Activity", "Payee changes", "Receipts", "Audit", "AWS evidence", "Bench"])
-    for tab, fn in zip(tabs, (tab_activity, tab_changes, tab_receipts, tab_audit, tab_evidence, tab_bench)):
+    if emulator_only():
+        st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 5 attached)</span>',
+                    unsafe_allow_html=True)
+    tabs = st.tabs(["Activity", "Payee changes", "Approvals", "Receipts", "Audit", "AWS evidence", "Bench"])
+    for tab, fn in zip(tabs, (tab_activity, tab_changes, tab_approvals, tab_receipts, tab_audit, tab_evidence,
+                              tab_bench)):
         with tab:
             fn(st)
 
