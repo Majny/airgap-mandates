@@ -48,6 +48,7 @@ FACT_SEVERITY: dict[str, dict[str, str]] = {
     "F-BANK": {"domestic": "INFO", "foreign_or_emi": "WARN"},
     "F-FIRSTSEEN": {"known": "INFO", "new": "WARN"},
     "F-DUP": {"duplicate": "BLOCK"},
+    "F-AMOUNT-DOC": {"match": "INFO", "mismatch": "BLOCK"},
     "F-SPLIT": {"split": "WARN"},
     "F-Z": {"outlier": "WARN"},
     "F-ANOM": {"low": "INFO", "high": "WARN"},

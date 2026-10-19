@@ -11,7 +11,7 @@
     "error": "render_mismatch",
     "message": "displayed text differs from executor render",
     "details": {
-      "expected_sha256": "902496cc954dd5c8bb524a00d09947be8d8d7dddb8aa432c899fc5bd295ac4d5"
+      "expected_sha256": "b4185560cfa4f37ba86c11e3536e7e6c19fc51f847acd761e4e185551dac269c"
     }
   }
 }

@@ -156,7 +156,10 @@
       }
     },
     "render_profile": {
-      "const": "safe5-mono-18x7"
+      "enum": [
+        "safe3-mono-16x4",
+        "safe5-mono-18x7"
+      ]
     }
   },
   "required": [

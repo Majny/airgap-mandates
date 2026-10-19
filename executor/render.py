@@ -2,15 +2,18 @@
 
 Owner: WS-C. Shared by every workstream; the Python API in CONTRACTS §5.6 is frozen.
 
-The executor renders the text a human signs on the Trezor Safe 5 from its own data (S2).
-The text is exactly what the device shows: profile `safe5-mono-18x7` = 18 mono columns x
-7 lines per page, at most 2 pages, ASCII 0x20-0x7E plus LF, line 1 starts `AG1/<DEPLOY>`.
+The executor renders the text a human signs on the Trezor from its own data (S2).
+The text is exactly what the device shows: default profile `safe3-mono-16x4` (Trezor Safe 3)
+= 16 mono columns x 4 lines per device page, at most 14 lines (4 pages), ASCII 0x20-0x7E plus
+LF, line 1 starts `AG1/<DEPLOY>`. The Safe 3 draws 18 columns, but its page-break glyphs take
+2 columns on the last line of a page and the first line of the next (measured at H0,
+docs/device/measurements.md); at width 16 no line can ever reflow across a page break.
 Only executor-verified [F] content is ever rendered; [H] facts are dropped (D3) and any
 BLOCK fact raises (R0: nothing to approve means nothing on the device).
 
-Pagination is implicit: `render()` returns one LF-joined string; the device breaks pages
-every 7 lines, so page 1 of a 2-page text is exactly 7 lines. `render_pages()` splits it.
-Output is deterministic: same inputs -> byte-identical text.
+Layout is built as two logical blocks of 7 lines (block 1 = what the money does, block 2 = why
+it is safe and who signs); the device then pages the LF-joined text every `lines_per_page`
+lines. `render_pages()` splits it into device pages. Output is deterministic.
 """
 
 from __future__ import annotations
@@ -27,23 +30,36 @@ from executor.canonical import canonical_json
 
 # --------------------------------------------------------------------------- profiles
 
+PROFILE_SAFE3 = "safe3-mono-16x4"
 PROFILE_SAFE5 = "safe5-mono-18x7"
 PROFILE_UI = "ui-preview-32"
-DEFAULT_PROFILE = PROFILE_SAFE5
+DEFAULT_PROFILE = PROFILE_SAFE3
 
 
 @dataclass(frozen=True)
 class Profile:
     name: str
     width: int  # columns per line
-    lines_per_page: int
-    max_pages: int
-    break_line_max: int  # max length of page-1 last line and page-2 first line (marker may eat columns)
+    lines_per_page: int  # device page height (the device breaks pages every N lines)
+    max_pages: int  # device pages
+    break_line_max: int  # max length of the last line of a page and the first line of the next (marker glyphs)
     min_width: int
-    exact_first_page: bool  # device pagination: page 1 of a 2-page text has exactly lines_per_page lines
+    exact_first_page: bool  # logical block 1 of a 2-block text has exactly block_lines lines
+    block_lines: int = 7  # logical layout block (block 1 = what the money does, block 2 = why safe, who signs)
+    max_lines: int = 14
+    hash_hex: int = 16  # hex digits shown on the H and P lines
+    title_width: int = 0  # line 1 (title) may be wider: it is never adjacent to a page break. 0 = width
+
+    @property
+    def title_max(self) -> int:
+        return max(self.width, self.title_width)
 
 
 PROFILES: dict[str, Profile] = {
+    # Trezor Safe 3 (T2B1/T3B1), measured at H0: 18 mono cols x 4 lines; page-break glyphs take 2 cols, so width 16.
+    PROFILE_SAFE3: Profile(PROFILE_SAFE3, width=16, lines_per_page=4, max_pages=4, break_line_max=16,
+                           min_width=16, exact_first_page=True, hash_hex=14, title_width=18),
+    # Trezor Safe 5 (T3T1), emulator-measured: 18 mono cols x 7 lines; marker width unmeasured, hence 15.
     PROFILE_SAFE5: Profile(PROFILE_SAFE5, width=18, lines_per_page=7, max_pages=2, break_line_max=15,
                            min_width=18, exact_first_page=True),
     # UI preview only (never sent to a device): same layout, wider lines, no device pagination rule.
@@ -51,11 +67,11 @@ PROFILES: dict[str, Profile] = {
                         min_width=18, exact_first_page=False),
 }
 
-DEFAULT_WIDTH = PROFILES[DEFAULT_PROFILE].width  # 18
-LINES_PER_PAGE = 7
-MAX_PAGES = 2
-MAX_LINES = LINES_PER_PAGE * MAX_PAGES  # 14
-BREAK_LINE_MAX = 15  # until H0 measures the "..." page-break marker
+DEFAULT_WIDTH = PROFILES[DEFAULT_PROFILE].width  # 16
+LINES_PER_PAGE = PROFILES[DEFAULT_PROFILE].lines_per_page  # 4
+MAX_PAGES = PROFILES[DEFAULT_PROFILE].max_pages  # 4
+MAX_LINES = PROFILES[DEFAULT_PROFILE].max_lines  # 14
+BREAK_LINE_MAX = PROFILES[DEFAULT_PROFILE].break_line_max  # 16 (= width: the break rule is vacuous)
 MIN_WIDTH = {name: p.min_width for name, p in PROFILES.items()}
 DEFAULT_DEPLOYMENT = "DEMO"
 PROTOCOL_TAG = "AG1"
@@ -79,6 +95,7 @@ FACT_ORDER = (
     "F-BANK",
     "F-FIRSTSEEN",
     "F-DUP",
+    "F-AMOUNT-DOC",
     "F-SPLIT",
     "F-Z",
     "F-ANOM",
@@ -86,6 +103,9 @@ FACT_ORDER = (
 )
 _SEVERITIES = ("INFO", "WARN", "BLOCK")
 _TRUNC = "~"
+
+# Short role names for narrow profiles (`ROLE TREASURY 2/2` is 17 chars).
+ROLE_SHORT = {"TREASURY": "TREAS"}
 
 # Vendor signer role -> device label (ATTEST page 2).
 ROLE_DISPLAY = {"director": "DIR", "accountant": "ACCT", "finance": "FIN"}
@@ -279,11 +299,21 @@ def _nonce(nonce: str) -> str:
     return n
 
 
-def _hex16(h: str, name: str) -> str:
+def _hex16(h: str, name: str, n: int = 16) -> str:
+    """First `n` hex digits of a lowercase hex digest (16 = 64 bits; the Safe 3 profile shows 14 = 56 bits)."""
     s = str(h)
     if len(s) < 16 or any(c not in "0123456789abcdef" for c in s):
         raise RenderError("PARAM", f"bad {name} (lowercase hex, >= 16 chars)")
-    return s[:16]
+    return s[:n]
+
+
+def _hash_line(tag: str, h: str, name: str, prof: "Profile") -> str:
+    return f"{tag} {_hex16(h, name, prof.hash_hex)}"
+
+
+def _short(full: str, short: str, width: int) -> str:
+    """Fixed-format line with a deterministic short form for narrow profiles."""
+    return full if len(full) <= width else _check_line(short, width)
 
 
 def _int(v: Any, name: str, minimum: int = 0) -> int:
@@ -409,6 +439,10 @@ def _title(deployment: str, kind: str, number: int | None, width: int) -> str:
     return t
 
 
+def _tw(p: "Profile") -> int:
+    return p.title_max
+
+
 def _role_line(role: str, sig_index: int, sig_total: int, width: int) -> str:
     i, n = _int(sig_index, "sig_index", 1), _int(sig_total, "sig_total", 1)
     if i > n:
@@ -416,7 +450,7 @@ def _role_line(role: str, sig_index: int, sig_total: int, width: int) -> str:
     r = str(role)
     if not r.isascii() or not r.isalpha():
         raise RenderError("PARAM", f"bad role {role!r}")
-    return _check_line(f"ROLE {r.upper()} {i}/{n}", width)
+    return _short(f"ROLE {r.upper()} {i}/{n}", f"ROLE {ROLE_SHORT.get(r.upper(), r.upper())} {i}/{n}", width)
 
 
 def get_profile(profile: str | Profile | None = None, width: int | None = None) -> Profile:
@@ -430,7 +464,7 @@ def get_profile(profile: str | Profile | None = None, width: int | None = None) 
     if width is not None:
         if isinstance(width, bool) or not isinstance(width, int) or width < p.min_width:
             raise RenderError("WIDTH", f"width must be int >= {p.min_width} for {p.name}")
-        p = replace(p, width=width, break_line_max=min(p.break_line_max, width))
+        p = replace(p, width=width, break_line_max=min(p.break_line_max, width), title_width=max(p.title_max, width))
     return p
 
 
@@ -448,7 +482,7 @@ def _page1(cands: list[_L], prof: Profile) -> tuple[list[str], list[str]]:
     """Choose page-1 lines (template order) and the optional lines carried to page 2."""
     mandatory = [c for c in cands if c.prio == 0]
     optional = sorted((c for c in cands if c.prio > 0), key=lambda c: c.prio)
-    lpp = prof.lines_per_page
+    lpp = prof.block_lines
     if prof.exact_first_page:
         need = lpp - len(mandatory)
         if need < 0 or need > len(optional):
@@ -473,10 +507,10 @@ def _page2(head: list[str], carried: list[str], fs: list[Fact] | None, tail: lis
            *, summary_first: bool) -> list[str]:
     body: list[str] = []
     if fs is not None:
-        body = _fact_lines(fs, prof.lines_per_page - len(head) - len(carried) - len(tail), prof.width)
+        body = _fact_lines(fs, prof.block_lines - len(head) - len(carried) - len(tail), prof.width)
     page = head + carried + body + tail
-    if len(page) > prof.lines_per_page:
-        raise RenderError("PAGES", "page 2 exceeds lines_per_page")
+    if len(page) > prof.block_lines:
+        raise RenderError("PAGES", "block 2 exceeds block_lines")
     if prof.exact_first_page and not summary_first and len(page[0]) > prof.break_line_max:
         # Page-break rule: move the first line that fits to the front (deterministic, nothing dropped).
         for i, line in enumerate(page):
@@ -489,8 +523,8 @@ def _page2(head: list[str], carried: list[str], fs: list[Fact] | None, tail: lis
 
 
 def _finish(lines: list[str], prof: Profile) -> str:
-    for line in lines:
-        _check_line(line, prof.width)
+    for i, line in enumerate(lines):
+        _check_line(line, prof.title_max if i == 0 else prof.width)
     text = "\n".join(lines)
     check_text(text, prof)
     return text
@@ -504,17 +538,20 @@ def check_text(text: str, profile: str | Profile | None = None) -> list[list[str
     if not all(" " <= c <= "~" or c == "\n" for c in text):
         raise RenderError("NON_ASCII", "text must be ASCII 0x20-0x7E plus LF")
     ls = text.split("\n")
-    for line in ls:
-        _check_line(line, prof.width)
+    for i, line in enumerate(ls):
+        _check_line(line, prof.title_max if i == 0 else prof.width)
     if not ls[0].startswith(f"{PROTOCOL_TAG}/"):
         raise RenderError("PARAM", f"line 1 must start with {PROTOCOL_TAG}/<DEPLOY>")
+    if len(ls) > prof.max_lines:
+        raise RenderError("PAGES", f"{len(ls)} lines > {prof.max_lines}")
     lpp = prof.lines_per_page
     pages = [ls[i : i + lpp] for i in range(0, len(ls), lpp)]
     if len(pages) > prof.max_pages:
         raise RenderError("PAGES", f"{len(pages)} pages > {prof.max_pages}")
-    if prof.exact_first_page and len(pages) > 1:
-        if len(pages[0][-1]) > prof.break_line_max or len(pages[1][0]) > prof.break_line_max:
-            raise RenderError("PAGE_BREAK", f"lines adjacent to a page break must be <= {prof.break_line_max}")
+    if prof.exact_first_page:
+        for a, b in zip(pages, pages[1:]):
+            if len(a[-1]) > prof.break_line_max or len(b[0]) > prof.break_line_max:
+                raise RenderError("PAGE_BREAK", f"lines adjacent to a page break must be <= {prof.break_line_max}")
     return pages
 
 
@@ -571,7 +608,7 @@ def render_pay(
     w = p.width
     fs = _device_facts(facts)
     cands = [
-        _L(_title(deployment, "PAY", proposal_no, w)),
+        _L(_title(deployment, "PAY", proposal_no, _tw(p))),
         _L(_check_line(format_amount(amount_minor, currency), w)),
         *(_L(x) for x in format_iban_lines("", iban, w)),
         _L(_fit(display_name(payee_name), w)),
@@ -586,9 +623,14 @@ def render_pay(
     if bl:
         cands.append(_L(bl, prio=3))
     page1, carried = _page1(cands, p)
-    tail = [_role_line(role, sig_index, sig_total, w), f"N {_nonce(nonce)}", f"H {_hex16(subject_hash, 'subject_hash')}"]
+    tail = [_role_line(role, sig_index, sig_total, w), f"N {_nonce(nonce)}", _hash_line("H", subject_hash, "subject_hash", p)]
     page2 = _page2([summary_line(fs)], carried, fs, tail, p, summary_first=True)
     return _finish(page1 + page2, p)
+
+
+def _payees_line(count: int, version: int, width: int) -> str:
+    c, v = _int(count, "payee_count"), _int(version, "payee_registry_version")
+    return _short(f"PAYEES {c} REG V{v}", f"PAYEES {c} V{v}", width)
 
 
 def render_mandate(
@@ -623,7 +665,7 @@ def render_mandate(
     if any(c not in ("MTCH", "CMTC", "NMTC", "NOAP") for c in vop):
         raise RenderError("PARAM", f"bad require_vop {require_vop!r}")
     cands = [
-        _L(_title(deployment, "MANDATE", None, w)),
+        _L(_title(deployment, "MANDATE", None, _tw(p))),
         _L(f"NO {_int(mandate_no, 'mandate_no', 1)} {_currency(currency)}"),
         _L(f"PER PAY {_major(max_per_payment_minor)}"),
         _L(f"TOTAL {_major(max_total_minor)}"),
@@ -636,12 +678,23 @@ def render_mandate(
         _role_line(role, sig_index, sig_total, w),
         f"FROM {_mmdd_hhmm(valid_from)}",
         _check_line(f"REQ VOP {'/'.join(vop) if vop else 'NONE'}", w),
-        _check_line(f"PAYEES {_int(payee_count, 'payee_count')} REG V{_int(payee_registry_version, 'payee_registry_version')}", w),
+        _payees_line(payee_count, payee_registry_version, w),
         f"N {_nonce(nonce)}",
-        f"P {_hex16(policy_hash, 'policy_hash')}",
-        f"H {_hex16(subject_hash, 'subject_hash')}",
+        _hash_line("P", policy_hash, "policy_hash", p),
+        _hash_line("H", subject_hash, "subject_hash", p),
     ], p, summary_first=False)
     return _finish(page1 + page2, p)
+
+
+def _old_line(old_iban: str, old_since: date | str, width: int) -> str:
+    ym = _year_month(old_since)
+    return _short(f"OLD ..{iban_last4(old_iban)} {ym}", f"OLD ..{iban_last4(old_iban)} {ym[2:]}", width)
+
+
+def _new_iban_lines(iban: str, width: int) -> list[str]:
+    """`NEW` + IBAN; at narrow widths a long IBAN gets a `NEW IBAN` label line instead (max 4 lines either way)."""
+    out = format_iban_lines("NEW", iban, width)
+    return out if len(out) <= 3 else ["NEW IBAN"] + format_iban_lines("", iban, width)
 
 
 def render_change(
@@ -666,18 +719,18 @@ def render_change(
     w = p.width
     fs = _device_facts(facts)
     cands = [
-        _L(_title(deployment, "CHG", change_no, w)),
+        _L(_title(deployment, "CHG", change_no, _tw(p))),
         _L(_fit(display_name(vendor_name), w)),
         _L(f"ICO {_ico(vendor_ico)}"),
-        _L(_check_line(f"OLD ..{iban_last4(old_iban)} {_year_month(old_since)}", w), prio=1, carry=True),
-        *(_L(x) for x in format_iban_lines("NEW", new_iban, w)),
+        _L(_old_line(old_iban, old_since, w), prio=1, carry=True),
+        *(_L(x) for x in _new_iban_lines(new_iban, w)),
     ]
     bl = bank_line(new_iban)
     if bl:
         cands.append(_L(bl, prio=2))
     page1, carried = _page1(cands, p)
     tail = ["COOLOFF DONE", _role_line(role, sig_index, sig_total, w), f"N {_nonce(nonce)}",
-            f"H {_hex16(subject_hash, 'subject_hash')}"]
+            _hash_line("H", subject_hash, "subject_hash", p)]
     page2 = _page2([summary_line(fs)], carried, fs, tail, p, summary_first=True)
     return _finish(page1 + page2, p)
 
@@ -711,7 +764,7 @@ def render_vendor_attest(
     if role is None:
         raise RenderError("PARAM", f"bad signer_role {signer_role!r}")
     cands = [
-        _L(_title(deployment, "ATTEST", None, w)),
+        _L(_title(deployment, "ATTEST", None, _tw(p))),
         _L(_fit(display_name(vendor_name), w)),
         _L(f"ICO {_ico(ico)}"),
         _L("PAY TO ACCOUNT"),
@@ -719,9 +772,9 @@ def render_vendor_attest(
         _L(f"FROM {_to_date(valid_from).isoformat()}", prio=1, carry=True),
     ]
     page1, carried = _page1(cands, p)
-    head = [_check_line(f"SIGNER {role} ({role_basis})", w), _check_line(f"QUORUM {t}/{n} V{_int(version, 'version', 1)}", w),
+    head = [_short(f"SIGNER {role} ({role_basis})", f"SIGNER {role} {role_basis}", w), _check_line(f"QUORUM {t}/{n} V{_int(version, 'version', 1)}", w),
             _check_line(f"CHANGE {_int(change_no, 'change_no', 1)}", w)]
-    tail = [f"N {_nonce(nonce)}", f"H {_hex16(subject_hash, 'subject_hash')}"]
+    tail = [f"N {_nonce(nonce)}", _hash_line("H", subject_hash, "subject_hash", p)]
     page2 = _page2(head, carried, None, tail, p, summary_first=False)
     return _finish(page1 + page2, p)
 
@@ -736,11 +789,10 @@ def render_enroll(
 ) -> str:
     """Enrolment ceremony text (ARCHITECTURE §3.3), one page."""
     p = get_profile(profile, width)
-    w = p.width
     r = str(role)
     if r not in ("clerk", "treasury"):
         raise RenderError("PARAM", f"bad role {role!r}")
-    return _finish([_title(deployment, "ENROLL", None, w), f"ROLE {r.upper()}", f"N {_nonce(nonce)}"], p)
+    return _finish([_title(deployment, "ENROLL", None, _tw(p)), f"ROLE {r.upper()}", f"N {_nonce(nonce)}"], p)
 
 
 def render_chg_reject(
@@ -760,13 +812,13 @@ def render_chg_reject(
     p = get_profile(profile, width)
     w = p.width
     return _finish([
-        _title(deployment, "REJECT", change_no, w),
+        _title(deployment, "REJECT", change_no, _tw(p)),
         _fit(display_name(vendor_name), w),
         f"ICO {_ico(vendor_ico)}",
         f"NEW ..{iban_last4(new_iban)}",
         _check_line(f"ROLE {str(role).upper()}", w),
         f"N {_nonce(nonce)}",
-        f"H {_hex16(subject_hash, 'subject_hash')}",
+        _hash_line("H", subject_hash, "subject_hash", p),
     ], p)
 
 
@@ -810,9 +862,11 @@ __all__ = [
     "MAX_PAGES",
     "MIN_WIDTH",
     "PROFILES",
+    "PROFILE_SAFE3",
     "PROFILE_SAFE5",
     "PROFILE_UI",
     "ROLE_DISPLAY",
+    "ROLE_SHORT",
     "TEMPLATES",
     "TRANSLIT",
     "Fact",

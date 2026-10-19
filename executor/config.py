@@ -66,7 +66,7 @@ class Settings:
     log_origin: str = "airgap.example/demo"  # AIRGAP_LOG_ORIGIN (origin = <log_origin>/<log_id>)
     local_key_dir: str = ".local/keys"  # AIRGAP_LOCAL_KEY_DIR
     tsa_url: str = "off"  # AIRGAP_TSA_URL ("off" disables RFC 3161)
-    render_profile: str = "safe5-mono-18x7"  # AIRGAP_RENDER_PROFILE
+    render_profile: str = "safe3-mono-16x4"  # AIRGAP_RENDER_PROFILE (Trezor Safe 3, H0)
     tz: str = "Europe/Prague"  # AIRGAP_TZ
     challenge_ttl_seconds: int = 300  # AIRGAP_CHALLENGE_TTL_SECONDS
     cooling_seconds: int = 20  # AIRGAP_COOLING_SECONDS (demo; prod 86400)

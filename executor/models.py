@@ -249,6 +249,7 @@ FACT_ORDER: list[str] = [
     "F-BANK",
     "F-FIRSTSEEN",
     "F-DUP",
+    "F-AMOUNT-DOC",
     "F-SPLIT",
     "F-Z",
     "F-ANOM",

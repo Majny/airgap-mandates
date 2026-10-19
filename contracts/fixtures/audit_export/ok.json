@@ -226,6 +226,6 @@
       "cb8f509013b60f7bb3cfcaaa9d69501eeacba2ef1e39c644b3e8e16e87d79a4d": "s3://airgap-log/snapshots/mostlyright.sqlite",
       "fb054e5384d308f3467e466a1ebc2d1d9266e7f751d6f1393d01bcae320af333": "s3://airgap-log/snapshots/adis.json"
     },
-    "render_profile": "safe5-mono-18x7"
+    "render_profile": "safe3-mono-16x4"
   }
 }

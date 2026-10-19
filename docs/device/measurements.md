@@ -10,8 +10,8 @@ file records what its `ethereum.sign_message` screen does, so the render profile
 | Transport | WebUSB via libusb (`webusb:002:1`), Codec v1 (not THP), no Bridge needed | UDP `127.0.0.1:21324`, debuglink 21325 |
 | Security | bootloader locked, PIN on, **passphrase protection on**, `optiga_sec 0`, auto-lock 10 min | no PIN, no passphrase |
 
-Legend: [E] measured on the emulator with debuglink + framebuffer PNG; [P] confirmed on the physical device
-(photo in `photos/`); [P pending] not yet confirmed physically.
+Legend: [E] measured on the emulator with debuglink + framebuffer PNG; [P] confirmed on the physical device;
+[P pending] not yet confirmed physically.
 
 ## Message screen (`ethereum.sign_message`, "Confirm message")
 
@@ -32,23 +32,44 @@ Legend: [E] measured on the emulator with debuglink + framebuffer PNG; [P] confi
 | Before the message | a "Signing address 0x…" screen (the approver sees which identity signs), RIGHT to continue | [E] | `h0/emu_pay_golden_00.png` |
 | Title bar | "CONFIRM MESSAGE" with page dots; long titles are clipped | [E] | |
 
-## Consequences for the render profile
-- `safe5-mono-18x7` texts are **not safe on the Safe 3**: any line of 17-18 chars at line 4k or 4k+1 reflows across
-  the page break. With today's goldens, PAY, ENROLL and CHG_REJECT display exactly; **CHG** (`OLD ..5399 2024-03` at
-  line 4, `NEW CZ.. ` at line 5, `ROLE TREASURY 2/2` at line 12) and **MANDATE** (`P 1f3a…` at line 13) reflow
-  (`tests/device/test_screens.py`, xfail until the profile lands).
-- 14 lines = 4 pages on the Safe 3. The "5-page trap" does not exist here (confirm only on the last page), but we
-  keep a hard cap anyway.
-- Proposed profile and trade-offs: see the WS-C report / `docs/CONTRACTS.md` proposal (`safe3-mono-16x4`).
+## Device evidence (Q&A slide)
+The approver key lives on a **genuine Trezor Safe 3**: its Optiga authenticity proof verifies against the Trezor
+production root ("Trezor Company / Trezor Safe 3", leaf CN `T2B1 Trezor Safe 3`, chain sha256 `7d363795…`), and its
+challenge-keyed firmware hash equals the hash computed from the official `trezor-t2b1-2.12.0.bin` (blake2s keyed with
+our random challenge over the 13x128 KiB firmware area), with the bootloader locked. Five EIP-191 signatures made on it
+(4-page PAY, 7-page test text, diacritics, ENROLL, one more) each recover with stock `eth_account` to the enrolled
+address `0x6a7438740dc3289067175efda02459170dc1317d`. A host timeout cancels cleanly (Cancel at 20.0 s, device
+back to its homescreen). Czech diacritics render wrongly on the hardware too, which is why the device only ever gets
+ASCII and the golden tests compare screenshots, not debuglink text. Limit: attestation proves the genuine device at
+enrolment, not that later signatures came from it (the seed could be restored elsewhere; ARCHITECTURE §3.3).
+Records: `enroll_clerk_physical.json` (GENUINE), `enroll_treasury_emulator.json` (EMULATOR, T3B1).
 
-## Physical device
-- [P pending] Authenticity proof (Optiga chain) and challenge-keyed firmware hash vs the official 2.12.0 image.
-- [P pending] Photos of the same screens (PAY golden 4 pages, 20 numbered lines, diacritics), hold timing,
-  host timeout.
-- [P pending] EIP-191 signature → `eth_account` recovery round trip.
+## Physical device results
+| Check | Result | Status |
+|---|---|---|
+| Authenticity (`device.authenticate` + chain verify) | verified; on-device allow; 8.9 s | [P] |
+| Firmware hash vs official 2.12.0 image | match (blake2s keyed, 13x128 KiB area, 0xFF pad) | [P] |
+| EIP-191 → `eth_account` recovery | 5/5 match; human time per sign 11-24 s (PAY 4 pages: 19.5 s; 7 pages: 24 s) | [P] |
+| Paging, 4 lines, CONFIRM only on the last page | as on the emulator (human operated the same flows) | [P] |
+| Diacritics | rendered wrongly (operator report) | [P] |
+| Host timeout | `Cancelled` at 20.0 s, device not busy and still unlocked afterwards | [P] |
+| Enrolment ceremony (`tools/enroll.py clerk`) | GENUINE, `fw_official_match: true` | [P] |
+| Photos | pending: operator to copy into `photos/` | [P pending] |
+| Hold under 1 s does not sign | pending operator answer (emulator: yes, see above) | [P pending] |
+| USB autodetect | with the emulator running, trezorlib enumerates UDP first; the signer's `usb` therefore matches `webusb` only | [P] |
+
+## Render profile (decided after H0)
+- `safe5-mono-18x7` texts are **not safe on the Safe 3**: an 18-char line at line 4k or 4k+1 reflows across the page
+  break (the old CHG and MANDATE goldens did).
+- Default profile is now **`safe3-mono-16x4`**: 16 columns (title line 18), 4-line device pages, at most 14 lines
+  (4 pages), H/P lines 14 hex, deterministic short forms (`ROLE TREAS`, `PAYEES n Vv`, `OLD ..xxxx YY-MM`,
+  `SIGNER ROLE BASIS`, `NEW IBAN` label line for long IBANs). No line can ever reflow. CONTRACTS §5.
+- `tests/device/test_screens.py` checks every fixture challenge on the emulator: debuglink text paged every 4 lines
+  with no reflow, plus pixel-equal PNG goldens in `emulator/`.
 
 ## Reproduce
 ```
 tests/device/tenv.sh T3B1 2.12.5-arm      # trezor-user-env + Safe 3 emulator on udp:127.0.0.1:21324
 AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324 .venv/bin/pytest -q tests/device
+.venv/bin/python -m tools.enroll clerk --official-fw .local/fw/trezor-t2b1-2.12.0.bin   # physical, USB
 ```

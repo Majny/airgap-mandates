@@ -47,14 +47,14 @@
       "role": "clerk",
       "subject_id": "mnd_3",
       "deployment": "DEMO",
-      "profile": "safe5-mono-18x7",
+      "profile": "safe3-mono-16x4",
       "exp": "2026-10-19T12:05:00Z",
-      "text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE CLERK 1/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 REG V31\nN 91BC02E1\nP 1f3a9c0e7d2b4a61\nH aaba5fe46a3b68b0",
-      "text_sha256": "d8bcfe89d130dbe699dde63485593a01a69834c61328425d43a0946cf8cce1db",
+      "text": "AG1/DEMO MANDATE\nNO 3 CZK\nPER PAY 80000\nTOTAL 250000\nMAX 20 PAYMENTS\nEXISTING PAYEES\nTO 10-20 18:00\nROLE CLERK 1/2\nFROM 10-19 12:00\nREQ VOP MTCH\nPAYEES 12 V31\nN 91BC02E1\nP 1f3a9c0e7d2b4a\nH aaba5fe46a3b68",
+      "text_sha256": "297a2d1efdb199647b2ae24193593f270d9a4dd2e485d2d620273543b2e9b2b7",
       "subject_hash": "aaba5fe46a3b68b0aa14d292cacff90fdee88f3b3cf1d049663ea80a2af1cd3f",
-      "width": 18,
-      "lines_per_page": 7,
-      "pages": 2,
+      "width": 16,
+      "lines_per_page": 4,
+      "pages": 4,
       "line_count": 14
     }
   }

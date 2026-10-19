@@ -1,6 +1,7 @@
-"""Tests for executor/render.py, profile safe5-mono-18x7 (CONTRACTS §5, ARCHITECTURE §3.4).
+"""Tests for executor/render.py, profile safe5-mono-18x7 (non-default since H0; CONTRACTS §5).
 
-The four goldens below are byte-for-byte the screens in ARCHITECTURE §3.4.
+The four goldens below are the v2 Safe 5 screens. The default profile safe3-mono-16x4 is tested in
+tests/test_render_safe3.py. Every kwargs helper here pins profile=safe5-mono-18x7.
 Emulator screenshot goldens live in tests/device/ (WS-C, needs trezor-user-env).
 """
 
@@ -40,6 +41,7 @@ def pay_kwargs(**kw: Any) -> dict[str, Any]:
         iban=ACME_IBAN, amount_minor=12500_50, currency="CZK", vs="2026101901", facts=PAY_FACTS,
         subject_hash=h64("9b1e44c07a2d1f30"),
     )
+    base.setdefault("profile", R.PROFILE_SAFE5)
     base.update(kw)
     return base
 
@@ -52,6 +54,7 @@ def mandate_kwargs(**kw: Any) -> dict[str, Any]:
         policy_hash=h64("1f3a9c0e7d2b4a61"), subject_hash=h64("3e0d9a1c55b2e7f0"), role="clerk", sig_index=1,
         sig_total=2,
     )
+    base.setdefault("profile", R.PROFILE_SAFE5)
     base.update(kw)
     return base
 
@@ -62,6 +65,7 @@ def chg_kwargs(**kw: Any) -> dict[str, Any]:
         old_since="2024-03-01", new_iban=NEW_IBAN, facts=CHG_FACTS, subject_hash=h64("4f2a9c1e0b7d3a55"),
         role="treasury", sig_index=2, sig_total=2,
     )
+    base.setdefault("profile", R.PROFILE_SAFE5)
     base.update(kw)
     return base
 
@@ -72,6 +76,7 @@ def attest_kwargs(**kw: Any) -> dict[str, Any]:
         valid_from="2026-10-20", signer_role="director", role_basis="OR", threshold=2, signer_count=3, version=5,
         subject_hash=h64("5a0c7e19d3b4f286"),
     )
+    base.setdefault("profile", R.PROFILE_SAFE5)
     base.update(kw)
     return base
 
@@ -85,8 +90,9 @@ def assert_s11(text: str) -> list[list[str]]:
     assert ls[0].startswith("AG1/")
     assert len(ls) <= 14
     if len(ls) > 7:
-        assert len(ls[6]) <= R.BREAK_LINE_MAX and len(ls[7]) <= R.BREAK_LINE_MAX
-    return R.render_pages(text)
+        brk = R.PROFILES[R.PROFILE_SAFE5].break_line_max
+        assert len(ls[6]) <= brk and len(ls[7]) <= brk
+    return R.render_pages(text, R.PROFILE_SAFE5)
 
 
 # ----------------------------------------------------------------- goldens (ARCHITECTURE §3.4)
@@ -190,14 +196,14 @@ def test_attest_golden():
 ])
 def test_rerender_from_params(template, kw, golden):
     assert R.render(template, kw) == golden
-    assert R.render(template, kw, profile=R.PROFILE_SAFE5, deployment="DEMO") == golden
+    assert R.render(template, {k: v for k, v in kw.items() if k != "profile"}, profile=R.PROFILE_SAFE5,
+                    deployment="DEMO") == golden
 
 
 def test_profile_constants():
     p = R.PROFILES["safe5-mono-18x7"]
     assert (p.width, p.lines_per_page, p.max_pages, p.break_line_max) == (18, 7, 2, 15)
-    assert R.DEFAULT_PROFILE == "safe5-mono-18x7" and R.DEFAULT_WIDTH == 18 and R.MAX_LINES == 14
-    assert R.MIN_WIDTH["safe5-mono-18x7"] == 18
+    assert R.MIN_WIDTH["safe5-mono-18x7"] == 18 and p.hash_hex == 16
 
 
 # ----------------------------------------------------------------- general rules
@@ -371,7 +377,7 @@ def test_enroll_and_reject_single_page():
     e = R.render_enroll(role="clerk", nonce="0C55A1E7")
     assert e == "AG1/DEMO ENROLL\nROLE CLERK\nN 0C55A1E7"
     r = R.render_chg_reject(change_no=7, nonce="1A2B3C4D", vendor_name="ACME s.r.o.", vendor_ico="12345678",
-                            new_iban=FRAUD_IBAN, subject_hash=h64("0123456789abcdef"))
+                            new_iban=FRAUD_IBAN, subject_hash=h64("0123456789abcdef"), profile=R.PROFILE_SAFE5)
     assert r == ("AG1/DEMO REJECT 7\nACME S.R.O.\nICO 12345678\nNEW ..1234\nROLE CLERK\nN 1A2B3C4D\n"
                  "H 0123456789abcdef")
     assert len(assert_s11(r)) == 1
@@ -382,26 +388,26 @@ def test_enroll_and_reject_single_page():
 
 def test_negative_diacritics_rejected():
     with pytest.raises(R.RenderError) as e:
-        R.check_text("AG1/DEMO PAY 1\nDODAVATEL ŘEMESLA")
+        R.check_text("AG1/DEMO PAY 1\nDODAVATEL ŘEMESLA", R.PROFILE_SAFE5)
     assert e.value.code == "NON_ASCII"
 
 
 def test_negative_19_char_line_rejected():
     with pytest.raises(R.RenderError) as e:
-        R.check_text("AG1/DEMO PAY 1\n" + "X" * 19)
+        R.check_text("AG1/DEMO PAY 1\n" + "X" * 19, R.PROFILE_SAFE5)
     assert e.value.code == "WIDTH"
 
 
 def test_negative_three_pages_rejected():
     with pytest.raises(R.RenderError) as e:
-        R.check_text("\n".join(["AG1/DEMO PAY 1"] + ["LINE"] * 14))
+        R.check_text("\n".join(["AG1/DEMO PAY 1"] + ["LINE"] * 14), R.PROFILE_SAFE5)
     assert e.value.code == "PAGES"
 
 
 def test_negative_long_line_at_page_break_rejected():
     text = "\n".join(["AG1/DEMO PAY 1"] + ["L"] * 5 + ["X" * 16] + ["N 0C55A1E7"])
     with pytest.raises(R.RenderError) as e:
-        R.check_text(text)
+        R.check_text(text, R.PROFILE_SAFE5)
     assert e.value.code == "PAGE_BREAK"
 
 
