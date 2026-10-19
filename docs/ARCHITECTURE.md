@@ -353,22 +353,43 @@ The tools are served by the executor-side `tools` λ. The A2 layer is AgentCore 
 
 ### 4.3 Egress and network isolation (S9, S10)
 
-**AWS (demo and the S10 proof):**
-- The agent runs as a Lambda container in a VPC with **no IGW and no NAT**.
-- Its only interface endpoints are `bedrock-runtime` and `execute-api` (private API GW, which fronts `tools`), plus AgentCore Gateway if a PrivateLink endpoint exists [U].
-- If there is no Gateway endpoint, the tools λ (outside the VPC) evaluates the same Cedar text with cedarpy. Optionally the tools λ fronts the Gateway itself: agent → private API → tools λ → Gateway → targets.
-- The agent's only outbound effect is `mail.send_template`, which goes to the egress λ. The egress λ applies:
-  - the recipient allowlist (registered contacts);
-  - deterministic DLP (IBAN mod-97, IČO checksum, card Luhn, base64/hex blobs, data in URLs);
-  - size and rate limits, and attachment stripping;
+**AWS (demo and the S10 proof), as deployed Mon 19 Oct (`infra/airgap_stack.py`):**
+- The agent runs as a Lambda (zip, not container) in a VPC with **no IGW and no NAT**: one AZ, isolated subnet, its
+  security group may only reach the endpoint security group on 443. VPC Flow Logs (ALL) go to CloudWatch.
+- Its only interface endpoints are `bedrock-runtime` and `execute-api`. The private REST API serves only
+  `POST /tools/{name}` (resource policy: the agent role, and `aws:SourceVpce` must be this endpoint). There is no
+  AgentCore Gateway on the demo path (create/delete probe was GO); the tools λ evaluates the Cedar tool policy with
+  cedarpy (A2).
+- **Endpoint policies** allow only principals of our account (`aws:PrincipalAccount`), execute-api only on
+  `*/prod/POST/tools/*`, bedrock-runtime only Invoke/Converse/ApplyGuardrail.
+- **DNS:** Route 53 Resolver DNS Firewall on the agent VPC: only `bedrock-runtime.eu-central-1.amazonaws.com` and
+  `*.execute-api.eu-central-1.amazonaws.com` resolve, everything else gets NXDOMAIN; Resolver query logs go to
+  `/airgap-agent/dns-queries` (evidence: `example.com` / `checkip.amazonaws.com` -> NXDOMAIN, action BLOCK).
+- **Agent credentials** are useless outside the VPC (explicit Deny on `bedrock:*` / `execute-api:Invoke` unless
+  `aws:SourceVpc` is the agent VPC) and may write only their own log group.
+- The agent's only outbound effect is `mail.send_template` (fixed templates, digit-bearing vars bound to the
+  recipient's DKIM-authenticated documents), which goes through `POST /egress`. Egress applies:
+  - the recipient allowlist (registered vendor domains / contacts, internal domain);
+  - deterministic DLP: registry IBANs/IČOs by lookup after normalisation (NFKC, zero-width removal, spelled digits,
+    separator-joined and reversed digit runs, CZ domestic account form), unknown IBANs by mod-97, cards by IIN+Luhn,
+    base64/base32/base85/hex blobs decoded and re-scanned, data in URLs;
+  - size and rate limits; attachments are refused (scanned first);
   - Bedrock Guardrails sensitive-info filters with custom IBAN/IČO regex as a *measured second opinion*.
 - Blocked messages produce an `egress_block` leaf.
+
+**What our own review found (and what was fixed).** An adversarial review of the deployed stack (36 agents, every
+finding independently re-verified) found three HIGH exfiltration channels from a *fully compromised* agent λ, all
+in the perimeter, none in the money path: (1) the execute-api endpoint had no endpoint policy, so the agent could
+reach a private API in an attacker's account; (2) the bedrock-runtime endpoint had none either (Bedrock calls with
+the attacker's own keys); (3) the VPC resolver answered public names (DNS tunnelling, invisible to security groups
+and Flow Logs). This section previously claimed "no resolver path to the internet", which was false as first
+deployed. All three are fixed and verified on AWS (above). Medium/low findings (agent-controlled session/step,
+invoice binding per email, typed-field instruction channels, error echoes) are being fixed in the tools λ with
+regression tests and an adversarial re-verification loop; open residuals are listed in `infra/PROBES.md`.
 
 **Local twin (dev, bench):**
 - Docker `internal` network, plus an egress proxy that allowlists the Bedrock, executor and tools hostnames.
 - This is not a security claim on a compromised laptop (H6). It exists so the bench is reproducible.
-
-**DNS:** there is no resolver path to the internet inside the VPC beyond the endpoint names. Route 53 Resolver DNS Firewall is stretch [U cost].
 
 ### 4.4 F-ANOM: deterministic action-anomaly score (an [F], because the executor observes it)
 
