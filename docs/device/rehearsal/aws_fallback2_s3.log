@@ -1,0 +1,34 @@
+*** FALLBACK MODE: CLERK SIGNS ON THE EMULATOR (T3B1), NOT THE PHYSICAL DEVICE ***
+clerk    0x73d0385f4d8e00c5e6504c6030f47bf6212736a8  EMULATOR
+treasury 0xfa01a39f8abaeb660c3137f14a310d0b414b2a15  EMULATOR
+
+[S3] change chg_2 from acme.cz (DKIM PASS) -> LT493999000000005678: PENDING_ATTEST; BLOCK: F-ATTEST ATT 0/3
+[S3] deepfake 'CFO' presses the clerk: there is no challenge, so there is no button (R0)
+[S3] tripwire delivered to the contact registered at enrolment (portal, simulated)
+[S3] registered contact answers 'not us' -> chg_2 REJECTED
+[S3] VC supplier-erp: ok=True -> PENDING_ATTEST
+[S3] VC supplier-bank: ok=True -> COOLING
+[S3] cooling-off over -> SIG_CLERK; device shows:
+AG1/DEMO CHG 3
+ACME S.R.O.
+ICO 12345678
+OLD ..5399 24-03
+NEW CZ20 0300
+    0000 0020
+    0123 4567
+0 BLOCK 2 WARN
+ATT 2/3 ERP BANK
++11 MORE 0 BLOCK
+COOLOFF DONE
+ROLE CLERK 1/2
+N 164780F3
+H dac85c9cbf440e
+
+--> CLERK on Safe 3 EMULATOR: auto-confirm (simulated human)
+--> TREASURY on Safe 3 EMULATOR: auto-confirm (simulated human)
+[S3] clerk + treasury (2/2, distinct keys) -> ACTIVE; registry IBAN now CZ2003000000002001234567
+
+S3 WITH DEVICES OK (FALLBACK: EMULATOR CLERK)
+real 67.26
+user 0.46
+sys 0.09

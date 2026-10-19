@@ -1,0 +1,22 @@
+*** FALLBACK MODE: CLERK SIGNS ON THE EMULATOR (T3B1), NOT THE PHYSICAL DEVICE ***
+clerk    0x73d0385f4d8e00c5e6504c6030f47bf6212736a8  EMULATOR
+treasury 0xfa01a39f8abaeb660c3137f14a310d0b414b2a15  EMULATOR
+
+--> CLERK on Safe 3 EMULATOR: auto-confirm (simulated human)
+--> TREASURY on Safe 3 EMULATOR: auto-confirm (simulated human)
+[S2] change chg_1 acme-cz.com -> LT483999000000001234: REJECTED at creation, no challenge (device stays dark)
+     BLOCK: F-ATTEST ATT 0/3, F-DOMAIN DOMAIN LOOKALIKE, F-VOP VOP NMTC
+[S2] proposal prp_1 from the lookalike email -> deny ['F-AMOUNT-DOC', 'F-DOMAIN', 'F-DOMAIN-AGE', 'I-AMOUNT', 'I-BLOCK']
+--> CLERK on Safe 3 EMULATOR: auto-confirm (simulated human)
+--> CLERK: replaying the captured signature (no device interaction)
+[S2] escalation mandate.write      -> refused (tool plane is the private API in the agent VPC: shown by the agent run (WS-E))
+[S2] escalation agent->/signatures -> refused (IAM explicit Deny (WS-E evidence: simulate-principal-policy))
+[S2] escalation self-approval      -> refused (unknown_signer)
+[S2] escalation replay             -> refused (nonce_reused)
+[S2] exfil: tool plane is the private API in the agent VPC: shown by the agent run (WS-E)
+[S2] money moved to the attacker: 0
+
+S2 WITH DEVICES OK (FALLBACK: EMULATOR CLERK)
+real 28.95
+user 0.47
+sys 0.09
