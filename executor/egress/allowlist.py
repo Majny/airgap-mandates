@@ -16,7 +16,6 @@ INTERNAL_DOMAINS: frozenset[str] = frozenset({"airgap.example"})
 
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)$")
 _URL_IN_TEXT_RE = re.compile(r"(?:https?:)?//[^\s)\"'<>]+", re.I)
-_ENCODED_VALUE_RE = re.compile(r"^(?:[A-Za-z0-9+/_-]{12,}={0,2}|[0-9a-fA-F]{16,}|\d{8,})$")
 _MAX_PLAIN_PARAM = 64
 
 
@@ -60,19 +59,29 @@ def urls_in(text: str) -> list[str]:
     return [m.group(0) for m in _URL_IN_TEXT_RE.finditer(text or "")]
 
 
+def _looks_encoded(value: str) -> bool:
+    """Value is long, or decodes (base64/base32/hex/url-escaped) to printable text."""
+    from executor.egress import dlp
+
+    v = unquote(value)
+    if len(v) > _MAX_PLAIN_PARAM:
+        return True
+    return bool(dlp.decode_blobs(v)) or (v != value and len(v) >= 16 and not v.replace("-", "").isalnum())
+
+
 def url_data_findings(target: str) -> list[dict[str, Any]]:
-    """E-URLDATA findings for data smuggled in URL query/path."""
+    """E-URLDATA findings for data smuggled in URL query/path/fragment. Plain ids, slugs and UUIDs pass; registry
+    identifiers anywhere in a URL are caught by DLP on the target string."""
     if "//" not in target:
         return []
     parts = urlsplit(target if "://" in target else "https:" + target)
     findings: list[dict[str, Any]] = []
     for k, v in parse_qsl(parts.query, keep_blank_values=True):
-        if len(v) > _MAX_PLAIN_PARAM or _ENCODED_VALUE_RE.match(v):
+        if _looks_encoded(v):
             findings.append({"rule_id": "E-URLDATA", "detail": f"query parameter {k[:32]}", "count": 1})
-    for seg in unquote(parts.path).split("/"):
-        stem = seg.rsplit(".", 1)[0]
-        if len(stem) > _MAX_PLAIN_PARAM or (len(stem) >= 20 and _ENCODED_VALUE_RE.match(stem)):
+    for seg in parts.path.split("/"):
+        if _looks_encoded(seg.rsplit(".", 1)[0]):
             findings.append({"rule_id": "E-URLDATA", "detail": "encoded path segment", "count": 1})
-    if parts.fragment and (len(parts.fragment) > _MAX_PLAIN_PARAM or _ENCODED_VALUE_RE.match(parts.fragment)):
+    if parts.fragment and _looks_encoded(parts.fragment):
         findings.append({"rule_id": "E-URLDATA", "detail": "fragment", "count": 1})
     return findings

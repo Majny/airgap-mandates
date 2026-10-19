@@ -1,8 +1,15 @@
 """DLP content checks: IBANs, ICOs, registry names, card numbers (Luhn), record counts, encoded payloads. CONTRACTS.md §4.2.
 
 Registry identifiers are matched by lookup (exact value from the vendor registry), not only by checksum: the demo ICOs
-12345678 / 87654321 deliberately fail the CZ mod-11 checksum. Unknown identifiers are caught by checksum (IBAN mod-97,
-labelled ICO mod-11, card Luhn). Base64/hex blobs are decoded one level and re-scanned.
+12345678 / 87654321 deliberately fail the CZ mod-11 checksum. Before matching, text is normalised (NFKC, format chars
+such as zero-width spaces removed, spelled-out digits mapped) and registry values are also searched in separator-joined
+digit runs (forwards and reversed), which covers dashes/dots/spaces, the CZ domestic form `19-2000145399/0800` and
+letter-only obfuscations such as ROT13 of the country code. Unknown IBANs are caught by mod-97 and cards by IIN+Luhn.
+Third-party ICOs that are not in the registry are public data and are not flagged. base64/base32/base85/hex blobs
+(and adjacent base64 chunks joined) are decoded one level and re-scanned.
+
+Strict by design: a vendor's own registry identifiers are blocked even when sent back to that vendor; the agent only
+sends fixed templates (mail.send_template) so legitimate mail never needs them.
 
 Owner: WS-E.
 """
@@ -11,6 +18,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+import unicodedata
 from typing import Any
 
 # Order of rule ids in decisions (CONTRACTS §4.2).
@@ -18,14 +26,22 @@ RULE_ORDER: list[str] = ["E-ALLOWLIST", "E-DLP-IBAN", "E-DLP-ICO", "E-DLP-NAME",
                          "E-ENCODED", "E-URLDATA", "E-GUARDRAILS", "E-SIZE", "E-RATE"]
 
 COUNT_THRESHOLD = 3  # >= this many identifiers (IBAN + ICO + card) in one message is a bulk record dump
-NAME_THRESHOLD = 2  # >= this many distinct registry vendor names in one message
+NAME_THRESHOLD = 3  # >= this many distinct registry vendor names in one message
 
 _IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b")
-_ICO_RE = re.compile(r"(?<!\d)\d{8}(?!\d)")
-_ICO_LABEL_RE = re.compile(r"(?:I[CČ]O?|I[CČ]|DI[CČ]|reg(?:istration)?\.?\s*no\.?)\s*[:.]?\s*(?:CZ)?\s*$", re.I)
-_CARD_RE = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")
-_B64_RE = re.compile(r"[A-Za-z0-9+/_-]{20,}={0,2}")
+_CARD_RE = re.compile(r"(?<![\d-])(?:\d{4}([ -]?)\d{4}\1\d{4}\1\d{4}|3[47]\d{2}([ -]?)\d{6}\2\d{5})(?![\d-])")
+_SEP_RE = re.compile(r"(?<=[0-9A-Za-z])[\s\-./_,:;|+*'\"]{1,3}(?=[0-9A-Za-z])")
+_DIGITS_RE = re.compile(r"\d{6,}")
+_B64_TOKEN_RE = re.compile(r"[A-Za-z0-9+/_-]{8,}={0,2}")
+_B64_RE = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
+_B32_RE = re.compile(r"[A-Z2-7]{16,}={0,6}")
+_B85_RE = re.compile(r"[!-~]{20,}")
 _HEX_RE = re.compile(r"\b[0-9a-fA-F]{32,}\b")
+_DIGIT_WORDS = {w: str(i) for i, ws in enumerate([
+    ("zero", "nula"), ("one", "jedna", "jeden"), ("two", "dva", "dve", "dvě"), ("three", "tri", "tři"),
+    ("four", "ctyri", "čtyři"), ("five", "pet", "pět"), ("six", "sest", "šest"), ("seven", "sedm"),
+    ("eight", "osm"), ("nine", "devet", "devět")]) for w in ws}
+_DIGIT_WORD_RE = re.compile(r"\b(" + "|".join(sorted(_DIGIT_WORDS, key=len, reverse=True)) + r")\b", re.I)
 
 
 def iban_valid(iban: str) -> bool:
@@ -42,8 +58,7 @@ def ico_valid(ico: str) -> bool:
     if not re.fullmatch(r"\d{8}", ico):
         return False
     s = sum(int(ico[i]) * (8 - i) for i in range(7))
-    check = (11 - s % 11) % 10
-    return check == int(ico[7])
+    return (11 - s % 11) % 10 == int(ico[7])
 
 
 def luhn_valid(number: str) -> bool:
@@ -60,99 +75,103 @@ def luhn_valid(number: str) -> bool:
     return total % 10 == 0
 
 
-def _registry_sets(vendors: list[dict[str, Any]]) -> tuple[set[str], set[str], dict[str, str]]:
-    ibans: set[str] = set()
-    icos: set[str] = set()
-    names: dict[str, str] = {}
-    for v in vendors:
-        if v.get("iban"):
-            ibans.add(str(v["iban"]).replace(" ", "").upper())
-        for h in v.get("iban_history") or []:
-            if h.get("iban"):
-                ibans.add(str(h["iban"]).replace(" ", "").upper())
-        if v.get("ico"):
-            icos.add(str(v["ico"]))
-        if v.get("name"):
-            names[_norm_name(str(v["name"]))] = str(v["name"])
-    return ibans, icos, names
+def normalize(text: str) -> str:
+    """NFKC, drop format chars (zero-width, soft hyphen, BOM), map spelled-out digits."""
+    t = unicodedata.normalize("NFKC", text)
+    t = "".join(c for c in t if unicodedata.category(c) != "Cf")
+    return _DIGIT_WORD_RE.sub(lambda m: _DIGIT_WORDS[m.group(1).lower()], t)
+
+
+class Registry:
+    """Lookup sets derived from registry rows."""
+
+    def __init__(self, vendors: list[dict[str, Any]]) -> None:
+        self.ibans: set[str] = set()
+        self.icos: set[str] = set()
+        self.names: dict[str, str] = {}
+        for v in vendors:
+            for i in [v.get("iban")] + [h.get("iban") for h in v.get("iban_history") or []]:
+                if i:
+                    self.ibans.add(str(i).replace(" ", "").upper())
+            if v.get("ico"):
+                self.icos.add(str(v["ico"]))
+            if v.get("name"):
+                self.names[_norm_name(str(v["name"]))] = str(v["name"])
+        # Digit cores: IBAN without country code, and for CZ the account (prefix+number) without leading zeros.
+        # Short cores (< 10 digits) only count as a whole digit run or followed by the bank code (domestic form).
+        self.iban_cores: dict[str, str] = {}
+        self.short_cores: dict[str, str] = {}
+        for i in self.ibans:
+            if i[2:].isdigit():
+                self.iban_cores[i[2:]] = i
+            if i.startswith("CZ") and len(i) == 24:
+                core = (i[8:14] + i[14:]).lstrip("0")
+                if len(core) >= 10:
+                    self.iban_cores[core] = i
+                else:
+                    self.short_cores[core] = i
+                    self.iban_cores[core + i[4:8]] = i
 
 
 def _norm_name(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip().casefold()
 
 
-def _find_ibans(text: str, registry: set[str]) -> tuple[set[str], set[str]]:
-    """(registry IBANs, other mod-97-valid IBANs) found in text."""
-    compact = text.upper()
-    hit_reg: set[str] = set()
-    hit_other: set[str] = set()
-    for m in _IBAN_RE.finditer(compact):
+def _digit_runs(text: str) -> list[str]:
+    joined = _SEP_RE.sub("", text)
+    runs = _DIGITS_RE.findall(joined)
+    return runs + [r[::-1] for r in runs]
+
+
+def _registry_hits(text: str, reg: Registry) -> tuple[set[str], set[str]]:
+    """(registry IBANs, registry ICOs) present in text in any separator/ordering form."""
+    upper = text.upper()
+    flat = _SEP_RE.sub("", upper)
+    ibans = {i for i in reg.ibans if i in flat or i[::-1] in flat}
+    icos: set[str] = set()
+    for run in _digit_runs(upper):
+        ibans |= {i for core, i in reg.iban_cores.items() if core in run}
+        ibans |= {i for core, i in reg.short_cores.items() if core == run.lstrip("0")}
+        icos |= {c for c in reg.icos if c == run}  # whole run: avoids hits inside parcel/order numbers
+    # An ICO found only inside a registry IBAN's digits is that IBAN, not the ICO.
+    rest = flat
+    for i in ibans:
+        rest = rest.replace(i, " ").replace(i[::-1], " ")
+        for core, owner in reg.iban_cores.items():
+            if owner == i:
+                rest = rest.replace(core, " ")
+    rest_runs = _digit_runs(rest)
+    icos = {c for c in icos if c in rest_runs}
+    return ibans, icos
+
+
+def _other_ibans(text: str, reg: Registry) -> set[str]:
+    out: set[str] = set()
+    for m in _IBAN_RE.finditer(text.upper()):
         cand = m.group(0).replace(" ", "")
-        # A greedy match may swallow trailing text; try every prefix length from longest down.
-        for n in range(len(cand), 14, -1):
-            c = cand[:n]
-            if c in registry:
-                hit_reg.add(c)
+        for n in range(len(cand), 14, -1):  # greedy match may swallow trailing text
+            if iban_valid(cand[:n]):
+                if cand[:n] not in reg.ibans:
+                    out.add(cand[:n])
                 break
-            if iban_valid(c):
-                hit_other.add(c)
-                break
-    # Registry values also match when embedded without word boundaries (e.g. "x=CZ65...").
-    flat = re.sub(r"\s", "", compact)
-    hit_reg |= {i for i in registry if i in flat}
-    return hit_reg, hit_other - hit_reg
-
-
-def _find_icos(text: str, registry: set[str]) -> tuple[set[str], set[str]]:
-    """(registry ICOs, labelled checksum-valid ICOs). Unlabelled 8-digit numbers (VS, dates) are not flagged."""
-    hit_reg: set[str] = set()
-    hit_other: set[str] = set()
-    for m in _ICO_RE.finditer(text):
-        v = m.group(0)
-        if v in registry:
-            hit_reg.add(v)
-        elif ico_valid(v) and _ICO_LABEL_RE.search(text[max(0, m.start() - 24):m.start()]):
-            hit_other.add(v)
-    return hit_reg, hit_other
-
-
-def _find_cards(text: str) -> set[str]:
-    return {re.sub(r"\D", "", m.group(0)) for m in _CARD_RE.finditer(text) if luhn_valid(m.group(0))}
-
-
-def _find_names(text: str, names: dict[str, str]) -> set[str]:
-    t = _norm_name(text)
-    return {orig for norm, orig in names.items() if norm and norm in t}
-
-
-def _decode_blobs(text: str) -> list[tuple[str, str]]:
-    """[(kind, decoded text)] for base64 / hex runs that decode to mostly printable text."""
-    out: list[tuple[str, str]] = []
-    for m in _B64_RE.finditer(text):
-        s = m.group(0)
-        if s.isdigit() or re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]+", s):
-            continue  # plain numbers / IBANs are not encodings
-        pad = s + "=" * (-len(s) % 4)
-        for dec in (base64.b64decode, base64.urlsafe_b64decode):
-            try:
-                raw = dec(pad.replace("-", "+").replace("_", "/") if dec is base64.b64decode else pad)
-            except (binascii.Error, ValueError):
-                continue
-            txt = _printable(raw)
-            if txt is not None:
-                out.append(("base64", txt))
-                break
-    for m in _HEX_RE.finditer(text):
-        s = m.group(0)
-        if len(s) % 2:
-            s = s[:-1]
-        txt = _printable(bytes.fromhex(s))
-        if txt is not None:
-            out.append(("hex", txt))
     return out
 
 
-def _printable(raw: bytes) -> str | None:
+def _find_cards(text: str) -> set[str]:
+    out = set()
+    for m in _CARD_RE.finditer(text):
+        n = re.sub(r"\D", "", m.group(0))
+        if re.match(r"4|5[1-5]|2[2-7]|3[47]|6(?:011|5)", n) and luhn_valid(n):
+            out.add(n)
+    return out
+
+
+def _find_names(text: str, reg: Registry) -> set[str]:
+    t = _norm_name(text)
+    return {orig for norm, orig in reg.names.items() if norm and norm in t}
+
+
+def printable(raw: bytes) -> str | None:
     if len(raw) < 8:
         return None
     try:
@@ -160,15 +179,70 @@ def _printable(raw: bytes) -> str | None:
     except UnicodeDecodeError:
         return None
     ok = sum(1 for c in txt if c.isprintable() or c in "\n\r\t")
-    return txt if ok / len(txt) >= 0.9 else None
+    letters = sum(1 for c in txt if c.isalnum())
+    return txt if ok / len(txt) >= 0.95 and letters / len(txt) >= 0.5 else None
 
 
-def _identifiers(text: str, vendors: list[dict[str, Any]]) -> dict[str, set[str]]:
-    reg_ibans, reg_icos, names = _registry_sets(vendors)
-    ib_reg, ib_other = _find_ibans(text, reg_ibans)
-    ico_reg, ico_other = _find_icos(text, reg_icos)
-    return {"iban_reg": ib_reg, "iban_other": ib_other, "ico_reg": ico_reg, "ico_other": ico_other,
-            "card": _find_cards(text), "name": _find_names(text, names)}
+def _b64(s: str) -> str | None:
+    s = s.rstrip("=")
+    for alt in (None, b"-_"):
+        try:
+            raw = base64.b64decode(s + "=" * (-len(s) % 4), altchars=alt, validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        txt = printable(raw)
+        if txt:
+            return txt
+    return None
+
+
+def decode_blobs(text: str) -> list[tuple[str, str]]:
+    """[(kind, decoded text)] for base64 / base32 / base85 / hex runs that decode to printable text."""
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(kind: str, src: str, txt: str | None) -> None:
+        if txt and src not in seen:
+            seen.add(src)
+            out.append((kind, txt))
+
+    for m in _B64_RE.finditer(text):
+        add("base64", m.group(0), _b64(m.group(0)))
+    tokens = [t for t in _B64_TOKEN_RE.findall(text) if not t.isdigit()]
+    for i in range(len(tokens)):  # chunks split across tokens: try adjacent concatenations
+        for j in range(i + 2, min(len(tokens), i + 6) + 1):
+            joined = "".join(t.rstrip("=") for t in tokens[i:j])
+            add("base64", joined, _b64(joined))
+    for m in _B32_RE.finditer(text):
+        s = m.group(0)
+        try:
+            add("base32", s, printable(base64.b32decode(s + "=" * (-len(s.rstrip("=")) % 8))))
+        except (binascii.Error, ValueError):
+            pass
+    for m in _B85_RE.finditer(text):
+        s = m.group(0)
+        if s in seen or re.fullmatch(r"[A-Za-z0-9+/=_.:-]+", s):
+            continue  # plain words / base64 already handled
+        for dec in (base64.b85decode, base64.a85decode):
+            try:
+                add("base85", s, printable(dec(s)))
+            except (binascii.Error, ValueError):
+                pass
+    for m in _HEX_RE.finditer(text):
+        s = m.group(0)[: len(m.group(0)) // 2 * 2]
+        add("hex", s, printable(bytes.fromhex(s)))
+    return out
+
+
+def _identifiers(text: str, reg: Registry) -> dict[str, set[str]]:
+    t = normalize(text)
+    ib_reg, ico_reg = _registry_hits(t, reg)
+    return {"iban_reg": ib_reg, "iban_other": _other_ibans(t, reg), "ico_reg": ico_reg,
+            "card": _find_cards(t), "name": _find_names(t, reg)}
+
+
+def _n_ids(ids: dict[str, set[str]]) -> int:
+    return sum(len(ids[k]) for k in ("iban_reg", "iban_other", "ico_reg", "card"))
 
 
 def scan(content: str, attachments: list[dict[str, Any]], *, vendors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -182,8 +256,9 @@ def scan(content: str, attachments: list[dict[str, Any]], *, vendors: list[dict[
             raw = b""
         parts.append(raw.decode("utf-8", "replace"))
     text = "\n".join(parts)
+    reg = Registry(vendors)
 
-    ids = _identifiers(text, vendors)
+    ids = _identifiers(text, reg)
     findings: list[dict[str, Any]] = []
     if ids["iban_reg"]:
         findings.append({"rule_id": "E-DLP-IBAN", "detail": "IBANs from vendor registry", "count": len(ids["iban_reg"])})
@@ -191,23 +266,18 @@ def scan(content: str, attachments: list[dict[str, Any]], *, vendors: list[dict[
         findings.append({"rule_id": "E-DLP-IBAN", "detail": "IBAN pattern (mod-97)", "count": len(ids["iban_other"])})
     if ids["ico_reg"]:
         findings.append({"rule_id": "E-DLP-ICO", "detail": "ICO from vendor registry", "count": len(ids["ico_reg"])})
-    if ids["ico_other"]:
-        findings.append({"rule_id": "E-DLP-ICO", "detail": "labelled ICO (mod-11)", "count": len(ids["ico_other"])})
     if len(ids["name"]) >= NAME_THRESHOLD:
         findings.append({"rule_id": "E-DLP-NAME", "detail": "several registry vendor names", "count": len(ids["name"])})
     if ids["card"]:
-        findings.append({"rule_id": "E-DLP-CARD", "detail": "card number (Luhn)", "count": len(ids["card"])})
-    n_ids = sum(len(ids[k]) for k in ("iban_reg", "iban_other", "ico_reg", "ico_other", "card"))
+        findings.append({"rule_id": "E-DLP-CARD", "detail": "card number (IIN + Luhn)", "count": len(ids["card"])})
+    n_ids = _n_ids(ids)
     if n_ids >= COUNT_THRESHOLD:
         findings.append({"rule_id": "E-DLP-COUNT", "detail": f"{n_ids} identifiers in one message", "count": n_ids})
 
-    blobs = _decode_blobs(text)
+    blobs = decode_blobs(normalize(text))
     if blobs:
         kinds = sorted({k for k, _ in blobs})
-        hidden = 0
-        for _, dec in blobs:
-            d = _identifiers(dec, vendors)
-            hidden += sum(len(d[k]) for k in ("iban_reg", "iban_other", "ico_reg", "ico_other", "card"))
+        hidden = sum(_n_ids(_identifiers(dec, reg)) for _, dec in blobs)
         detail = f"{'/'.join(kinds)} blob" + (f" hiding {hidden} identifiers" if hidden else "")
         findings.append({"rule_id": "E-ENCODED", "detail": detail, "count": len(blobs)})
     return findings

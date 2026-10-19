@@ -140,3 +140,58 @@ def test_propose_has_no_iban_and_reaches_executor():
     assert st == 400  # P3: no IBAN argument
     leaf = [x for x in h.leaves() if x["type"] == "tool_call" and x["data"]["tool"] == "payment.propose"][0]
     assert leaf["data"]["rule_ids"] == ["T-TAINT"]  # untrusted read 1 step earlier (LOG_ONLY)
+
+
+def _propose_args(doc_id: str, **over):
+    return {"vendor_id": "ven_12345678", "invoice_ref": doc_id, "invoice_no": "FV-2026-0412", "amount_minor": 1450000,
+            "currency": "CZK", "vs": "20260412", "due": "2026-10-29", "reason_code": "DUE", **over}
+
+
+def test_inflate_rejected_t_amount_mismatch():
+    h = ToolHarness()
+    h.mandate()
+    doc_id = _isdoc_doc_id(h)
+    st, r = h.tool("payment.propose", _propose_args(doc_id, amount_minor=1650000))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert leaf["data"]["result"] == "forbidden" and "T-AMOUNT-MISMATCH" in leaf["data"]["rule_ids"]
+    assert not h.store.scan("proposals")  # nothing reached the executor
+    st, r = h.tool("payment.propose", _propose_args(doc_id, amount_minor=1000000))
+    assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"]  # lower without PARTIAL
+    st, r = h.tool("payment.propose", _propose_args(doc_id, amount_minor=1000000, reason_code="PARTIAL"))
+    assert st == 200, r
+
+
+def test_doc_fields_must_agree():
+    h = ToolHarness()
+    doc_id = _isdoc_doc_id(h)
+    for over in ({"vs": "99999999"}, {"due": "2026-12-31"}, {"currency": "EUR"}, {"invoice_no": "FV-X"},
+                 {"vendor_id": "ven_87654321"}):
+        st, r = h.tool("payment.propose", _propose_args(doc_id, **over))
+        assert st == 403 and r["details"]["rule_ids"] == ["T-DOC-MISMATCH"], (over, r)
+
+
+def test_spayd_body_uses_warn_fallbacks():
+    h = ToolHarness()
+    st, r = h.tool("inbox.read", {"email_id": "eml_0001"})
+    body_id = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "body")
+    st, r = h.tool("payment.propose", _propose_args(body_id))
+    # body has SPAYD (amount, VS, due) but no issue date or invoice number: allowed with WARN fallbacks
+    assert st == 200, r
+    leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
+    assert {"T-ISSUEDATE-FALLBACK", "T-INVOICENO-AGENT"} <= set(leaf["data"]["rule_ids"])
+
+
+def test_document_without_amount_fails_closed():
+    import pytest
+
+    from executor.config import Settings
+    from executor.tools.handler import DocMismatch, invoice_from_document
+
+    draft = {"doc_id": "doc_0000000000000000", "sha256": "0" * 64,
+             "fields": {"invoice_no": "FV-1", "issue_date": "2026-10-15", "due_date": None, "amount_minor": None,
+                        "currency": None, "vs": None, "iban": None, "supplier_ico": None}}
+    with pytest.raises(DocMismatch) as e:
+        invoice_from_document(_propose_args("doc_0000000000000000"), draft, {"ico": "12345678"},
+                              settings=Settings(backend="memory"))
+    assert e.value.rule_ids == ["T-DOC-MISSING"]
