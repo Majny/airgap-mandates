@@ -87,9 +87,11 @@ offline-demo: .local/bin/noteverify  ## "Wi-Fi off" stage check of docs/audit/de
 	bash tools/offline_demo.sh docs/audit/demo
 
 # ---------------------------------------------------------------- live demo on AWS (WS-F; scenes refuse non-AWS)
-.PHONY: demo-reset demo-s1 demo-s2 demo-s3 demo-s5
+.PHONY: demo-reset demo-s1 demo-s2 demo-s3 demo-s5 stage-bundle
 DEMO_URL ?= $(shell $(PY) -c "import json;print(json.load(open('infra/evidence/post_deploy.json'))['api_url'])" 2>/dev/null)
-DEMO_ENV = AIRGAP_BACKEND=aws AWS_REGION=eu-central-1 AIRGAP_EXECUTOR_URL=$(DEMO_URL)
+# W2 (litewitness on EC2) holds its own key, not KMS: pin it from the committed W2 evidence, out of band
+W2_VKEY ?= $(or $(AIRGAP_W2_VKEY),$(shell $(PY) -c "import json;print(json.load(open('docs/audit/aws-w2-mon/trust-keys.json'))['w2'])" 2>/dev/null))
+DEMO_ENV = AIRGAP_BACKEND=aws AWS_REGION=eu-central-1 AIRGAP_EXECUTOR_URL=$(DEMO_URL) AIRGAP_W2_VKEY=$(W2_VKEY)
 
 demo-reset:  ## AWS OWNER ONLY (docs/STAGE.md T-60): = infra.reset_state --yes (wipes the airgap-* tables, re-seeds)
 	$(DEMO_ENV) $(PY) -m infra.reset_state --yes
@@ -105,3 +107,6 @@ demo-s3:  ## live S3 on AWS (takeover -> ATT 0/3 -> tripwire reject; legit 2/3 V
 
 demo-s5:  ## seal the audit export from AWS (auditor role, read-only) + tampered copy, for the offline beat
 	$(DEMO_ENV) $(PY) -m demo.scene_s5
+
+stage-bundle:  ## seal the AWS export into docs/audit/demo (W2 pinned; refuses unless green), then: make offline-demo
+	$(DEMO_ENV) $(PY) -m tools.demo_bundle --from-aws $(DEMO_URL) --out docs/audit/demo

@@ -26,7 +26,7 @@ def run(settings: Settings | None = None, *, url: str | None = None) -> int:
         rc = subprocess.call(cmd)
         if rc:
             return rc
-    print(f"Wi-Fi off now, then WS-B's stage check: bash tools/offline_demo.sh {OUT} "
+    print(f"Wi-Fi off now, then WS-B's stage check: QUORUM=log,w1,w2 bash tools/offline_demo.sh {OUT} "
           f"(noteverify + verify_audit --replay green; {OUT}/bundle.tampered.json red at seq N)")
     return 0
 

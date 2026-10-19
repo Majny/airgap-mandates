@@ -4,7 +4,7 @@
 
 The FinTechers Hackathon 2026 · Track 3 "Securing the agentic bank".
 
-A bank back-office AI agent proposes payments but holds no write credential. An executor outside the operator's laptop pays only within a mandate signed on a hardware device (Trezor Safe 3), or after a human holds-to-confirm exactly what the device display shows — and the display shows only facts the executor verified itself. A new payee account needs 2-of-3 independent supplier attestations (SD-JWT VCs bound to the change) and dual control on two devices. Every input, decision, signature and execution lands in a C2SP-format transparency log, cosigned by witnesses and verifiable offline with code we did not write.
+A bank back-office AI agent proposes payments but holds no write credential. An executor outside the operator's laptop pays only within a mandate signed on a hardware device (Trezor Safe 3), or after a human holds-to-confirm exactly what the device display shows — and the display shows only facts the executor verified itself. A new payee account needs 2-of-3 independent supplier attestations (SD-JWT VCs bound to the change) and dual control on two devices. Every input, decision, signature and execution lands in a C2SP-format transparency log, cosigned by witnesses and verifiable offline (log signatures with unmodified upstream Go; entries and cosignatures with our open verifier).
 
 The demo runs on AWS eu-central-1 (executor, store, KMS, Object Lock, Bedrock, witnesses). The local `memory`/`moto` backends exist for development and CI only.
 

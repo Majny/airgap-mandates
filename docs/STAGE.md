@@ -19,12 +19,12 @@ export AWS_PROFILE=hackathon
 
 ## T-60 min: reset routine (Tue 11:00, after the 06:00 policy freeze)
 
-1. AWS owner: `python -m infra.reset_state --yes --stage` (stage: the software e2e keys are NOT enrolled, so the
+1. AWS owner: `.venv/bin/python -m infra.reset_state --yes --stage` (stage: the software e2e keys are NOT enrolled, so the
    sealed bundle lists only the physical clerk (GENUINE), the emulator treasury and the inactive fallback; rehearsals
    use `make demo-reset` = without `--stage`; wipes 7 tables, seeds registry +
    `data/enrollment.json` signers with their `enroll` leaves, resets W2's litewitness state for our origin, first
    checkpoint; ~72 s). Add `--fallback-clerk` only
-   if the fallback switch is decided before the demo. Then `python -m infra.load_inbox --url $API` (9 emails, 5 s).
+   if the fallback switch is decided before the demo. Then `.venv/bin/python -m infra.load_inbox --url $API` (9 emails, 5 s).
    Nobody else resets. W2 cosigns every checkpoint automatically (checkpointer tick -> `witness.relay_w2.after_tick`
    over SSM); manual fallback: `python -m witness.relay_w2 --executor-url $API --aws-role airgap-relay --read-role
    airgap-auditor --w2-ssm i-0bc5865c1ddae7b1d` with `AIRGAP_W2_VKEY` set.
@@ -45,12 +45,12 @@ fallback video, so the recorded screens match what the judges see live (the Mond
 
 1. Laptop on the frozen rev (`git checkout` the deployed main), `make data`, `make preflight` GREEN (hash rows match
    the deploy; the agent builds its task from this checkout's `data/emails/manifest.json`).
-2. AWS owner: `make demo-reset` (normal, no `--fallback-clerk`) + `python -m infra.load_inbox --url $API` (9 emails).
+2. AWS owner: `make demo-reset` (normal, no `--fallback-clerk`) + `.venv/bin/python -m infra.load_inbox --url $API` (9 emails).
 3. Camera rig recording (docs/device/demo-rig.md). Device operator ready, Safe 3 unlocked.
 4. `.venv/bin/python -m host.signer s1 --with-agent --url $API`: hold 1 = MANDATE, then the agent pays ACME, Beta and
    Gamma (no taps, ~40-75 s), hold 2 = the Delta 125000.50 CZK step-up; replay refused. Stop recording.
-5. `make checkpoint-now`, then `make demo-bundle` (seals `docs/audit/demo`, refuses unless green) and
-   `make offline-demo` (ALL PASS). Commit the bundle + video (`docs/device/photos/`).
+5. `make checkpoint-now`, then `make stage-bundle` (seals the AWS export into `docs/audit/demo`, W2 pinned,
+   refuses unless green) and `make offline-demo` (strict log + W1 + W2 quorum, ALL PASS). Commit the bundle + video (`docs/device/photos/`).
 6. AWS owner resets again for the stage itself (S1 is single-shot per reset).
 
 ## Beats
@@ -62,14 +62,14 @@ Wall times are measured (WS-E dress rehearsal #1 on AWS with software keys; WS-C
 |---|---|---|---|---|
 | 0:00-0:15 | Hook + disclosure | - | - | "This agent is compromised right now. It still can't move a koruna." |
 | 0:15-0:45 | **S1 normal day (one beat, real agent)** | one command: `.venv/bin/python -m host.signer s1 --with-agent --url $API`, or the three parts: (1) `host.signer mandate --url $API`, (2) `make agent-s1`, (3) `host.signer payup --url $API` | 2 holds: (1) MANDATE, 4 pages; (3) PAY step-up of the 4th vendor's over-cap invoice, 4 pages. Nothing to press while the agent pays the 3 legit invoices | (1) mandate 80000/payment, 250000 total, clerk device + treasury emulator 2/2. (2) the agent λ (no-NAT VPC, Sonnet) pays ACME, Beta and Gamma under the mandate (no taps). (3) the 4th vendor's invoice (WS-D fixture `09_delta_invoice_overcap.eml`, due 2026-10-18) is over the per-payment cap and is not paid by the agent: device step-up -> executed; replay -> 403 `nonce_reused`. The 4th vendor has no other payment that day, so no F-SPLIT carry-over. Single shot per reset. Then `make checkpoint-now`. **Rehearsed green on AWS** (fallback, deploy `0b41856`, 79 s): 3 ALLOW + Delta CHALLENGE `[F-MANDATE, I-PER, I-WARN]` -> executed, replay 403; bundle sealed green (log+W1+W2), offline ALL PASS (`docs/device/rehearsal/aws_stage_s1_fallback.log`) |
-| 0:45-1:35 | **S2 lookalike BEC + escalation + exfil** | `.venv/bin/python -m host.signer scene s2 --url $API` (software keys: `make demo-s2`, 4 s) | **device stays dark** for the change; one PAY hold inside the escalation step (the replay re-sends it, no second hold) | `make agent-s2` (14 s): the agent declines the BEC email. Rehearsal #1 failed at step 3 (F-AMOUNT-DOC); fixed on main (`8428c3b`), re-verify in rehearsal #2. IAM AccessDenied / VPC no-route evidence is WS-E's |
+| 0:45-1:35 | **S2 lookalike BEC + escalation + exfil** | `.venv/bin/python -m host.signer scene s2 --url $API` (software keys: `make demo-s2`, 4 s) | **device stays dark** for the change; one PAY hold inside the escalation step (the replay re-sends it, no second hold) | `make agent-s2` (14 s): the agent declines the BEC email. Rehearsal #1 failed at step 3 (reused S1's 125000.50 amount -> F-DUP/I-DUP deny); fixed on main (`8428c3b`, step 3 = Beta 91200.00), re-verified on AWS 2026-10-19 20:45 (SCENE S2 OK). IAM AccessDenied / VPC no-route evidence is WS-E's |
 | 1:35-2:30 | **S3 takeover + deepfake, then legit change** | `.venv/bin/python -m host.signer scene s3 --url $API` (software keys: `make demo-s3`, 52 s incl. the 20 s cooling-off) | device dark through the takeover (ATT 0/3 = BLOCK, "there is no button"); then CHG clerk 1/2: 4 pages, `ATT 2/3 ERP BANK` is always on page 3 (pinned), hold | treasury 2/2 on the emulator. Talk over the 20 s cooling-off |
-| 2:30-3:20 | **S5 offline audit** | before Wi-Fi off: `make demo-s5` (seals the AWS export + a tampered copy, 3 s); Wi-Fi off: `bash tools/offline_demo.sh .local/demo/s5` (1 s) | - | stock Go `noteverify` + `verify_audit` green, one-byte flip red at `seq N`. Lines to say: `docs/audit/DEMO-LINES.md`. Backup: `make offline-demo` on the pre-sealed `docs/audit/demo` |
+| 2:30-3:20 | **S5 offline audit** | before Wi-Fi off: `make demo-s5` (seals the AWS export + a tampered copy, 3 s); Wi-Fi off: `QUORUM=log,w1,w2 bash tools/offline_demo.sh .local/demo/s5` (1 s; every checkpoint must carry log + W1 + W2) | - | stock Go `noteverify` + `verify_audit` green, one-byte flip red at `seq N`. Lines to say: `docs/audit/DEMO-LINES.md`. Backup: `make offline-demo` on the pre-sealed `docs/audit/demo` (only once it shows policy `d33008c4`, i.e. after Tue 11:00 `make stage-bundle`) |
 | 3:20-4:00 | Bench + real-vs-simulated | `bench/results/REPORT.md` on screen | - | WS-F |
 
 Every device prompt prints `--> CLERK on Safe 3 GENUINE: read every page, then HOLD the right button` on the
 laptop: that is the operator's cue. The host UI (`make ui`, WS-F) is the projector's left side;
-**TBD WS-F:** it calls the API without SigV4 today, so on AWS it needs a SigV4 client (see `host.signer.executor_call`).
+The UI calls the API with SigV4 via `host.signer.executor_call`.
 Keep AWS runs serialized: Lambda concurrency in this account is 10 in total.
 
 ## Fallback switch (emulator clerk)
@@ -131,7 +131,7 @@ Raw logs: `infra/evidence/rehearsal/`.
 | Step | Command | Result | Wall time |
 |---|---|---|---|
 | reset | `make demo-reset` | PASS (log size 13, no stale checkpoint) | 72 s |
-| inbox | `python -m infra.load_inbox --url $API` (ingest role) | PASS 8/8 | 5 s |
+| inbox | `.venv/bin/python -m infra.load_inbox --url $API` (ingest role) | PASS 8/8 | 5 s |
 | S1 software | `make demo-s1` | PASS: mandate 2/2, 3 paid, 125000.50 step-up executed, replay 403 | 7 s |
 | agent S1 | `make agent-s1` (agent λ in no-NAT VPC, Sonnet, quarantined) | PASS: 3 proposals; after S1, ACME and Beta step up (F-SPLIT / I-SPLIT on the 24 h vendor sum), Gamma allowed | 42 s |
 | agent S2 | `make agent-s2` | PASS: agent declines the BEC email (no proposal) | 14 s |

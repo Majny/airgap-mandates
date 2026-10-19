@@ -144,6 +144,8 @@ def decide(subject: dict[str, Any], facts: FactSet, state: dict[str, Any], polic
     schema = policy["cedar_schema"]
     m, p = state["mandate"], state["payee"]
     vendor = subject["invoice"]["vendor_id"]
+    if not inv.mandate_covers_currency(m, subject["invoice"]):
+        m = None  # caps are in the mandate's currency: a foreign-currency invoice is outside the mandate (step-up)
     mandate = _mandate_entity(m, phash)
     payee = {"uid": {"type": "Payee", "id": str(vendor)},
              "attrs": {"known": p is not None, "active": p is not None and p["active_iban"] and p["status"] == "ACTIVE",

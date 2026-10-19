@@ -25,7 +25,12 @@ def wsa_facts(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> 
     active = m if m is not None and m.get("status") == "ACTIVE" else None
     out: list[Fact] = []
 
-    if active is None:
+    if active is not None and not inv.mandate_covers_currency(active, invoice):
+        out.append(_fact("F-MANDATE", "no_mandate", f"Mandate is in {active.get('currency')}, invoice is not",
+                         "NO MANDATE (FX)", {"amount_minor": amount, "currency": invoice.get("currency"),
+                                             "mandate_currency": active.get("currency")}))
+        active = None
+    elif active is None:
         out.append(_fact("F-MANDATE", "no_mandate", "No active mandate", "NO MANDATE", {"amount_minor": amount}))
     else:
         per, total = int(active["max_per_payment_minor"]), int(active["max_total_minor"])

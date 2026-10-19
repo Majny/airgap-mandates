@@ -69,18 +69,35 @@ _SCHEMA_DIR = Path(__file__).resolve().parents[1] / "contracts" / "schemas"
 _VALIDATORS: dict[str, Any] = {}
 
 
+def _strict_validator():
+    """Draft 2020-12 with `pattern` anchored ECMA-style: Python's `$` also matches before a trailing newline, so
+    "CZ65...\\n" would pass `^...$` and dodge the "already the active IBAN" guard (red-team F3)."""
+    import re
+
+    import jsonschema
+
+    def pattern(validator, patrn, instance, schema):
+        if validator.is_type(instance, "string"):
+            strict = patrn[:-1] + r"\Z" if patrn.endswith("$") and not patrn.endswith(r"\$") else patrn
+            if not re.search(strict, instance):
+                yield jsonschema.ValidationError(f"{instance!r} does not match {patrn!r}")
+
+    return jsonschema.validators.extend(jsonschema.Draft202012Validator, {"pattern": pattern})
+
+
 def validate(body: Any, schema_name: str) -> dict[str, Any]:
     """jsonschema validation against contracts/schemas/<schema_name>.json -> 400 invalid_request."""
     if schema_name not in _VALIDATORS:
-        import jsonschema
-        from referencing import Registry, Resource
+        from referencing import Registry
+        from referencing.jsonschema import DRAFT202012
 
         res = []
         for p in _SCHEMA_DIR.glob("*.json"):
             if p.name != "endpoints.json":
                 doc = json.loads(p.read_text())
-                res.append((doc["$id"], Resource.from_contents(doc)))
-        _VALIDATORS[schema_name] = jsonschema.Draft202012Validator(
+                doc.pop("$schema", None)  # else following a $ref switches back to the stock (non-strict) validator
+                res.append((doc["$id"], DRAFT202012.create_resource(doc)))
+        _VALIDATORS[schema_name] = _strict_validator()(
             {"$ref": f"https://airgap.local/schemas/{schema_name}.json"}, registry=Registry().with_resources(res))
     errs = sorted(_VALIDATORS[schema_name].iter_errors(body), key=lambda e: list(e.path))
     if errs:
