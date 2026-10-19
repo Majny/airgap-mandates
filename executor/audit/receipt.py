@@ -278,3 +278,80 @@ def receipt_qr_svg(r: dict[str, Any], *, scale: int = 4, border: int = 4) -> str
     buf = io.BytesIO()
     _qr(r).save(buf, kind="svg", scale=scale, border=border)
     return buf.getvalue().decode("utf-8")
+
+
+# --- short QR (AGR2): what a phone can actually scan --------------------------------------------------------------
+SHORT_PREFIX = "AGR2:"
+_SHORT_RE = re.compile(r"AGR2:(tx_[0-9a-f]{16}):(0|[1-9][0-9]*):([0-9a-f]{64}):([1-9][0-9]*):([0-9a-f]{16})")
+
+
+def short_qr_payload(r: dict[str, Any]) -> str:
+    """'AGR2:<tx_id>:<seq>:<leaf_hash hex>:<tree_size>:<root first 16 hex>' (~115 chars, QR ~v7). A phone did not
+    read the full AGR1 receipt (v34); AGR2 is a pointer that verifies only together with the exported bundle (the
+    full receipt stays a file). Leaf hash = full 256 bits; the 64-bit root prefix only selects the checkpoint, whose
+    root the bundle verification recomputes."""
+    from executor.audit import checkpoint as cp
+
+    tx_id = (r["entry"].get("data") or {})["tx_id"]
+    root16 = cp.parse_note(r["checkpoint_note"])["root_hash"][:16]
+    out = f"{SHORT_PREFIX}{tx_id}:{int(r['seq'])}:{r['leaf_hash']}:{int(r['tree_size'])}:{root16}"
+    parse_short_qr(out)
+    return out
+
+
+def parse_short_qr(text: str) -> dict[str, Any]:
+    """Strict parse of an AGR2 payload -> {tx_id, seq, leaf_hash, tree_size, root16}; ValueError otherwise."""
+    m = _SHORT_RE.fullmatch(text.strip()) if isinstance(text, str) else None
+    if m is None:
+        raise ValueError("not an AGR2 short receipt (AGR2:<tx_id>:<seq>:<leaf_hash>:<tree_size>:<root16>)")
+    tx_id, seq, leaf_hash, size, root16 = m.groups()
+    if int(seq) >= int(size):
+        raise ValueError(f"seq {seq} is not inside tree size {size}")
+    return {"tx_id": tx_id, "seq": int(seq), "leaf_hash": leaf_hash, "tree_size": int(size), "root16": root16}
+
+
+def short_qr_problems(short: dict[str, Any], bundle: dict[str, Any]) -> list[str]:
+    """Check an AGR2 pointer against an export (verify the bundle itself separately with tools.verify_audit): the
+    execution leaf of tx_id at seq has leaf_hash, a bundle checkpoint of tree_size has a root starting with root16,
+    and the leaf is included under that root."""
+    from executor.audit import checkpoint as cp
+    from executor.audit import merkle
+
+    seq, size = short["seq"], short["tree_size"]
+    leaves = sorted((le for le in bundle.get("leaves") or [] if isinstance(le, dict)), key=lambda le: le.get("seq", -1))
+    leaf = next((le for le in leaves if le.get("seq") == seq), None)
+    if leaf is None:
+        return [f"seq {seq}: no such leaf in the bundle"]
+    problems = []
+    ev = leaf.get("event") or {}
+    if leaf.get("leaf_hash") != short["leaf_hash"]:
+        problems.append(f"seq {seq}: leaf hash differs from the QR")
+    if ev.get("type") != "execution" or (ev.get("data") or {}).get("tx_id") != short["tx_id"]:
+        problems.append(f"seq {seq}: not the execution leaf of {short['tx_id']}")
+    roots = []
+    for note in bundle.get("checkpoints") or []:
+        try:
+            p = cp.parse_note(note)
+        except Exception:  # noqa: BLE001 - malformed notes are the bundle verifier's finding
+            continue
+        if p["size"] == size and p["root_hash"].startswith(short["root16"]):
+            roots.append(bytes.fromhex(p["root_hash"]))
+    if not roots:
+        return problems + [f"no bundle checkpoint of size {size} with root {short['root16']}..."]
+    hashes = [bytes.fromhex(le["leaf_hash"]) for le in leaves[:size]]
+    if len(hashes) != size or not merkle.verify_inclusion(seq, size, bytes.fromhex(short["leaf_hash"]),
+                                                          merkle.inclusion_proof(seq, hashes), roots[0]):
+        problems.append(f"seq {seq}: not included under the size {size} checkpoint root")
+    return problems
+
+
+def short_qr_png(r: dict[str, Any], *, scale: int = 16, border: int = 4) -> bytes:
+    """PNG of the AGR2 short QR (large modules: default 16 px/module, quiet zone 4). Needs segno."""
+    try:
+        import segno
+    except ImportError:
+        raise RuntimeError("receipt QR codes need segno: pip install segno") from None
+    buf = io.BytesIO()
+    segno.make(short_qr_payload(r), error="M", mode="byte", micro=False, boost_error=True).save(
+        buf, kind="png", scale=scale, border=border, dark="black", light="white")
+    return buf.getvalue()

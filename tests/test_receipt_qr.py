@@ -6,6 +6,7 @@ import copy
 import json
 import xml.etree.ElementTree as ET
 import zlib
+from pathlib import Path
 
 import pytest
 
@@ -173,3 +174,58 @@ def test_deeply_nested_payload_is_a_value_error():
     payload = receipt.QR_PREFIX + base64.urlsafe_b64encode(zlib.compress(deep, 9)).decode().rstrip("=")
     with pytest.raises(ValueError, match="nested too deeply"):
         receipt.parse_qr_payload(payload)
+
+
+# --- AGR2 short QR: stock phone cameras could not read the full AGR1 receipt (v34); this pointer is ~v7 ------------
+DEMO = Path(__file__).resolve().parents[1] / "docs" / "audit" / "demo"
+
+
+@pytest.fixture(scope="module")
+def demo():
+    return json.loads((DEMO / "bundle.json").read_text()), json.loads((DEMO / "receipt.json").read_text())
+
+
+def test_short_payload_round_trip_and_verifies(demo):
+    bundle, r = demo
+    p = receipt.short_qr_payload(r)
+    s = receipt.parse_short_qr(p)
+    assert len(p) <= 122 and s["seq"] == r["seq"] and s["leaf_hash"] == r["leaf_hash"]
+    assert receipt.short_qr_problems(s, bundle) == []
+
+
+def test_short_qr_is_small_enough_for_a_stock_camera(demo):
+    segno = pytest.importorskip("segno")
+    q = segno.make(receipt.short_qr_payload(demo[1]), error="M", mode="byte", micro=False, boost_error=True)
+    assert q.version <= 8 and q.error in ("M", "Q", "H")
+    png = receipt.short_qr_png(demo[1])
+    assert png.startswith(b"\x89PNG") and q.symbol_size(scale=16, border=4)[0] >= 600
+
+
+@pytest.mark.parametrize("field,value,needle", [
+    ("leaf_hash", "0" * 64, "leaf hash differs"),
+    ("tx_id", "tx_" + "0" * 16, "not the execution leaf"),
+    ("root16", "0" * 16, "no bundle checkpoint"),
+    ("seq", 0, "not the execution leaf"),
+])
+def test_short_qr_tampering_is_caught(demo, field, value, needle):
+    bundle, r = demo
+    s = {**receipt.parse_short_qr(receipt.short_qr_payload(r)), field: value}
+    assert any(needle in p for p in receipt.short_qr_problems(s, bundle))
+
+
+@pytest.mark.parametrize("bad", ["AGR2:tx_1:1:ab:2:cd", "AGR2:tx_047f9128ce39e1bf:35:" + "a" * 64 + ":35:" + "b" * 16,
+                                 "AGR1:xyz", "", "AGR2:TX_047F9128CE39E1BF:1:" + "A" * 64 + ":2:" + "B" * 16])
+def test_short_qr_parse_is_strict(bad):
+    with pytest.raises(ValueError):
+        receipt.parse_short_qr(bad)
+
+
+def test_cli_short_qr_needs_the_bundle(demo, tmp_path):
+    f = tmp_path / "scan.txt"
+    f.write_text(receipt.short_qr_payload(demo[1]) + "\n")
+    keys = str(DEMO / "trust-keys.json")
+    assert va.main([str(DEMO / "bundle.json"), "--trust-keys", keys, "--receipt", str(f)]) == 0
+    assert va.main(["--receipt", str(f)]) == 1
+    seq = demo[1]["seq"]
+    f.write_text(receipt.short_qr_payload(demo[1]).replace(f":{seq}:", f":{seq - 1}:", 1))
+    assert va.main([str(DEMO / "bundle.json"), "--trust-keys", keys, "--receipt", str(f)]) == 1
