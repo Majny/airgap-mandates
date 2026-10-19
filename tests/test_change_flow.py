@@ -330,8 +330,8 @@ def test_dual_control_to_active_updates_registry(env: Env):
     reg = env.store.get("registry", {"vendor_id": ACME["vendor_id"]})
     assert reg["iban"] == NEW_IBAN
     assert reg["iban_history"] == [
-        {"iban": ACME["iban"], "from": "2024-03-01", "to": "2026-10-19", "change_id": None},
-        {"iban": NEW_IBAN, "from": "2026-10-19", "to": None, "change_id": ch["change_id"]},
+        {"iban": ACME["iban"], "from": "2024-03-01", "to": "2026-10-19T12:00:30Z", "change_id": None},
+        {"iban": NEW_IBAN, "from": "2026-10-19T12:00:30Z", "to": None, "change_id": ch["change_id"]},
     ]
     meta = env.store.get("registry", {"vendor_id": M.META_KEY})
     assert meta["registry_version"] == 2 and meta["registry_hash"] != "0" * 64
@@ -669,7 +669,7 @@ def test_seed_registry_signers_and_inbox(tmp_path):
     assert clerk["device"] == "GENUINE" and "ceremony" not in clerk
     (row,) = store.scan("inbox")
     assert row["email_id"] == "eml_" + hashlib.sha256(raw).hexdigest()[:16]
-    assert row["from_domain"] == "acme.cz" and row["received_at"] == "2026-10-19T09:15:00Z"
+    assert row["from_domain"] == "acme.cz" and row["received_at"] == "2026-10-19T12:00:00Z"  # seeding clock, not Date
     assert row["dkim"]["result"] in ("pass", "fail", "none")  # no DKIM-Signature: never "pass"
     leaves = [json.loads(r["event"]) for r in store.query("audit", ("log_id", "audit"))]
     assert [e["type"] for e in leaves] == ["enroll", "enroll", "ingest"]  # signers enrolled in the log (§7.2)
