@@ -114,20 +114,20 @@ order (§5.4). Values not listed are INFO.
 | id | source (snapshot) | values → severity | display_line (≤16) |
 |---|---|---|---|
 | `F-MANDATE` (WS-A) | active mandate | over cap / no mandate → WARN (step-up) | `OVER MANDATE CAP`, `NO MANDATE` |
-| `F-ATTEST` | §11 verifier | k ≥ 2 distinct classes → INFO; break-glass → INFO; **k < 2 and not break-glass → BLOCK** | `ATT 2/3 ERP BANK`, `ATT BREAK-GLASS`, `ATT 0/3` |
+| `F-ATTEST` | §11 verifier | k ≥ 2 distinct classes → INFO; break-glass → INFO; `in_network = false` → INFO (`F-CALLBACK` carries the BLOCK); **k < 2, in network and not break-glass → BLOCK** | `ATT 2/3 ERP BANK`, `ATT 3/3 ALL` (full class list would exceed the width), `ATT BREAK-GLASS`, `ATT OFF-NETWORK`, `ATT 0/3` |
 | `F-CALLBACK` | vendor portal | confirmed → INFO; off-network (or break-glass) and unconfirmed → BLOCK | `CALLBACK OK`, `CALLBACK MISSING` |
 | `F-DOMAIN` | vendor master `domain` vs sender; homoglyph + edit distance; MostlyRight `website_domain` | match → INFO; lookalike → BLOCK | `DOMAIN MATCH`, `DOMAIN LOOKALIKE` |
-| `F-DKIM` | ingest-computed DKIM/SPF/ARC (`dns` snapshot) | pass → INFO; fail → BLOCK | `DKIM PASS`, `DKIM FAIL` |
-| `F-DOMAIN-AGE` | `whois` fixture | < 30 d → WARN | `DOMAIN AGE 12D`, `DOMAIN AGE 3Y` |
-| `F-WARNLIST` | MostlyRight regulator warnings (national regulator + ESMA + AMF lists) | hit → BLOCK | `WARNLIST CLEAR`, `WARNLIST HIT` |
-| `F-SANCTION` | MostlyRight EU sanctions (entities) | hit → BLOCK | `SANCTIONS CLEAR`, `EU SANCTION HIT` |
-| `F-VOP` | VoP mock (EPC codes) | `MTCH` → INFO; `CMTC` → WARN; `NMTC` → BLOCK; `NOAP` → WARN | `VOP MTCH`, `VOP CMTC`, `VOP NMTC`, `VOP NOAP` |
-| `F-PSP` | MostlyRight `counterparty_records`: SEPA Instant + VoP participant lists, national (CNB) and ESMA licence registers | licensed + `in_sct_inst` + `in_vop` → INFO; licensed, not in VoP → WARN; **absent → WARN** ("absent ≠ safe") | `PSP INST VOP OK`, `PSP NO VOP`, `PSP UNKNOWN` |
+| `F-DKIM` | ingest-computed DKIM/SPF/ARC (`dns` snapshot) | pass **and aligned** (`d` == From domain) → INFO; fail, none, unaligned, a signature with an `l=` body-length tag, or an `email_id` with no inbox row → BLOCK | `DKIM PASS`, `DKIM FAIL` |
+| `F-DOMAIN-AGE` | first seen in **our inbox** (`inbox` by domain), or `registry.registered_since` when the sender domain equals the vendor's registered domain (lookalikes never do); not WHOIS | < 30 d → WARN | `DOMAIN AGE 12D`, `DOMAIN AGE 3Y` |
+| `F-WARNLIST` | MostlyRight regulator warnings (national regulator + ESMA + AMF lists) | hit → BLOCK; snapshot missing → WARN (no `prov`) | `WARNLIST CLEAR`, `WARNLIST HIT`, `WARNLIST N/A` |
+| `F-SANCTION` | MostlyRight EU sanctions (entities) | hit → BLOCK; snapshot missing → WARN (no `prov`) | `SANCTIONS CLEAR`, `EU SANCTION HIT`, `SANCTIONS N/A` |
+| `F-VOP` | VoP mock (EPC codes) | `MTCH` → INFO; `CMTC` → WARN (rapidfuzz `token_sort_ratio` ≥ 85 after normalising legal forms, punctuation and diacritics — non-Latin letters are kept — or every registered-name token contained in the holder name); `NMTC` → BLOCK; `NOAP` (PSP not a participant, or account unknown) → WARN | `VOP MTCH`, `VOP CMTC`, `VOP NMTC`, `VOP NOAP` |
+| `F-PSP` | MostlyRight `counterparty_records`: SEPA Instant + VoP participant lists, national (CNB) and ESMA licence registers | evaluated for **payee changes only** (account binding; a proposal pays the registry's ACTIVE IBAN, which passed the change flow). Licensed + `in_sct_inst` + `in_vop` in force at the snapshot date → INFO; licensed or listed, not in VoP → WARN; **absent → WARN** ("absent ≠ safe") | `PSP INST VOP OK`, `PSP NO VOP`, `PSP UNKNOWN` |
 | `F-VAT` | `adis` cache: unreliable-payer flag and published accounts for the DIČ | published → INFO; not published → WARN; unreliable payer → BLOCK | `ADIS ACCT YES`, `ADIS ACCT NO`, `VAT UNRELIABLE` |
 | `F-BANK` | `bank_codes` (bank-code list, IBAN → bank) | domestic → INFO; foreign or EMI for a CZ vendor → WARN | `BANK DOMESTIC`, `BANK FOREIGN EMI` |
 | `F-FIRSTSEEN` | `registry` history | IBAN first seen < 72 h → WARN | `IBAN NEW 2H`, `IBAN SEEN 400D` |
 | `F-DUP` (WS-A) | ledger | duplicate → BLOCK (deny) | `DUPLICATE INV` |
-| `F-AMOUNT-DOC` (WS-D computes; WS-E `executor/docs` `check_against_document`) | provenance-hashed source document (`invoice_ref`) | `match`, or `partial` (lower with `reason_code` `PARTIAL`) → INFO; `mismatch` (higher, lower without PARTIAL, or currency/VS/due date/invoice_no/supplier ICO differ) → BLOCK; `unavailable` (document missing or not extractable) → **BLOCK** (fail closed). evidence `{invoice_amount_minor, doc_amount_minor, doc_sha256, invoice_ref, mismatched (comma-joined field names), reason_code}`, `prov` = `doc_sha256` | `AMOUNT OK DOC`, `AMOUNT != DOC` |
+| `F-AMOUNT-DOC` (WS-D computes; WS-E `executor/docs` `check_against_document`) | provenance-hashed source document (`invoice_ref`) | `match`, or `partial` (lower with `reason_code` `PARTIAL`) → INFO; `mismatch` (higher, lower without PARTIAL, or currency/VS/due date/invoice_no/supplier ICO differ) → BLOCK; `unavailable` (document missing or not extractable) → **BLOCK** (fail closed). evidence `{invoice_amount_minor, doc_amount_minor, doc_sha256, invoice_ref, mismatched (comma-joined field names), reason_code}`, `prov` = `doc_sha256` | `AMOUNT OK DOC` (match), `AMOUNT PART DOC` (partial), `AMOUNT != DOC` (mismatch), `AMOUNT DOC N/A` (unavailable) |
 | `F-SPLIT` (WS-A) | ledger | 24 h split → WARN (step-up) | `SPLIT 24H` |
 | `F-Z` (WS-A) | ledger | robust z > 3.5 → WARN (step-up) | `AMOUNT OUTLIER` |
 | `F-ANOM` (WS-E feeds, WS-D computes) | executor tool-call log (`tool_call` leaves) | score 0..100; ≥ 40 → WARN (step-up); **never allows** | `ANOM 10/100`, `ANOM 55/100` |
@@ -402,6 +402,7 @@ Every rejection at steps 4–9 appends a `signature` leaf with `accepted:false, 
 | `missing_callback_attestation` | 403 | off-network / break-glass change signed before the callback was confirmed |
 | `attestation_insufficient` | 403 | in-network change signed (or VC flow) without ≥ 2 valid VCs from distinct pinned classes (replaces v1 `vendor_attestation_missing`) |
 | `kb_jwt_invalid` | 403 | KB-JWT `aud`/`nonce` mismatch, `iat` older than 15 min, bad `cnf` signature |
+| (`attestation_insufficient`) | 403 | also returned for the `verify_vc` errors `binding_mismatch`, `vc_invalid`, `vc_revoked`; the original code is in `details.vc_error` |
 | `issuer_not_pinned` | 403 | VC issuer key not in the vendor's pinned trust list |
 | `break_glass_required` | 403 | VC submitted for a vendor with no pinned issuers (`in_network = false`) |
 | `callback_attempts_exceeded` | 403 | 4th callback attempt (the change is already REJECTED) |
@@ -864,6 +865,8 @@ demo scene unless `backend == "aws"` and `aws_region == "eu-central-1"`; the UI 
 | `AIRGAP_MANDATE_DUAL_THRESHOLD_MINOR` | `10000000` | `max_total_minor` above this needs clerk + treasury |
 | `AIRGAP_DATA_DIR` | `data` | snapshots (dns, whois, adis, bank_codes, vendors, mostlyright/) |
 | `AIRGAP_ADIS_MODE` | `cache` | `cache` \| `live` (live never on stage) |
+| `AIRGAP_MOSTLYRIGHT_CSV` | — | MostlyRight CSV source for `tools/load_mostlyright.py` (path or `s3://`; else `data/mostlyright/*.csv`, the team copy, then S3). The CSV is never committed |
+| `AIRGAP_SMS_OUTBOX_FILE` | — | SIMULATED SMS outbox (jsonl) of the vendor portal; unset = in-memory only |
 | `AIRGAP_FAKE_NOW` | — | ISO datetime; freezes the executor clock (ignored when `aws`) |
 | `AIRGAP_EXECUTOR_URL` | `http://127.0.0.1:8000` | host/agent/bench → executor (the private API URL in the demo) |
 | `AIRGAP_BEDROCK_MODEL_ID` | `eu.anthropic.claude-sonnet-4-5-20250929-v1:0` | planner (verify with `aws bedrock list-inference-profiles --region eu-central-1`) |
@@ -875,6 +878,10 @@ demo scene unless `backend == "aws"` and `aws_region == "eu-central-1"`; the UI 
 | `AIRGAP_CODE_SHA256` | — | deployed code hash for checkpoint `code` extension line (base64 or hex; set by CDK from Lambda CodeSha256; local fallback = sha256 over `executor/*.py`) |
 | `AIRGAP_W1_LOG_VKEY` | — | pinned signed-note vkey of the log key that W1 accepts (W1 role needs no KMS access to the log key) |
 | `AIRGAP_TREZOR_PATH` | — (USB autodetect) | e.g. `udp:127.0.0.1:21324` for the emulator |
+
+`make data` (`python -m tools.load_mostlyright ensure`) builds `data/mostlyright/snapshot.sqlite` when missing and checks it
+against the committed `snapshot.sha256`; `test`, `ci`, `dev` and `e2e` depend on it (without the snapshot F-WARNLIST /
+F-SANCTION fail safe to WARN and every payment steps up).
 
 Local dev (`make dev`): `AIRGAP_BACKEND=memory uvicorn executor.app:app --port 8000` — the executor as a plain Python
 process with local Ed25519 keys and an in-process witness. `executor.app.create_app(settings)` and
@@ -912,7 +919,9 @@ process with local Ed25519 keys and an in-process witness. `executor.app.create_
   No pins (`in_network = false`) → `break_glass_required` (callback path).
 - **Verifier**: `executor.attest.vc.verify_vc(vc: str, change: dict, *, pins: list[dict], now: datetime) -> AttestResult`,
   `AttestResult = {ok, issuer_class, iss, error, disclosed {legal_name, iban, ico}, vc_sha256}`; `ok` requires the
-  disclosed `iban == change.new_iban` and `ico == change.vendor_ico`.
+  disclosed `iban == change.new_iban` and `ico == change.vendor_ico`. `error` is one of `kb_jwt_invalid`, `issuer_not_pinned`,
+  `break_glass_required` (own HTTP codes, §4.4) or `binding_mismatch`, `vc_invalid`, `vc_revoked` (HTTP 403
+  `attestation_insufficient` with `details.vc_error`). `issuer_class` comes from the matching pin, `null` when unpinned.
 - **Revocation**: static list in the demo (`data/vc_status.json`); Token Status List later [U].
 - **Commitments**: the `attest` log stores `SHA256(canonical_json(body) || commit_nonce_128)`, never a bare IBAN hash.
 - The v1 EIP-191 `VENDOR_ATTEST` path is kept as the **hardware issuer profile** (ATTEST screen, §5.2), stretch.
@@ -939,3 +948,10 @@ Cedar rule ids `I-REGISTRY`, `I-VOP`, `I-WARN`, `I-BLOCK`, `I-CALLBACK`, `I-COOL
 challenge `width` 16 / `lines_per_page` 4 / `pages` 1–4, `display_line` ≤ 16, H/P 14 hex, `render_profile` in
 health and export = `safe3-mono-16x4` | `safe5-mono-18x7`; treasury emulator = T3B1; passphrase rule (§6);
 new fact `F-AMOUNT-DOC` after `F-DUP` (§2.1).
+
+**v2.2 (WS-D facts, 2026-10-19).** §2.1: F-ATTEST `ATT OFF-NETWORK` / `ATT 3/3 ALL`; F-DKIM requires alignment
+(unaligned, `l=` tag, unknown `email_id` → BLOCK); F-DOMAIN-AGE = first seen in our inbox or the registered vendor
+domain's `registered_since` (not WHOIS); F-VOP CMTC rule; `WARNLIST N/A` / `SANCTIONS N/A` when the snapshot is
+missing; F-PSP on payee changes only; F-AMOUNT-DOC four lines. §4.4/§11: `binding_mismatch`, `vc_invalid`,
+`vc_revoked` → 403 `attestation_insufficient` + `details.vc_error`. Schemas: `attest_summary.issuer_class` and
+`vendor.bic` nullable. §9: `AIRGAP_MOSTLYRIGHT_CSV`, `AIRGAP_SMS_OUTBOX_FILE`, `make data`.

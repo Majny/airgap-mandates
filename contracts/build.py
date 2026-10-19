@@ -176,7 +176,7 @@ DEFS = {
         "decision": ref("decision"), "challenge_nonce": nullable(NONCE), "tx_id": nullable(TX_ID),
         "created_at": TS,
     }),
-    "attest_summary": obj({"issuer_class": ISSUER_CLASS, "iss": STR, "verified": BOOL, "error": nullable(STR),
+    "attest_summary": obj({"issuer_class": nullable(ISSUER_CLASS), "iss": STR, "verified": BOOL, "error": nullable(STR),
                            "verified_at": TS}),
     "attest_result": obj({"ok": BOOL, "issuer_class": nullable(ISSUER_CLASS), "iss": nullable(STR),
                           "error": nullable(STR), "disclosed": {"type": "object"}, "vc_sha256": HEX64}),
@@ -200,7 +200,7 @@ DEFS = {
     "issuer_pin": obj({"issuer_class": ISSUER_CLASS, "iss": STR, "jwk_thumbprint": STR, "pinned_at": TS}),
     "vendor": obj({
         "vendor_id": {"type": "string", "pattern": r"^ven_[0-9]{8}$"}, "ico": ICO, "name": STR,
-        "domain": STR, "iban": IBAN, "bic": STR,
+        "domain": STR, "iban": IBAN, "bic": nullable(STR),
         "country": {"type": "string", "pattern": r"^[A-Z]{2}$"}, "phone": STR,
         "contact_email": STR, "registered_since": DATE, "in_network": BOOL,
         "issuer_pins": arr(ref("issuer_pin")),
