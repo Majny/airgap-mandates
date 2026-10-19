@@ -1,0 +1,22 @@
+record_id,record_type,source_list,authority,authority_country,name,other_names,country,national_id,lei,bic,eu_reference_number,un_id,website,website_domain,email_domain,address,city,category,detail,value_kind,passported_to,since,until,in_sct_inst,sct_inst_ready_since,sct_inst_leaving_date,in_vop,vop_status,vop_role,vop_ready_since,vop_leaving_date,name_count,regulation_url
+a1000000000000000000000000000000,licence,cnb_banks,Fictional Central Bank (FCB),CZ,"Testovaci Banka, a.s.",,CZ,11223344,,,,,,,,,,Bank,,,,1995-01-01,,,,,,,,,,,
+a2000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,TESTOVACI BANKA A.S.,,CZ,,,TSTBCZPPXXX,,,,,,,,SCT Inst and VoP,,,,2025-01-06,,true,2025-01-06,,true,Ready for operations,,2025-08-08,,,
+a3000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,NOVAPAY BANKA A.S.,,CZ,,,NOVPCZPPXXX,,,,,,,,,,,,,,true,2025-02-01,,false,,,,,,
+a4000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,PENDING BANKA A.S.,,CZ,,,PNDGCZPPXXX,,,,,,,,,,,,,,true,2025-02-01,,true,Pending EDS registration,,,,,
+a5000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,FUTURE BANKA A.S.,,CZ,,,FUTRCZPPXXX,,,,,,,,,,,,,,true,2030-01-01,,true,Ready for operations,,2030-01-01,,,
+b1000000000000000000000000000000,warning,amf_blacklists,Fictional Markets Authority,FR,fictiveinvest.test,,,,,,,,,fictiveinvest.test,,,,Forex,,website,,2024-01-01,,,,,,,,,,,
+b2000000000000000000000000000000,warning,amf_blacklists,Fictional Markets Authority,FR,gmail.com,,,,,,,,,,gmail.com,,,Impersonation,,email,,2024-01-01,,,,,,,,,,,
+b3000000000000000000000000000000,warning,esma_non_compliant_casps,Fictional Securities Authority,IT,Nepravda Capital,,,,,,,,,nepravda-capital.test|https,,,,Crypto-asset services without authorisation,,firm,,2025-03-04,,,,,,,,,,,
+c1000000000000000000000000000000,sanction,eu_financial_sanctions,Fictional Commission,,Fiktivni Zbrojovka Holding,Fiktivni Zbrojovka Holding | Imaginary Arms Plant Company,XX,55667788,,,EU.0000.1,,,,,,,TEST,,,,2024-02-23,,,,,,,,,,2,https://example.test/reg
+c2000000000000000000000000000000,sanction,eu_financial_sanctions,Fictional Commission,,Orel,Orel,,,,,EU.0000.2,,,,,,,TEST,,,,,,,,,,,,,,1,https://example.test/reg
+d1000000000000000000000000000000,licence,cnb_linked_credit_intermediaries,Fictional Central Bank (FCB),CZ,≈Ωlu≈•ouƒçk√Ω K≈Ø≈à s.r.o.,,CZ,22334455,,,,,,,,,,,,,,2017-01-19,,,,,,,,,,,
+e1000000000000000000000000000000,licence,cnb_exchange_offices,Fictional Central Bank (FCB),CZ,äùastn· SmÏn·rna s.r.o.,,CZ,33445566,,,,,,,,,,Exchange office,,,,,,,,,,,,,,,
+f1000000000000000000000000000000,sanction,eu_financial_sanctions,Fictional Commission,,Rozdel
+eny Holding,Rozdeleny Holding,,,,,EU.0000.3,,,,,,,TEST,,,,,,,,,,,,,,1,https://example.test/reg
+a6000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,LEFT BANKA A.S.,,CZ,,,LEFTCZPPXXX,,,,,,,,,,,,,,true,2023-01-01,2024-12-02,true,Ready for operations,,2025-01-01,,,
+a7000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,VOP LEFT BANKA A.S.,,CZ,,,VLFTCZPPXXX,,,,,,,,,,,,,,true,2023-01-01,,true,Ready for operations,,2025-01-01,2026-09-27,,
+a8000000000000000000000000000000,payment_scheme,epc_scheme_registers,Fictional Payments Council,,SOON LEAVING BANKA A.S.,,CZ,,,SOONCZPPXXX,,,,,,,,,,,,,,true,2023-01-01,2026-11-09,true,Ready for operations,,2025-01-01,,,
+a9000000000000000000000000000000,licence,cnb_banks,Fictional Central Bank (FCB),CZ,Expired Banka a.s.,,CZ,44556677,,,,,,,,,,Bank,,,,1995-01-01,2026-04-24,,,,,,,,,,
+b4000000000000000000000000000000,warning,amf_blacklists,Fictional Markets Authority,FR,Ghost Warning Firm
+c3000000000000000000000000000000,sanction,eu_financial_sanctions,Fictional Commission,,Ghost Sanctioned Holding
+9f000000000000000000000000000000,Ghost Warning Firm,warning,,,Ghost Warning Firm
