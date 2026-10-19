@@ -36,7 +36,7 @@ Run IDs:
   - It treats everything else as a hint.
 - **Money moves only inside a mandate people signed, or after a hold-to-confirm of exactly the text the device shows.**
 - **New account = 2 of 3 independent supplier attestations + 2/2 dual control.** Otherwise there is nothing to approve: the device stays dark.
-- **Everything goes into a witnessed transparency log** that a supervisor verifies offline with code we did not write.
+- **Everything goes into a witnessed transparency log** that a supervisor verifies offline: unmodified upstream Go checks the log signature, our open verifier re-checks every entry, cosignature and decision.
 
 ## Slide 4: Live beats (0:15-2:30; projector = ops console + device camera)
 
@@ -71,11 +71,11 @@ Run IDs:
   - the Trezor Safe 3 in my hand (genuine, certificate chain verified);
   - the executor on AWS eu-central-1 with its IAM walls (agent: explicit deny on the tables, KMS and `/signatures`);
   - the agent VPC with no route out;
-  - KMS Ed25519 log and witness keys, every checkpoint cosigned by two witnesses (one is unmodified upstream litewitness), and S3 Object Lock;
-  - the offline verifier = upstream Go code.
+  - KMS Ed25519 log key and W1 witness key, every checkpoint cosigned by two witnesses (W2 is unmodified upstream litewitness with its own key), and S3 Object Lock;
+  - the offline check: unmodified upstream Go for the log signature, plus our open verifier for entries, cosignatures and decisions.
 - **Simulated, and labelled:**
   - the companies;
-  - the treasury approver (emulator);
+  - the treasury approver (emulator, auto-confirmed by script: a simulated human);
   - the supplier attestation issuers (real cryptography, fictitious organisations);
   - the VoP responder;
   - the humans in the benchmark.

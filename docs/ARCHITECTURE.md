@@ -27,7 +27,7 @@ A new payee account needs both of these:
 - **2-of-3 independent supplier attestations** (SD-JWT VCs bound to the change nonce), or a break-glass path (callback to a contact registered before the request, plus a cooling-off period).
 - **2/2 dual control** on two different devices.
 
-Every input, decision, signature and execution goes into a C2SP-format transparency log. Witnesses cosign it, and a supervisor can verify it offline with **code we did not write** (Go `sumdb/note`). Decisions can also be replayed offline. There is no blockchain and no LLM anywhere in the decision path.
+Every input, decision, signature and execution goes into a C2SP-format transparency log. Witnesses cosign it, and a supervisor can verify it offline with **code we did not write** (Go `sumdb/note`) for the log signature; entries and cosignatures are checked by our open verifier. Decisions can also be replayed offline. There is no blockchain and no LLM anywhere in the decision path.
 
 **One line for the jury:** "Take over the agent, the laptop and the supplier's mailbox, and you still cannot send one koruna to a new account. Afterwards a supervisor can prove that offline."
 
@@ -919,7 +919,7 @@ H0 device facts (WS-C) ─► CONTRACTS v2 freeze ─► render v2 + signer + de
 | 0:15–0:45 | **S1 normal day.** The agent extracts and matches 3 invoices, which are paid under mandate 3; receipt QR; witness tick. The 4th, over the cap, lights the **Safe 3 on camera**. The screen matches the renderer character for character; hold to confirm | Agent (Sonnet), tools λ, Cedar `decide`, `TransactWriteItems`, render v2, signer, checkpoint + W1 |
 | 0:45–1:35 | **S2 lookalike BEC + escalation + exfil.** An `acme-cz.com` email with a hidden PDF injection. The agent says "CFO approved"; the facts panel goes red (DOMAIN, VoP NMTC BLOCK, PSP UNKNOWN). **The device stays dark** (R0): "there is nothing to approve." Then 4 escalation attempts in quick succession: `mandate.write` (Cedar forbid), self-approval (unknown signer), replay (`nonce_reused`), direct DynamoDB/secret (AccessDenied + `simulate-principal-policy`). The exfil email is blocked by egress DLP, and `curl example.com` from the agent VPC times out: "0 bytes" | Facts engine, R0, Gateway/cedarpy, IAM, egress λ, VPC |
 | 1:35–2:30 | **S3 real-domain takeover + deepfake.** DKIM is green; the Polly "CFO" (fictional, labelled synthetic) presses the clerk. **ATT 0/3 is a BLOCK**, so "there is no button". The tripwire reaches the registered contact, who answers "not us", and the change is REJECTED. A 10-second clip of the legitimate path: 2/3 VCs, then cooling, then CHG on Safe 3 + emulator, then ACTIVE | FSM v2, SD-JWT verifier, portal, Scheduler |
-| 2:30–3:20 | **S5 offline audit.** Wi-Fi off; `noteverify` (upstream Go) green; `verify_audit.py` with replay 100% match. Flip one byte: red at `seq N`. Present a fork: W1 returns 409 and a `witness_refusal` leaf appears | Export bundle, verifiers, witnesses |
+| 2:30–3:20 | **S5 offline audit.** Wi-Fi off; `noteverify` (upstream Go) green; `verify_audit.py` with replay 100% match. Flip one byte: red at `seq N`. Present a fork: W1 returns 422 and a `witness_refusal` leaf appears | Export bundle, verifiers, witnesses |
 | 3:20–4:00 | Bench table A0→A3 (money to attacker X → 0, with CIs, including the rubber-stamp column and the in-mandate residual); real-vs-simulated slide; business line: liability shift under the PSR/PSD3 provisional deal [U status], hardware cost per approver, payee-binding network | Bench JSONL |
 
 **Q&A cards:**

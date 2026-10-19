@@ -211,7 +211,7 @@ svg text { font-family: inherit; }
     <!-- offline -->
     <rect class="d-box" x="1098" y="300" width="282" height="104" rx="10"/>
     <text class="d-t" x="1120" y="342">Supervisor, offline</text>
-    <text class="d-s" x="1120" y="376">upstream Go verifier</text>
+    <text class="d-s" x="1120" y="376">upstream Go + our verifier</text>
     <path class="d-arrow" d="M970 480 H1060 V352 H1094" marker-end="url(#ah)"/>
     <text class="d-lbl" x="1098" y="440">checkpoints + export,</text>
     <text class="d-lbl" x="1098" y="466">verified with Wi-Fi off</text>
@@ -292,10 +292,10 @@ svg text { font-family: inherit; }
       <li>Executor on AWS eu-central-1; the agent role is denied tables, KMS, signatures</li>
       <li>Agent VPC with no route out</li>
       <li>KMS Ed25519 log, two witnesses cosign every checkpoint, S3 Object Lock</li>
-      <li>Offline verifier = unmodified upstream Go code</li></ul></div>
+      <li>Offline check: upstream Go (log signature) + our verifier (entries, cosignatures)</li></ul></div>
     <div><h3 class="muted">Simulated, labelled</h3><ul>
       <li>Companies, domains, accounts, inbox</li>
-      <li>Treasury approver on the emulator</li>
+      <li>Treasury approver on the emulator, auto-confirmed (simulated human)</li>
       <li>Supplier attestation issuers (real crypto, fictitious organisations)</li>
       <li>VoP responder; the “CFO” voice (Polly)</li>
       <li>Benchmark humans: a model, not a user study</li></ul></div>

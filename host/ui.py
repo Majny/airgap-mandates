@@ -222,19 +222,23 @@ def tab_audit(st: Any) -> None:
 
 
 def tab_evidence(st: Any) -> None:
-    st.caption("AWS evidence (eu-central-1). Files under demo/evidence/ are captured in rehearsal and labelled so.")
-    files = sorted(Path("demo/evidence").glob("*.json")) if Path("demo/evidence").exists() else []
+    st.caption("AWS evidence (eu-central-1). Files under infra/evidence/ were captured in rehearsal and are labelled so.")
+    ev = Path(__file__).resolve().parent.parent / "infra" / "evidence"
+    files = sorted(f for f in ev.glob("*") if f.suffix in (".json", ".txt")) if ev.exists() else []
     if not files:
         st.info("no evidence captured yet (WS-E probes: simulate-principal-policy, AccessDenied, Object Lock, Flow Logs)")
     for f in files:
-        with st.expander(f.stem):
-            st.json(json.loads(f.read_text()))
+        with st.expander(f.name):
+            if f.suffix == ".json":
+                st.json(json.loads(f.read_text()))
+            else:
+                st.code(f.read_text())
 
 
 def tab_bench(st: Any) -> None:
-    from bench.report import report
     st.caption("Frozen runs only (bench/results/FROZEN.md). Simulated humans are a model of a human, not a user study.")
-    st.markdown(report("bench/results"))
+    # REPORT.md is the frozen page; report("bench/results") would also pull superseded and check-only runs
+    st.markdown((Path(__file__).resolve().parent.parent / "bench" / "results" / "REPORT.md").read_text())
 
 
 def main() -> None:
@@ -263,7 +267,7 @@ def main() -> None:
         st.caption("SYNTHETIC VOICE (Amazon Polly), fictional person: the 'CFO' pressing the clerk")
         st.audio(clip.read_bytes(), format="audio/mpeg")
     if emulator_only():
-        st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 5 attached)</span>',
+        st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 3 attached)</span>',
                     unsafe_allow_html=True)
     tabs = st.tabs(["Activity", "Payee changes", "Approvals", "Receipts", "Audit", "AWS evidence", "Bench"])
     for tab, fn in zip(tabs, (tab_activity, tab_changes, tab_approvals, tab_receipts, tab_audit, tab_evidence,
