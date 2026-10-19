@@ -31,6 +31,8 @@ def decide(policy: str, shown: dict[str, Any], truth: dict[str, Any]) -> bool:
                 return True
         return False
     if shown["kind"] == "change":
+        if shown.get("registry_iban") and _norm(shown.get("iban")) == _norm(shown["registry_iban"]):
+            return True  # the screen shows no change at all (what a lying UI does): nothing looks wrong
         return any(c["vendor_id"] == shown.get("vendor_id") and _norm(c["new_iban"]) == _norm(shown.get("iban"))
                    for c in truth.get("legit_changes", []))
     return False
