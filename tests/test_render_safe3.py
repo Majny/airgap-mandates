@@ -219,6 +219,29 @@ def test_amount_doc_fact_orders_after_dup():
     assert e.value.code == "R0_BLOCK"
 
 
+_MANY = [T.fact("F-VOP", "WARN", "VOP CMTC"), T.fact("F-ATTEST", line="ATT 2/3 ERP BANK"),
+         T.fact("F-PSP", "WARN", "PSP NO VOP"), T.fact("F-BANK", "WARN", "BANK FOREIGN EMI"),
+         T.fact("F-FIRSTSEEN", "WARN", "IBAN NEW 5H")]
+
+
+@pytest.mark.parametrize("iban", [T.NEW_IBAN, T.LONG_IBAN, T.FRAUD_IBAN])
+@pytest.mark.parametrize("profile", [R.PROFILE_SAFE3, R.PROFILE_SAFE5])
+def test_chg_attestation_is_pinned(iban, profile):
+    """ATT k/3 is what the human confirms on a CHG: never folded into +N MORE, even behind 4 WARNs."""
+    ls = R.render_change(**chg_kwargs(facts=_MANY, new_iban=iban, profile=profile)).split("\n")
+    assert "ATT 2/3 ERP BANK" in ls and "+4 MORE 0 BLOCK" in ls and "0 BLOCK 4 WARN" in ls
+    cb = [T.fact("F-CALLBACK", line="CALLBACK OK"), T.fact("F-ATTEST", line="ATT BREAK-GLASS")] + _MANY[2:]
+    ls = R.render_change(**chg_kwargs(facts=cb, new_iban=iban, profile=profile)).split("\n")
+    assert "ATT BREAK-GLASS" in ls and "0 BLOCK 3 WARN" in ls
+    ls = R.render_change(**chg_kwargs(facts=cb[:2], new_iban=T.NEW_IBAN, profile=profile)).split("\n")
+    assert "CALLBACK OK" in ls and "ATT BREAK-GLASS" in ls  # break-glass path, no overflow: both shown
+
+
+def test_pay_overflow_unchanged_by_pinning():
+    ls = R.render_pay(**pay_kwargs(facts=_MANY)).split("\n")
+    assert "ATT 2/3 ERP BANK" not in ls and "+3 MORE 0 BLOCK" in ls
+
+
 # ----------------------------------------------------------------- negative goldens (S11 validator, default profile)
 
 

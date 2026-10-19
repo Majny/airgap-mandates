@@ -1,0 +1,37 @@
+{
+ "active": false,
+ "address": "0x73d0385f4d8e00c5e6504c6030f47bf6212736a8",
+ "ceremony": {
+  "authenticity": "emulator: no Optiga",
+  "bootloader_locked": true,
+  "fw_challenge": "0f4b92c265ec74e1dbc8098c55af5da64da03c73073072c9bea58bed9f357946",
+  "fw_official_match": null,
+  "nonce": "2F42E9E9",
+  "text": "AG1/DEMO ENROLL\nROLE CLERK\nN 2F42E9E9",
+  "transport": "udp:127.0.0.1:21324"
+ },
+ "cert_chain_sha256": null,
+ "derivation_path": "m/44'/60'/0'/0/0",
+ "device": "EMULATOR",
+ "device_model": "T3B1",
+ "enroll_sig": "0xac3b2b05a1b3a242b7cdcd71a544691c677fa4dfdf01d67d3a4b6a943be2b16f5b2d75513e3bf8b85f07de213768036c9026cbda0eae9e2b8e48aa94e7a4b4561b",
+ "enrolled_at": "2026-10-19T13:05:55Z",
+ "firmware_version": "2.12.5",
+ "fw_hash": "ba304ba55fa74775646c32e6655277ca53683147223a2edd54230b64e7146d21",
+ "label": "Clerk FALLBACK (Trezor Safe 3, emulator)",
+ "leaf": {
+  "address": "0x73d0385f4d8e00c5e6504c6030f47bf6212736a8",
+  "cert_chain_sha256": null,
+  "derivation_path": "m/44'/60'/0'/0/0",
+  "device": "EMULATOR",
+  "device_model": "T3B1",
+  "enroll_sig": "0xac3b2b05a1b3a242b7cdcd71a544691c677fa4dfdf01d67d3a4b6a943be2b16f5b2d75513e3bf8b85f07de213768036c9026cbda0eae9e2b8e48aa94e7a4b4561b",
+  "firmware_version": "2.12.5",
+  "fw_hash": "ba304ba55fa74775646c32e6655277ca53683147223a2edd54230b64e7146d21",
+  "label": "Clerk FALLBACK (Trezor Safe 3, emulator)",
+  "role": "clerk"
+ },
+ "pk": "signer#0x73d0385f4d8e00c5e6504c6030f47bf6212736a8",
+ "role": "clerk",
+ "sk": "0"
+}

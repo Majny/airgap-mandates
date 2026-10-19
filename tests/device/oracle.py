@@ -68,11 +68,11 @@ def tenv(*cmds: dict, url: str = CONTROLLER) -> list[dict]:
 
 
 def start_emulator(model: str = "T3B1", version: str = "2.12.5-arm",
-                   mnemonic: str = "all all all all all all all all all all all all") -> None:
+                   mnemonic: str = "all all all all all all all all all all all all", label: str = "EMULATOR") -> None:
     """(Re)start a wiped emulator with a demo seed and screenshot capture on."""
     tenv({"type": "emulator-start", "model": model, "version": version, "wipe": True, "save_screenshots": True},
          {"type": "emulator-setup", "mnemonic": mnemonic, "pin": "", "passphrase_protection": False,
-          "label": "AG DEMO EMU", "needs_backup": False})
+          "label": label, "needs_backup": False})
 
 
 def screenshot() -> bytes:
