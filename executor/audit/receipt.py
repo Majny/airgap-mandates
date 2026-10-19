@@ -191,11 +191,13 @@ def qr_payload(r: dict[str, Any]) -> str:
 
     Why compressed: a full receipt is ~2-3 KB of JSON (entry, tx, a 1-14 hash inclusion proof as hex, a checkpoint
     note with 2-3 signatures, vkeys), while a QR code tops out at 2953 bytes (version 40, EC level L, byte mode).
-    zlib + base64url saves ~30% (hex digests and repeated keys compress; signatures do not), which keeps EC level
-    M up to ~10^5 leaves and level L (fallback) far beyond. Measured (FakeStore log, demo execution leaf + ledger row
+    zlib + base64url saves ~30% (hex digests and repeated keys compress; signatures do not). Synthetic sizes
+    (FakeStore log, demo execution leaf + ledger row
     in the middle of the tree, log + W1 note, no W2): tree size 10 -> proof 4, JSON 2116 B, payload 1436 chars,
     QR v31-M; 100 -> 7, 2322, 1609, v33-M; 1000 -> 10, 2528, 1777, v35-M; 10000 -> 14, 2801, 1993, v38-M.
-    Each extra proof hash adds ~55 chars; a W2 cosignature ~100."""
+    Each extra proof hash adds ~55 chars; a W2 cosignature ~100. Real executor receipts are ~300 chars larger (a
+    30-leaf S1 run: 1745 chars, v35-M), so they reach the version-40 / M limit around 10^4 leaves (sooner with W2)
+    and then fall back to L. Dense codes: show them large; the AGR1 text is a fallback input to verify_audit."""
     return QR_PREFIX + base64.urlsafe_b64encode(zlib.compress(canonical_json(r), 9)).decode("ascii").rstrip("=")
 
 
@@ -231,9 +233,15 @@ def parse_qr_payload(text: str) -> dict[str, Any]:
         obj = json.loads(data.decode("utf-8"), parse_float=_no_float, parse_constant=_no_float)
     except (UnicodeDecodeError, ValueError) as exc:
         raise ValueError(f"payload is not JSON ({exc})") from None
+    except RecursionError:
+        raise ValueError("payload JSON is nested too deeply") from None
     if not isinstance(obj, dict):
         raise ValueError("payload JSON is not an object")
-    if canonical_json(obj) != data:
+    try:
+        canonical = canonical_json(obj)
+    except (RecursionError, TypeError):
+        raise ValueError("payload JSON is nested too deeply or not canonical-encodable") from None
+    if canonical != data:
         raise ValueError("payload JSON is not canonical")
     return obj
 

@@ -165,3 +165,11 @@ def test_missing_segno_is_a_clear_error(r, monkeypatch):
     with pytest.raises(RuntimeError, match="pip install segno"):
         receipt.receipt_qr_png(r)
     assert receipt.parse_qr_payload(receipt.qr_payload(r)) == r  # payload needs no segno
+
+
+def test_deeply_nested_payload_is_a_value_error():
+    deep = b'{"a":' + b"[" * 30_000 + b"]" * 30_000 + b"}"  # under the 64 KiB cap, far past the recursion limit
+    assert len(deep) < receipt.QR_MAX_JSON
+    payload = receipt.QR_PREFIX + base64.urlsafe_b64encode(zlib.compress(deep, 9)).decode().rstrip("=")
+    with pytest.raises(ValueError, match="nested too deeply"):
+        receipt.parse_qr_payload(payload)
