@@ -155,3 +155,23 @@ def test_lambda_adapter(version):
     assert out["statusCode"] == 403 and "caller_not_allowed" in out["body"]
     assert handler.principal_from_arn("arn:aws:sts::1:assumed-role/airgap-vendor-portal/x") == "vendor_portal"
     handler._CTX = None
+
+
+def test_s12_every_decision_leaf_replays():
+    """WS-A side of S12: each decision leaf carries decide_inputs and replays at its policy_hash."""
+    from executor.policy import decide as D
+    from executor.policy import rules
+
+    h = Harness()
+    h.mandate()
+    h.propose(1_000_000)
+    h.propose(1_000_000)  # duplicate -> deny
+    _, r = h.propose(12_500_050, vendor="ven_87654321", no="Z-1")
+    h.submit(r["decision"]["challenge"], h.clerk)  # step-up re-check leaf
+    leaves = [e for e in h.leaves() if e["type"] == "decision"]
+    assert {e["data"]["decision"] for e in leaves} == {"allow", "deny", "challenge"} and len(leaves) == 4
+    for e in leaves:
+        ok, got = D.replay_decision(e, rules.policy_material())
+        assert ok, (e["data"], got)
+    tampered = {**leaves[0], "data": {**leaves[0]["data"], "decision": "deny"}}
+    assert D.replay_decision(tampered, rules.policy_material())[0] is False
