@@ -36,18 +36,13 @@ def enroll_signer(store: Any, address: str, role: str, *, device: str = "EMULATO
     """Test/dev enrolment only (no ceremony, no attestation; labelled); the real one is tools/enroll.py (WS-C).
     Writes the enrolled_signers row and an `enroll` leaf (§7.2) so a full offline verify sees the signer."""
     from executor.config import Settings
-    from executor.store import shims
+    from executor.store import signers
 
     row = {"address": address.lower(), "role": role, "label": label or f"{role} (test key, no ceremony)",
            "device": device, "device_model": "T3T1", "firmware_version": "2.12.5", "cert_chain_sha256": None,
            "fw_hash": None, "derivation_path": "m/44'/60'/0'/0/0", "enroll_sig": "", "active": True,
            "enrolled_at": "2026-10-19T12:00:00Z"}
-    store.put("enrolled_signers", row)
-    data = {k: row[k] for k in ("address", "role", "label", "device", "device_model", "firmware_version",
-                                "cert_chain_sha256", "fw_hash", "derivation_path", "enroll_sig")}
-    settings = settings or Settings(backend="memory")
-    shims.append(shims.make_event("enroll", data, subject_id=row["address"], actor="executor", settings=settings),
-                 store=store, settings=settings)
+    signers.enroll(store, row, settings=settings or Settings(backend="memory"))
 
 
 def seed_demo(store: Any) -> None:

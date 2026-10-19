@@ -413,8 +413,10 @@ def get_challenge(ctx: Context, p: dict, q: dict, body: Any, principal: str | No
 
 
 def _enrolled(ctx: Context, address: str, role: str) -> dict | None:
-    s = ctx.store.get("enrolled_signers", {"address": address})
-    return s if s and s.get("active") and s.get("role") == role else None
+    """Active row for the role whose enroll_seq points at its own enroll leaf ("enrolled before used", online)."""
+    from executor.store import signers
+
+    return signers.enrolled(ctx.store, address, role)
 
 
 def post_signatures(ctx: Context, p: dict, q: dict, body: Any, principal: str | None):
