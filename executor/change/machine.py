@@ -67,8 +67,12 @@ for _s in _NON_TERMINAL:
     EVENT_TRANSITIONS[(_s, E.EXPIRE)] = S.EXPIRED
 
 
-class ForbiddenTransition(Exception):
-    """Raised when a transition outside ALLOWED_TRANSITIONS / EVENT_TRANSITIONS is attempted."""
+class ForbiddenTransition(ApiError):
+    """Raised when a transition outside ALLOWED_TRANSITIONS / EVENT_TRANSITIONS is attempted (409 state_conflict
+    through handler.dispatch, e.g. a callback code for a change that is no longer CALLBACK_PENDING)."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(ErrorCode.STATE_CONFLICT, message)
 
 
 def is_allowed(src: ChangeState, dst: ChangeState) -> bool:
@@ -97,6 +101,8 @@ _DEFAULT_ACTOR: dict[ChangeEvent, str] = {
     E.VC_REVOKED: "executor", E.CLERK_REJECT_SIGNED: "host", E.EXPIRE: "executor", E.COOLING_ELAPSED: "executor",
 }
 _PORTAL_ONLY = frozenset({E.BREAK_GLASS, E.CALLBACK_CONFIRM, E.CALLBACK_DENY, E.TRIPWIRE_NOT_US})
+# Events whose caller (executor.handler) names the authenticated actor in payload["actor"].
+_PAYLOAD_ACTOR = frozenset({E.TRIPWIRE_NOT_US, E.CLERK_REJECT_SIGNED})
 
 
 def _parse(ts: str | None) -> datetime | None:
@@ -305,6 +311,11 @@ def _vc_error(code: str | None) -> str:
     return ErrorCode.ATTESTATION_INSUFFICIENT  # binding_mismatch, vc_revoked, ... (no own ApiError code)
 
 
+def _attest_sk(n: int) -> str:
+    """`attestations` sort key (CONTRACTS §3.1 `vc#<n>`), zero-padded so the natural order is submission order."""
+    return f"vc#{n:06d}"
+
+
 def _record_attestation(change: Change, result: dict[str, Any], vc: str, *, store: Any, settings: Any,
                         now: datetime) -> None:
     """`attestations` row with a salted commitment (commit_nonce private) + `attestation` leaf on the attest log."""
@@ -320,8 +331,8 @@ def _record_attestation(change: Change, result: dict[str, Any], vc: str, *, stor
            "error": result.get("error"), "commitment": commitment, "commit_nonce": commit_nonce.hex(),
            "issuer_jwt_sha256": hashlib.sha256(vc.split("~", 1)[0].encode("utf-8", "replace")).hexdigest(),
            "created_at": iso(now)}
-    n = len(store.query("attestations", ("change_id", cid)))
-    while not store.put_if_absent("attestations", dict(row, n=n + 1), "n"):
+    n = len(store.query("attestations", ("change_id", cid))) + 1
+    while not store.put_if_absent("attestations", dict(row, sk=_attest_sk(n), n=n), "sk"):
         n += 1
     ports.emit(store, settings, AuditEventType.ATTESTATION.value,
                {"change_id": cid, "issuer_class": result.get("issuer_class"), "iss": result.get("iss"),
@@ -346,6 +357,10 @@ def _on_vc(change: Change, payload: dict[str, Any], *, expect: dict[str, Any], a
         raise ApiError(ErrorCode.INVALID_REQUEST, "vc is required")
     revoked = _revoked(settings)
     result = dict(_vc.verify_vc(vc, change, pins=pins, now=now, revoked=revoked))
+    payload["attest_result"] = {  # AttestResult for the POST /changes/{id}/attestations response
+        "ok": bool(result.get("ok")), "issuer_class": result.get("issuer_class"), "iss": result.get("iss"),
+        "error": result.get("error"), "disclosed": dict(result.get("disclosed") or {}),
+        "vc_sha256": str(result.get("vc_sha256") or "")}
     _record_attestation(change, result, vc, store=store, settings=settings, now=now)
     detail = {"issuer_class": result.get("issuer_class"), "vc_sha256": result.get("vc_sha256"),
               "error": result.get("error")}
@@ -454,9 +469,13 @@ def transition(change_id: str, event: ChangeEvent, *, payload: dict[str, Any] | 
                settings: Any, now: datetime, actor: str | None = None) -> Change:
     """Apply one guarded event (CONTRACTS §6.1); appends state_transition (and change_event) leaves.
     Raises ForbiddenTransition / ApiError(state_conflict | attestation_insufficient | ...).
-    `actor` (optional) is the authenticated caller role; portal-only events refuse any other role."""
+    `actor` (optional) is the authenticated caller role; portal-only events refuse any other role. For
+    TRIPWIRE_NOT_US / CLERK_REJECT_SIGNED the handler passes it as payload["actor"]. VC_RECEIVED sets
+    payload["attest_result"] (AttestResult) for the response, also when the VC is rejected."""
     event = E(event)
-    payload = payload or {}
+    payload = payload if payload is not None else {}
+    if actor is None and event in _PAYLOAD_ACTOR and isinstance(payload.get("actor"), str):
+        actor = payload["actor"]
     if actor is not None and event in _PORTAL_ONLY and actor != "vendor_portal":
         raise ApiError(ErrorCode.CALLER_NOT_ALLOWED, f"{event.value} is vendor-portal only")
     actor = actor or _DEFAULT_ACTOR.get(event, "executor")
@@ -472,7 +491,10 @@ def transition(change_id: str, event: ChangeEvent, *, payload: dict[str, Any] | 
     guard = _GUARDS.get(event)
     if guard is not None:
         return guard(change, payload, expect=expect, actor=actor, store=store, settings=settings, now=now)
-    reason = str(payload.get("reason") or event.value.lower())[:200]
+    if event is E.CLERK_REJECT_SIGNED and not payload.get("reason") and payload.get("nonce"):
+        reason = f"clerk signed CHG_REJECT {payload['nonce']}"
+    else:
+        reason = str(payload.get("reason") or event.value.lower())[:200]
     return _commit(change, dst, event, reason=reason, actor=actor, expect=expect, store=store, settings=settings,
                    now=now)
 
@@ -569,7 +591,8 @@ def _activate(change: Change, *, expect: dict[str, Any], store: Any, settings: A
     meta = store.get("registry", {"vendor_id": META_KEY})
     version = int((meta or {}).get("registry_version", 0))
     active = [[r["vendor_id"], change["new_iban"] if r["vendor_id"] == vendor["vendor_id"] else r["iban"]]
-              for r in store.scan("registry") if r["vendor_id"] != META_KEY and r.get("iban")]
+              for r in store.scan("registry") if r["vendor_id"] != META_KEY and r.get("iban")
+              and r.get("status", "ACTIVE") == "ACTIVE"]  # same pairs as policy.mandate.registry_snapshot
     registry_hash = hashlib.sha256(canonical_json(sorted(active))).hexdigest()
     reason = "dual control complete: registry updated"
     reg_set: dict[str, Any] = {"iban": change["new_iban"], "iban_history": history}

@@ -95,7 +95,9 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     state: {"payee": registry row (required), "email": inbox row or None (incl. the ingest `dkim` verdict),
     "domain_first_seen": iso str|None (inbox by_domain), "change": change row (for F-ATTEST / F-CALLBACK),
     "attest_results": [AttestResult], "tool_log": [tool_call rows], "mandate", "extra_facts": [Fact] (WS-A:
-    F-MANDATE / F-DUP / F-SPLIT / F-Z), "snapshots": {name: path} overrides, "data_dir"}.
+    F-MANDATE / F-DUP / F-SPLIT / F-Z), "snapshots": {name: path} overrides, "data_dir",
+    "email_raw": raw .eml bytes|None (inbox.email_state; for a proposal its presence enables F-AMOUNT-DOC, and None
+    blocks)}.
     Returns FactSet (F facts sorted by FACT_ORDER, then H facts; facts_digest over F facts only; prov on every
     snapshot-derived fact)."""
     from executor.facts import anom, attest_fact, callback, firstseen, iban_bank, psp, sanction, vat, vop, warnlist
@@ -146,6 +148,10 @@ def compute(subject: dict[str, Any], state: dict[str, Any], now: datetime) -> Fa
     add(anom.anom_fact(subject, state.get("tool_log") or [], payee=payee, mandate=state.get("mandate"), now=now),
         "toollog")
     add(_translit_fact(name))
+    if kind == "proposal" and "email_raw" in state:
+        from executor.facts.amount_doc import amount_doc_fact
+
+        add(amount_doc_fact(subject.get("invoice") or {}, state["email_raw"], vendor_ico=ico))
     if kind == "proposal":
         from executor.policy.facts_wsa import wsa_facts  # F-MANDATE, F-DUP, F-SPLIT, F-Z (WS-A)
 
