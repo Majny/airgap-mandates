@@ -235,3 +235,171 @@ def sign_challenge(nonce: str, role: str, *, executor_url: str | None = None, tr
         })
         r.raise_for_status()
         return r.json()
+
+
+# --------------------------------------------------------------------------- demo harness and fallback kit
+
+EMULATOR_DEBUG = "127.0.0.1:21325"  # trezor-user-env debuglink
+BANNER_EMULATOR = "*** FALLBACK MODE: CLERK SIGNS ON THE EMULATOR (T3B1), NOT THE PHYSICAL DEVICE ***"
+
+
+def emulator_only(settings: Any = None) -> bool:
+    """The one switch: AIRGAP_TREZOR_PATH=udp:... puts the clerk on the emulator (fallback kit)."""
+    if settings is None:
+        from executor.config import Settings
+
+        settings = Settings.from_env()
+    return bool(settings.trezor_path and str(settings.trezor_path).startswith("udp:"))
+
+
+class AutoConfirm:
+    """Simulated human for EMULATOR signers only (labelled as such): pages through the message at a readable pace
+    via debuglink, then holds CONFIRM. Never used with a physical device (debuglink does not exist there)."""
+
+    def __init__(self, debug: str = EMULATOR_DEBUG, *, page_s: float = 1.2, hold_ms: int = 1500):
+        self.debug, self.page_s, self.hold_ms = debug, page_s, hold_ms
+
+    def start(self) -> threading.Thread:
+        t = threading.Thread(target=self._run, name="emulator-autoconfirm", daemon=True)
+        t.start()
+        return t
+
+    def _run(self) -> None:
+        import time
+
+        from trezorlib import models
+        from trezorlib.debuglink import DebugLink
+        from trezorlib.transport.udp import UdpTransport
+
+        d = DebugLink(UdpTransport(self.debug))
+        d.model = models.T3B1
+        try:
+            self._drive(d, time)
+        finally:
+            d.close()
+
+    def _drive(self, d: Any, time: Any) -> None:
+        deadline = time.monotonic() + 60
+        while d.read_layout(wait=False).title() not in ("Signing address", "Confirm message"):
+            if time.monotonic() > deadline:  # the sign request never reached the emulator
+                return
+            time.sleep(0.2)
+        for _ in range(40):
+            lay = d.read_layout(wait=True)
+            comps = lay.all_components()
+            time.sleep(self.page_s)
+            if "HoldToConfirm" in comps and lay.active_page() >= lay.page_count() - 1:
+                # Write the hold without the trailing GetState: its reply can arrive after the workflow ends and
+                # would then be read by the next debuglink session, shifting every later exchange by one.
+                from trezorlib import messages
+
+                d._write(messages.DebugLinkDecision(physical_button=messages.DebugPhysicalButton.RIGHT_BTN,
+                                                    hold_ms=self.hold_ms + 200))
+                return
+            d.press_right(wait=True)
+
+
+class DeviceSigner:
+    """eth_account-like signer backed by a Trezor, so executor.e2e.run() and WS-F scenes can sign on hardware:
+    `.address` and `.sign_message(encode_defunct(text=...)).signature`."""
+
+    def __init__(self, driver: TrezorDriver, key_ref: str, *, auto_confirm: bool = False,
+                 log: Any = print, name: str = ""):
+        if auto_confirm and not driver.is_emulator:
+            raise ValueError("auto-confirm is for EMULATOR signers only")
+        self.driver, self.key_ref, self.auto_confirm, self.log = driver, key_ref, auto_confirm, log
+        self.name = name or key_ref
+        self.address = driver.get_address(key_ref)
+        self.device = driver.device_label
+        self._sigs: dict[str, str] = {}
+
+    def sign_message(self, signable: Any) -> Any:
+        from types import SimpleNamespace
+
+        text = bytes(signable.body).decode("ascii")
+        if text in self._sigs:  # a replay re-sends the captured signature; the human is not asked again
+            self.log(f"--> {self.name}: replaying the captured signature (no device interaction)")
+            return SimpleNamespace(signature=bytes.fromhex(self._sigs[text][2:]))
+        where = f"{self.driver.info()['model']} {self.device}"
+        self.log(f"--> {self.name} on {where}: " + ("auto-confirm (simulated human)" if self.auto_confirm
+                                                     else "read every page, then HOLD the right button"))
+        if self.auto_confirm:
+            AutoConfirm().start()
+        _, sig = self.driver.sign_text(text, self.key_ref)
+        self._sigs[text] = sig
+        return SimpleNamespace(signature=bytes.fromhex(sig[2:]))
+
+
+def demo_signers(*, settings: Any = None, auto_treasury: bool = True, auto_clerk: bool | None = None,
+                 log: Any = print) -> tuple[DeviceSigner, DeviceSigner]:
+    """(clerk, treasury) for the demo. Default: physical Safe 3 over USB = clerk, T3B1 emulator = treasury.
+    Fallback (AIRGAP_TREZOR_PATH=udp:...): both on the emulator, clerk path m/.../0, treasury m/.../1."""
+    fallback = emulator_only(settings)
+    emu = TrezorDriver(EMULATOR_PATH)
+    clerk_drv = emu if fallback else TrezorDriver(USB)
+    if auto_clerk is None:
+        auto_clerk = fallback
+    if fallback:
+        log(BANNER_EMULATOR)
+    clerk = DeviceSigner(clerk_drv, "clerk", auto_confirm=auto_clerk, log=log, name="CLERK")
+    treasury = DeviceSigner(emu, "treasury", auto_confirm=auto_treasury, log=log, name="TREASURY")
+    return clerk, treasury
+
+
+def run_s1(*, auto_treasury: bool = True, auto_clerk: bool | None = None) -> dict:
+    """Demo beat S1 in-process (memory backend, development/rehearsal) with real device signatures."""
+    from datetime import datetime, timezone
+
+    from executor import e2e, handler
+    from executor.config import Settings
+    from executor.store import seed
+    from executor.store.memory import MemoryStore
+
+    clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
+    # Same setup as executor.e2e.in_process(), with device addresses enrolled instead of software keys.
+    s = Settings(backend="memory", data_dir=seed.dev_data_dir())
+    ctx = handler.Context(s, MemoryStore(s))
+    seed.seed_registry(ctx.store)
+    seed.enroll_signer(ctx.store, clerk.address, "clerk", device=clerk.device, label=f"clerk ({clerk.device})",
+                       settings=s)
+    seed.enroll_signer(ctx.store, treasury.address, "treasury", device=treasury.device,
+                       label=f"treasury ({treasury.device})", settings=s)
+    print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
+    call = lambda m, p, b, who: handler.dispatch(m, p, None, b, principal=who, ctx=ctx)
+    return e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc))
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+
+    ap = argparse.ArgumentParser(description="Device signer: demo S1 with hardware, or sign one challenge.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s1 = sub.add_parser("s1", help="run demo beat S1 in-process with real device signatures (rehearsal)")
+    s1.add_argument("--manual-treasury", action="store_true", help="operate the treasury emulator by hand")
+    s1.add_argument("--manual-clerk", action="store_true", help="fallback mode: operate the clerk emulator by hand")
+    sc = sub.add_parser("sign", help="GET /challenges/{nonce}, sign on the device, POST /signatures")
+    sc.add_argument("nonce")
+    sc.add_argument("role", choices=sorted(ROLE_PATHS))
+    sc.add_argument("--url", default=None)
+    sc.add_argument("--transport", default=None)
+    sub.add_parser("info", help="show the connected devices and the mode")
+    a = ap.parse_args(argv)
+    logging.basicConfig(level=logging.WARNING)
+    if a.cmd == "s1":
+        run_s1(auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None)
+        print("\nS1 WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
+    elif a.cmd == "sign":
+        print(json.dumps(sign_challenge(a.nonce, a.role, executor_url=a.url, transport=a.transport), indent=1))
+    else:
+        print("mode:", "FALLBACK (emulator clerk)" if emulator_only() else "physical clerk over USB")
+        for p in (USB, EMULATOR_PATH):
+            try:
+                print(json.dumps(TrezorDriver(p).info()))
+            except Exception as e:
+                print(f"{p}: not available ({type(e).__name__}: {e})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

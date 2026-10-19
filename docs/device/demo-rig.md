@@ -33,9 +33,25 @@ audience must be able to read the 16-18 character lines on the projector and see
 ## Fallbacks
 - Physical device not enumerating: close Trezor Suite (it holds the USB interface), re-plug, check the cable
   carries data (`.venv/bin/trezorctl list` must print `webusb:...`). No Bridge is needed.
-- Still failing: switch the clerk to the emulator (`AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324`); the treasury
-  emulator screen goes on the projector via the trezor-user-env dashboard (http://127.0.0.1:9001), labelled EMULATOR.
+- **Fallback kit (one switch):** `AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324` moves the clerk onto the T3B1 emulator
+  (path `m/44'/60'/0'/0/0`; treasury stays on `.../1`). Everything that signs prints
+  `*** FALLBACK MODE: CLERK SIGNS ON THE EMULATOR (T3B1), NOT THE PHYSICAL DEVICE ***`, the emulator homescreen
+  reads `EMULATOR`, enrolment marks it `device = EMULATOR`, and emulator signers auto-confirm only as a labelled
+  "simulated human" (debuglink pages through at 1.2 s per page, then holds). The emulator screen goes on the
+  projector from the trezor-user-env dashboard (http://127.0.0.1:9001). The `prod` profile refuses EMULATOR keys.
+  Fallback clerk address `0x73d0385f4d8e00c5e6504c6030f47bf6212736a8` (demo seed), so it must be enrolled
+  (`python -m tools.enroll clerk --transport udp:127.0.0.1:21324`) before the AWS demo can use it.
 - Last resort: the pre-recorded video of the same beat (WS-F owns the fallback video).
+
+## Rehearsal commands
+```
+tests/device/tenv.sh                                   # emulator up (treasury, and clerk in fallback)
+.venv/bin/python -m host.signer info                   # which devices are connected, which mode
+.venv/bin/python -m host.signer s1                     # S1 in-process: physical clerk holds twice (MANDATE, PAY)
+AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324 .venv/bin/python -m host.signer s1   # fallback: emulator only, auto
+.venv/bin/python -m host.signer sign <NONCE> clerk --url $AIRGAP_EXECUTOR_URL  # one challenge on a live executor
+```
+The replay step of S1 re-sends the captured signature; the human is not asked to sign twice.
 
 ## Checklist (T-30 min)
 - [ ] Device charged/plugged, unlocked (PIN), on the homescreen; auto-lock is 10 min, so unlock again just before.
