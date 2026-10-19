@@ -126,6 +126,13 @@ def tick(log_id: str = "audit", *, store: Any, settings: Any) -> str | None:
     return cp.make_checkpoint(log_id, store=store, settings=settings)
 
 
+def anchor(log_id: str = "audit", *, store: Any, settings: Any) -> dict[str, Any] | None:
+    """Scheduler entry (every AIRGAP_ANCHOR_INTERVAL_SECONDS): S3 Object Lock copy of the latest checkpoint."""
+    from executor.audit import anchor as anchor_mod
+
+    return anchor_mod.anchor(log_id, store=store, settings=settings)
+
+
 def leaves(log_id: str, from_seq: int = 0, *, store: Any) -> list[dict[str, Any]]:
     """Stored leaf items (sorted by seq), excluding the head item."""
     rows = store.query("audit", ("log_id", log_id))
