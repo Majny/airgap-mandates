@@ -541,8 +541,10 @@ def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = Tru
         raise RuntimeError(f"agent beat produced no proposals: {agent.get('error') or agent.get('final')}")
     challenged = [pr for pr in props if pr.get("decision") == "challenge"]
     if with_agent and not challenged:
-        raise RuntimeError("the agent produced no over-cap challenge: is this checkout's data/emails/manifest.json the "
-                           "deployed one (09_delta_invoice_overcap.eml, scenario overcap_invoice)? make preflight")
+        print(f"agent final message: {(agent or {}).get('final')}")
+        raise RuntimeError("the agent produced no over-cap challenge (its final message is above): check this "
+                           "checkout's data/emails/manifest.json is the deployed one (make preflight) and that the "
+                           "over-cap invoice is due (the agent pays only due invoices)")
     if with_agent and vendor_id is None and len({pr.get("vendor_id") for pr in challenged}) == 1:
         vendor_id = challenged[0]["vendor_id"]  # step up exactly what the agent could not pay
     st, led = call("GET", "/ledger", None, "host")
