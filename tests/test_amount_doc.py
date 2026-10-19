@@ -39,18 +39,9 @@ def _invoice(manifest_row: dict) -> tuple[dict, bytes]:
     return {**inv, "invoice_ref": _attachment(raw)["doc_id"], "reason_code": "DUE"}, raw
 
 
-# The fixture ISDOCs use <PayableAmount currency="CZK">, <DueDate> and <Supplier><ICO>; executor.docs.extract (WS-E)
-# reads only <PayableAmount>, <LocalCurrencyCode>, <PaymentDueDate>, <AccountingSupplierParty>..<ID>. Until WS-E
-# widens those regexes the fixtures have no machine-readable amount and F-AMOUNT-DOC (correctly) fails closed.
-_FIXTURE_READABLE = extract.extract_draft(_attachment(_raw("01_acme_invoice_legit.eml")))["fields"]["amount_minor"] \
-    is not None
-needs_extractor = pytest.mark.xfail(not _FIXTURE_READABLE, strict=True,
-                                    reason="WS-E extract.py does not parse the fixture ISDOC dialect yet")
-
 LEGIT = [r for r in MANIFEST if r["scenario"] == "legit_invoice"]
 
 
-@needs_extractor
 @pytest.mark.parametrize("row", LEGIT, ids=[r["file"] for r in LEGIT])
 def test_legit_fixtures_info(row):
     inv, raw = _invoice(row)
@@ -73,10 +64,7 @@ def test_fixture_06_injection():
     row = next(r for r in MANIFEST if r["file"] == "06_pdf_injection.eml")
     inv, raw = _invoice(row)
     f = amount_doc_fact(inv, raw, vendor_ico="87654321")
-    if _FIXTURE_READABLE:
-        assert (f["severity"], f["display_line"]) == ("INFO", "AMOUNT OK DOC")
-    else:
-        assert f["severity"] == "BLOCK" and f["evidence"]["mismatched"] == "T-DOC-MISSING"
+    assert (f["severity"], f["display_line"]) == ("INFO", "AMOUNT OK DOC")
 
 
 # ---------------------------------------------------------------- synthetic ISDOC in the extract.py dialect
