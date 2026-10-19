@@ -54,7 +54,7 @@ def _sig(nonce, purpose, role, addr, subject_id):
 def demo_events(n_payments: int = 2) -> list[dict]:
     """A plausible event mix for a fictitious company (enrolment, 2/2 mandate, payments, payee change)."""
     enroll = {"label": "test", "device_model": "Safe 5", "firmware_version": "2.8.0", "cert_chain_sha256": H,
-              "fw_hash": H, "enroll_sig": "0x" + "22" * 65}
+              "fw_hash": H, "enroll_sig": "0x" + "22" * 65, "active": True}
     evs = [_ev("enroll", {"address": CLERK, "role": "clerk", "device": "GENUINE", "derivation_path": "m/44'/60'/0'/0/0",
                           **enroll}, actor="tools"),
            _ev("enroll", {"address": TREASURY, "role": "treasury", "device": "EMULATOR",

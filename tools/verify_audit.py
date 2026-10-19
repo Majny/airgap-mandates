@@ -367,8 +367,10 @@ def _signed_text(d: dict[str, Any], challenge: dict[str, Any] | None) -> str | N
 
 
 def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, Any]]], ctx: _Ctx) -> None:
-    enrolled: dict[str, tuple[str, int]] = {}  # address -> latest (role, seq) so far: a re-enrolment supersedes
-    enroll_leaves: set[tuple[str, Any, int]] = set()  # every (address, role, seq): an address may be enrolled twice
+    # (address, role) -> latest enroll leaf so far: (seq, active, device). A later enroll leaf supersedes the earlier
+    # one; deactivation is an enroll leaf with active=false (CONTRACTS §7.2). Missing `active` (logs written before
+    # the field existed) counts as active and is noted.
+    enrolled: dict[tuple[str, Any], tuple[int, bool, Any]] = {}
     challenges: dict[str, tuple[int, dict[str, Any]]] = {}
     used: dict[str, int] = {}
     chg_signers: dict[str, dict[str, int]] = {}
@@ -376,8 +378,12 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
     for seq, ev in events:
         t, d = ev.get("type"), ev.get("data") or {}
         if t == "enroll":
-            enrolled[str(d.get("address", "")).lower()] = (d.get("role"), seq)
-            enroll_leaves.add((str(d.get("address", "")).lower(), d.get("role"), seq))
+            if "active" not in d:
+                ctx.count("enroll_active_missing")
+            elif not isinstance(d["active"], bool):
+                ctx.bad(f"seq {seq}: enroll leaf active is not a boolean", seq)
+            enrolled[(str(d.get("address", "")).lower(), d.get("role"))] = (seq, d.get("active", True) is not False,
+                                                                           d.get("device"))
         elif t == "challenge":
             challenges[d.get("nonce")] = (seq, d)
         elif t == "signature" and d.get("accepted"):
@@ -390,12 +396,15 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
                 ctx.bad(f"seq {seq}: nonce {nonce} accepted twice (first at seq {used[nonce]})", seq)
             used[nonce] = seq
             if d.get("role") in _BANK_ROLES:
-                e = enrolled.get(addr)
-                if e is None:
-                    ctx.bad(f"seq {seq}: accepted signature from {addr or 'no address'}, not enrolled before it", seq)
-                elif e[0] != d.get("role"):
-                    ctx.bad(f"seq {seq}: signer {addr} enrolled as {e[0]} (seq {e[1]}) but signed as {d.get('role')}",
+                e = enrolled.get((addr, d.get("role")))
+                other = sorted(str(r) for (a, r) in enrolled if a == addr and r != d.get("role"))
+                if e is None and other:
+                    ctx.bad(f"seq {seq}: signer {addr} enrolled as {', '.join(other)} but signed as {d.get('role')}",
                             seq)
+                elif e is None:
+                    ctx.bad(f"seq {seq}: accepted signature from {addr or 'no address'}, not enrolled before it", seq)
+                elif not e[1]:
+                    ctx.bad(f"seq {seq}: signer {addr} ({d.get('role')}) deactivated by enroll leaf seq {e[0]}", seq)
                 else:
                     ctx.count("signers_enrolled")
             ch = challenges.get(nonce)
@@ -436,11 +445,23 @@ def _check_signatures(bundle: dict[str, Any], events: list[tuple[int, dict[str, 
         ctx.note(f"re-render + signer recovery SKIPPED for {ctx.checked['rerender_unavailable']} signatures: the "
                  "bundle does not carry the signed text or challenge params")
 
-    for a in bundle.get("approvers") or []:
-        if (str(a.get("address", "")).lower(), a.get("role"), a.get("enroll_seq")) not in enroll_leaves:
-            ctx.bad(f"approver {a.get('address')}: does not match an enroll leaf (role/enroll_seq)")
+    if ctx.checked.get("enroll_active_missing"):
+        ctx.note(f"{ctx.checked['enroll_active_missing']} enroll leaves carry no `active` field: counted as active")
+    rows: set[tuple[str, Any]] = set()
+    for a in bundle.get("approvers") or []:  # one row per (address, role): its latest enroll leaf
+        key = (str(a.get("address", "")).lower(), a.get("role"))
+        e = enrolled.get(key)
+        if key in rows:
+            ctx.bad(f"approver {a.get('address')} ({a.get('role')}): listed twice")
+        elif e is None or e[0] != a.get("enroll_seq") or e[2] != a.get("device") or \
+                ("active" in a and a["active"] is not e[1]):
+            ctx.bad(f"approver {a.get('address')}: does not match its latest enroll leaf (role/enroll_seq/device/active)")
         else:
             ctx.count("approvers")
+        rows.add(key)
+    if "approvers" in bundle:
+        for addr, role in sorted(set(enrolled) - rows, key=str):
+            ctx.bad(f"approver {addr} ({role}): enrolled at seq {enrolled[(addr, role)][0]} but missing from approvers")
 
     mandates: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     for seq, ev in events:
