@@ -15,7 +15,7 @@ Run IDs:
 
 ## Slide 1: Hook (0:00-0:15)
 
-- **Disclosure (first line, said out loud):** "Everything in this repo was built since 12:00 yesterday. The `hackathon-start` tag is an empty commit."
+- **Disclosure (first line, said out loud):** "Before the kickoff we had only a written plan, outside the repo, no code. Everything you see was built since 12:00 yesterday; the `hackathon-start` tag is an empty commit."
 - **Title:** *This agent is compromised right now. It still can't move a koruna.*
 - **Sub:** AirGap Mandates: hardware-signed payment mandates for back-office AI agents.
 
@@ -44,7 +44,7 @@ Run IDs:
 |---|---|---|
 | 0:15-0:45 | **S1 normal day** | invoices paid under the mandate; the over-cap one lights the Trezor Safe 3 (`AG1/DEMO PAY ...`); hold to confirm; receipt QR; witness tick |
 | 0:45-1:35 | **S2 lookalike BEC + escalation + exfil** | facts go red, **the device stays dark** ("nothing to approve"); `mandate.write`, self-approval and replay are refused; exfil is blocked |
-| 1:35-2:30 | **S3 real-domain takeover + deepfake CFO** | DKIM green, **ATT 0/3 = BLOCK, there is no button**; tripwire answer "not us" means REJECTED; 10 s of the legitimate path: 2/3 attestations, cooling-off, clerk + treasury, ACTIVE |
+| 1:35-2:30 | **S3 real-domain takeover + synthetic-voice "CFO"** | DKIM green, **ATT 0/3 = BLOCK, there is no button**, while a 12 s clip plays the "CFO" demanding approval (labelled: *synthetic voice, Amazon Polly, fictional person*; `demo/assets/synthetic_cfo_call.mp3`, in the UI's S3 beat); tripwire answer "not us" means REJECTED; 10 s of the legitimate path: 2/3 attestations, cooling-off, clerk + treasury, ACTIVE |
 
 ## Slide 5: Numbers (3:20-3:50; S5 offline audit runs 2:30-3:20 without slides)
 
