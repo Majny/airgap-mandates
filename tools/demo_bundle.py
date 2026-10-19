@@ -284,6 +284,9 @@ def main(argv: list[str] | None = None) -> int:
             get, trust = _aws_reader(a.from_aws, role=a.role, region=a.region, origin=a.origin)
             if a.w2_vkey:
                 trust["w2"] = a.w2_vkey
+            else:
+                print("WARN: no W2 vkey pinned (--w2-vkey / $AIRGAP_W2_VKEY): W2 cosignatures stay unchecked, "
+                      "so `--quorum log,w1,w2` will fail", file=sys.stderr)
             sealed = build_from_api(get, trust, source=a.from_aws)
         except ValueError as exc:
             print(f"CANNOT SEAL FROM AWS: {exc}")
