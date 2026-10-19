@@ -1,12 +1,12 @@
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=deltastavby.cz;
  i=@deltastavby.cz; q=dns/txt; s=demo2026; t=1791790800; h=from : to :
  subject : date : message-id : mime-version : content-type;
- bh=2BBOu9V7qirzUAKmct/oAy0e1HHrylWvnlELv0m/XdM=;
- b=bdN1a9a0USciuvMoMlSIDo5rNi1Je+MMvB1Djmz4NFhjQhlncK9t+HtQ62x1jmvEnFnXX
- 4YgSBuQXhspdubUYR+EW+euPw4ws6GIWQxP2jmNwxH013BC1VUW344wjV2xRDQi7aqC94k3
- KRS6dbLszmDrnk89xthF3VCE7d5QsNh2A1/K7mj6AbCup5goKUZybbwbkaDqUr4jITE4nhv
- FojWCETIH19YjvPhjsQHs1N5z1Td+f77z+72Yew8reWLr0ihkS0WwPSFxJTbqv0Yyqi2/bG
- xsauPOUmSeNNgEaL0lcKI5p6me1b2yCMTWHjZNuS0nFibYWUpzF3lLa9at4w==
+ bh=rPo3n6VoHH5CzHufuDmjZGjUnJZFYuOOIUr+7OoLZTQ=;
+ b=USrPyIHMzbktX3VzQPTW2O+WVcZHTcnPBU0MGY9VrZWU/xh796jqILusuK1SQW8nki7us
+ E7b2LCv+LVX9b4GzwNjUcfW5oPFwbjJMg2L/s0OK6MbvjHVgZQpzR6rJjaWkh6UFlP7oTCV
+ Y3IuzqgFEIv5HXG9Q5zH8hnzAbpvdZkARqEaJTXWk+WJ117ZPLvjkeB0eHKSRMW/0J6zLxC
+ bWah+zUQZ/QasH+RUtJ+oZXPDMke1xnJxCVOAwRHU4XaTqVNNtbNsX6FGp/fXD740Z3eTID
+ 0UPxDQEwPpsS8bYu/OxtaZ5EcPcFxh1J3Yxz4wC12EYY99usxnF8RWqIg2zQ==
 From: Tomas Kral <fakturace@deltastavby.cz>
 To: Accounts Payable <ap@buyer-demo.example>
 Subject: Invoice DS-2026-0777
@@ -25,7 +25,7 @@ Dear colleagues,
 please find attached invoice DS-2026-0777 for construction works, phase 2 (fictitious).
 
 Amount: CZK 125 000.50
-Due date: 2026-10-19
+Due date: 2026-10-18
 Variable symbol: 20260777
 Account: CZ5201000000007788990011 (as registered)
 
@@ -43,7 +43,7 @@ Content-Transfer-Encoding: 7bit
   <!-- ISDOC-like FICTITIOUS demo invoice (AirGap Mandates fixture) -->
   <ID>DS-2026-0777</ID>
   <IssueDate>2026-10-12</IssueDate>
-  <DueDate>2026-10-19</DueDate>
+  <DueDate>2026-10-18</DueDate>
   <Supplier><Name>Delta Stavby s.r.o.</Name><ICO>77665546</ICO></Supplier>
   <Line><Description>Construction works, phase 2 (fictitious)</Description></Line>
   <PayableAmount currency="CZK">125000.50</PayableAmount>

@@ -57,7 +57,7 @@ INVOICES: dict[str, dict[str, Any]] = {
                          "item": "Printing of product leaflets"},
     # S1 step-up: over the 80000 CZK per-payment cap, from a vendor with no other payment that day (no F-SPLIT carry)
     "delta_ds-2026-0777": {"vendor": "delta", "invoice_no": "DS-2026-0777", "amount_minor": 12500050,
-                           "vs": "20260777", "issue_date": "2026-10-12", "due_date": "2026-10-19",
+                           "vs": "20260777", "issue_date": "2026-10-12", "due_date": "2026-10-18",
                            "item": "Construction works, phase 2 (fictitious)"},
     "beta_bs-2026-1203": {"vendor": "beta", "invoice_no": "BS-2026/1203", "amount_minor": 895400,
                           "vs": "20261203", "issue_date": "2026-10-09", "due_date": "2026-10-23",
