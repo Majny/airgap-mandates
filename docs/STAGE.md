@@ -19,30 +19,36 @@ export AWS_PROFILE=hackathon
 
 ## T-60 min: reset routine (Tue 11:00, after the 06:00 policy freeze)
 
-1. AWS owner: `python -m infra.reset_state --yes` (wipes 7 tables, seeds registry + `data/enrollment.json`
-   signers with their `enroll` leaves, first checkpoint). Nobody else resets.
-2. Re-seal the stage bundle once the freeze build is deployed: `make demo-bundle` (refuses unless green), then
-   `make offline-demo` once while online (builds `noteverify`).
-3. Device operator: Safe 3 auto-lock to max (Settings -> Auto-lock), short data cable seated and taped, no hub.
-4. Laptop: `tests/device/tenv.sh` (T3B1 emulator = treasury, homescreen reads `EMULATOR`).
-5. `make preflight` -> **PREFLIGHT GREEN**. Fix any FAIL row with the recovery table below. Re-run at T-10 min.
-6. Camera rig per `docs/device/demo-rig.md` (phone over the Safe 3, mirrored by cable, exposure locked low).
+1. AWS owner: `make demo-reset` (= `python -m infra.reset_state --yes`; wipes 7 tables, seeds registry +
+   `data/enrollment.json` signers with their `enroll` leaves, first checkpoint; ~72 s). Add `--fallback-clerk` only
+   if the fallback switch is decided before the demo. Then `python -m infra.load_inbox --url $API` (8 emails, 5 s).
+   Nobody else resets.
+2. **While online:** `make .local/bin/noteverify` (Go build; the offline beat cannot build it with Wi-Fi off).
+3. Re-seal the stage bundle once the freeze build is deployed: `make demo-bundle` (refuses unless green), then
+   `make offline-demo` once to see ALL PASS.
+4. Device operator: Safe 3 auto-lock to max (Settings -> Auto-lock), short data cable seated and taped, no hub.
+5. Laptop: `tests/device/tenv.sh` (T3B1 emulator = treasury, homescreen reads `EMULATOR`).
+6. `make preflight` -> **PREFLIGHT GREEN**. Fix any FAIL row with the recovery table below. Re-run at T-10 min.
+7. Camera rig per `docs/device/demo-rig.md` (phone over the Safe 3, mirrored by cable, exposure locked low).
 
 ## Beats
+
+Wall times are measured (WS-E dress rehearsal #1 on AWS with software keys; WS-C device runs). Human holds add
+~20 s per device prompt (4 pages read + 1 s hold; measured 11-24 s on the physical Safe 3).
 
 | Time | Beat | Command (laptop driver) | Device operator | Notes |
 |---|---|---|---|---|
 | 0:00-0:15 | Hook + disclosure | - | - | "This agent is compromised right now. It still can't move a koruna." |
-| 0:15-0:45 | **S1 normal day** | `.venv/bin/python -m host.signer s1 --url $API` | 2 holds: MANDATE (4 pages), then PAY 125000.50 CZK (4 pages) | single shot per reset (I-DUP / I-SPLIT within 24 h). Treasury = emulator, auto-confirm, labelled "simulated human". Then `make checkpoint-now` for the witness tick |
-| 0:45-1:35 | **S2 lookalike BEC + escalation + exfil** | today: `.venv/bin/python -m host.signer scene s2` (memory backend, device signers) | **device stays dark** for the change; one PAY hold inside the escalation step (the replay re-sends it, no second hold) | **TBD WS-F/WS-A:** AWS version of the scene. IAM AccessDenied / VPC no-route evidence is WS-E's (AWS only) |
-| 1:35-2:30 | **S3 takeover + deepfake, then legit change** | today: `.venv/bin/python -m host.signer scene s3` | device dark through the takeover (ATT 0/3 = BLOCK, "there is no button"); then CHG clerk 1/2: 4 pages, `ATT 2/3 ERP BANK` is always on page 3 (pinned), hold | treasury 2/2 on the emulator. **TBD WS-F/WS-A:** AWS version |
-| 2:30-3:20 | **S5 offline audit** | Wi-Fi off, then `make offline-demo` | - | stock Go `noteverify` + `verify_audit` green, one-byte flip red at `seq N`. Lines to say: `docs/audit/DEMO-LINES.md` |
+| 0:15-0:45 | **S1 normal day** | `.venv/bin/python -m host.signer s1 --url $API` | 2 holds: MANDATE (4 pages), then PAY 125000.50 CZK (4 pages) | 7 s machine time + 2 holds (~45 s with the human; physical run on AWS twice, green bundle). Single shot per reset (I-DUP / I-SPLIT within 24 h). Treasury = emulator, auto-confirm, labelled "simulated human". Then `make checkpoint-now` for the witness tick. Agent variant: `make agent-s1` (42 s, Sonnet; run it on a fresh reset or ACME/Beta step up after S1) |
+| 0:45-1:35 | **S2 lookalike BEC + escalation + exfil** | `.venv/bin/python -m host.signer scene s2 --url $API` (software keys: `make demo-s2`, 4 s) | **device stays dark** for the change; one PAY hold inside the escalation step (the replay re-sends it, no second hold) | `make agent-s2` (14 s): the agent declines the BEC email. Rehearsal #1 failed at step 3 (F-AMOUNT-DOC); fixed on main (`8428c3b`), re-verify in rehearsal #2. IAM AccessDenied / VPC no-route evidence is WS-E's |
+| 1:35-2:30 | **S3 takeover + deepfake, then legit change** | `.venv/bin/python -m host.signer scene s3 --url $API` (software keys: `make demo-s3`, 52 s incl. the 20 s cooling-off) | device dark through the takeover (ATT 0/3 = BLOCK, "there is no button"); then CHG clerk 1/2: 4 pages, `ATT 2/3 ERP BANK` is always on page 3 (pinned), hold | treasury 2/2 on the emulator. Talk over the 20 s cooling-off |
+| 2:30-3:20 | **S5 offline audit** | before Wi-Fi off: `make demo-s5` (seals the AWS export + a tampered copy, 3 s); Wi-Fi off: `bash tools/offline_demo.sh .local/demo/s5` (1 s) | - | stock Go `noteverify` + `verify_audit` green, one-byte flip red at `seq N`. Lines to say: `docs/audit/DEMO-LINES.md`. Backup: `make offline-demo` on the pre-sealed `docs/audit/demo` |
 | 3:20-4:00 | Bench + real-vs-simulated | `bench/results/REPORT.md` on screen | - | WS-F |
 
 Every device prompt prints `--> CLERK on Safe 3 GENUINE: read every page, then HOLD the right button` on the
 laptop: that is the operator's cue. The host UI (`make ui`, WS-F) is the projector's left side;
 **TBD WS-F:** it calls the API without SigV4 today, so on AWS it needs a SigV4 client (see `host.signer.executor_call`).
-**TBD WS-E:** a one-command entry point for the agent beat (`agent.agent.run_agent` has no CLI yet).
+Keep AWS runs serialized: Lambda concurrency in this account is 10 in total.
 
 ## Fallback switch (emulator clerk)
 
@@ -55,10 +61,11 @@ export AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324     # the one switch; unset to go 
 
 - Every signer then prints `*** FALLBACK MODE: CLERK SIGNS ON THE EMULATOR (T3B1), NOT THE PHYSICAL DEVICE ***`;
   say it out loud. The emulator screen goes on the projector from http://127.0.0.1:9001.
-- In-process scenes (`host.signer s1` without `--url`, `scene s2|s3`) work in fallback today (rehearsed green).
-- **On AWS** the fallback clerk `0x73d0385f4d8e00c5e6504c6030f47bf6212736a8` is enrolled but **inactive**
-  (`data/enrollment.json`). **TBD WS-E/WS-D:** a reset variant that activates it; until then the AWS fallback is the
-  recorded video, not a live emulator signature.
+- In-process scenes (`host.signer s1` without `--url`, `scene s2|s3`) work in fallback (rehearsed green).
+- **On AWS** the fallback clerk `0x73d0385f4d8e00c5e6504c6030f47bf6212736a8` is enrolled **inactive** by default.
+  It becomes active only through a reset with `--fallback-clerk` (AWS owner; a new, logged `enroll` leaf), so the
+  decision to fall back on AWS is made **before** the demo reset, never live. Without it, the AWS fallback is the
+  recorded video. `host.signer ... --url` refuses to run if a device address is not active (says which reset).
 - Last resort for any beat: the pre-recorded video (WS-F). First real-device take: `docs/device/photos/`.
 
 ## Recovery

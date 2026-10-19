@@ -412,20 +412,28 @@ def run_s1(*, auto_treasury: bool = True, auto_clerk: bool | None = None, url: s
     return e2e.run(call, clerk, treasury, now=datetime.now(timezone.utc))
 
 
-def run_scene(name: str, *, auto_treasury: bool = True, auto_clerk: bool | None = None) -> dict:
-    """WS-A's demo beats S2/S3 (executor.scenes, in-process memory backend with WS-D's seed data) with device
-    signers in place of the software keys. The seed already enrols data/enrollment.json; a device address that is
-    not active there (the fallback emulator clerk) is enrolled for this rehearsal only."""
+def run_scene(name: str, *, auto_treasury: bool = True, auto_clerk: bool | None = None,
+              url: str | None = None) -> dict:
+    """WS-A's demo beats S2/S3 (executor.scenes) with device signers in place of the software keys.
+
+    In-process (memory backend, WS-D's seed): the seed enrols data/enrollment.json; a device address not active there
+    (the fallback emulator clerk) is enrolled for this rehearsal only. With `url` (the AWS regional API, AwsEnv): the
+    device addresses must already be active in the deployment (fallback clerk: `infra.reset_state --fallback-clerk`);
+    nothing is enrolled from here."""
     from executor import scenes
     from executor.store import seed
 
-    env = scenes.DemoEnv()
+    env = scenes.AwsEnv(url) if url else scenes.DemoEnv()
     clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
     active = {(r["address"], r["role"]) for r in env.store.scan("enrolled_signers") if r.get("active")}
     for signer, role in ((clerk, "clerk"), (treasury, "treasury")):
-        if (signer.address, role) not in active:
-            seed.enroll_signer(env.store, signer.address, role, device=signer.device,
-                               label=f"{role} ({signer.device}, rehearsal)", settings=env.settings)
+        if (signer.address, role) in active:
+            continue
+        if url:
+            raise SystemExit(f"{role} {signer.address} ({signer.device}) is not active on {url}: ask the AWS owner "
+                             f"for a reset{' with --fallback-clerk' if signer.device == 'EMULATOR' else ''}")
+        seed.enroll_signer(env.store, signer.address, role, device=signer.device,
+                           label=f"{role} ({signer.device}, rehearsal)", settings=env.settings)
     env.clerk, env.treasury = clerk, treasury
     print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
     return scenes.scene_s2(env) if name == "s2" else scenes.scene_s3(env)
@@ -450,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     scn.add_argument("name", choices=["s2", "s3"])
     scn.add_argument("--manual-treasury", action="store_true")
     scn.add_argument("--manual-clerk", action="store_true")
+    scn.add_argument("--url", default=None, help="the AWS regional API (AwsEnv) instead of in-process")
     sub.add_parser("info", help="show the connected devices and the mode")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
@@ -457,7 +466,8 @@ def main(argv: list[str] | None = None) -> int:
         run_s1(auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None, url=a.url)
         print("\nS1 WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
     elif a.cmd == "scene":
-        run_scene(a.name, auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None)
+        run_scene(a.name, auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None,
+                  url=a.url)
         print(f"\n{a.name.upper()} WITH DEVICES OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
     elif a.cmd == "sign":
         print(json.dumps(sign_challenge(a.nonce, a.role, executor_url=a.url, transport=a.transport), indent=1))
