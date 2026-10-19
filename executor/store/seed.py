@@ -53,3 +53,31 @@ def enroll_signer(store: Any, address: str, role: str, *, device: str = "EMULATO
 def seed_demo(store: Any) -> None:
     if store.get("registry", REGISTRY_META) is None:
         seed_registry(store)
+
+
+_DEV_DATA_DIR: str | None = None
+
+
+def dev_data_dir(base: str = "data") -> str:
+    """Data dir for memory-backend runs: `base` if the MostlyRight snapshot has been built there, else a temp copy of
+    `base` with a snapshot built from WS-D's synthetic fixture (tests/fixtures/mostlyright_sample.csv, fictitious
+    names). Dev/CI only; never the demo."""
+    global _DEV_DATA_DIR
+    from pathlib import Path
+
+    if (Path(base) / "mostlyright" / "snapshot.sqlite").exists():
+        return base
+    if _DEV_DATA_DIR is None:
+        import shutil
+        import tempfile
+
+        from tools import load_mostlyright as loader
+
+        root = Path(__file__).resolve().parents[2]
+        d = Path(tempfile.mkdtemp(prefix="airgap-devdata-"))
+        shutil.copytree(root / base, d, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.sqlite", "*.csv"))
+        src = d / "mostlyright_fixture_2026-10-18.csv"
+        shutil.copy(root / "tests" / "fixtures" / "mostlyright_sample.csv", src)
+        loader.load(str(src), str(d / "mostlyright"))
+        _DEV_DATA_DIR = str(d)
+    return _DEV_DATA_DIR

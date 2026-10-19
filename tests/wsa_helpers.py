@@ -16,6 +16,7 @@ NOW = "2026-10-19T12:00:00Z"
 
 class Harness:
     def __init__(self, **settings: Any) -> None:
+        settings.setdefault("data_dir", seed.dev_data_dir())
         self.settings = Settings(backend="memory", fake_now=settings.pop("fake_now", NOW), **settings)
         self.store = MemoryStore(self.settings)
         self.ctx = handler.Context(self.settings, self.store)

@@ -172,9 +172,15 @@ def proposal_state(ctx: Context, vendor_id: str, now: datetime, *, exclude: str 
 def _evaluate(ctx: Context, pid: str, invoice: dict, hints: list, now: datetime, *, exclude: str | None = None):
     state = proposal_state(ctx, invoice["vendor_id"], now, exclude=exclude)
     subject = {"proposal_id": pid, "invoice": invoice}
+    extra: dict[str, Any] = {}
+    if invoice.get("email_id"):
+        from executor.facts import inbox
+
+        extra = inbox.email_state(invoice["email_id"], store=ctx.store)
     facts = shims.compute_facts({"kind": "proposal", "subject_id": pid, "proposal_id": pid, "invoice": invoice,
                                  "hints": hints, "email_id": invoice.get("email_id")},
-                                {**state, "snapshots": None, "tool_log": None, "change": None}, now)
+                                {**state, **extra, "snapshots": None, "tool_log": None, "change": None,
+                                 "data_dir": ctx.settings.data_dir}, now)
     policy = rules.policy_material()
     dec = decide_mod.decide(subject, facts, state, policy)
     digests = {"policy_hash": dec["policy_hash"],
@@ -298,14 +304,15 @@ def post_changes(ctx: Context, p: dict, q: dict, body: Any, principal: str | Non
     if vendor is None:
         raise _not_found(f"vendor {body['vendor_id']}")
     facts = shims.compute_facts({"kind": "change", **body}, {"payee": vendor, "mandate": None, "history": [],
-                                                             "snapshots": None, "tool_log": None, "change": None},
-                                now)
+                                                             "snapshots": None, "tool_log": None, "change": None,
+                                                             "data_dir": ctx.settings.data_dir}, now)
     c = _machine().create(body, facts, vendor, store=st, settings=ctx.settings, now=now)
     c = _change_out(c)
-    rule_ids = sorted({f["id"] for f in facts["facts"] if f["kind"] == "F" and f["severity"] == "BLOCK"
-                       and f["id"] not in ("F-ATTEST", "F-CALLBACK")})
+    cf = c.get("facts") or facts["facts"]  # the FSM's own FactSet is authoritative for the change
+    f_only = [f for f in cf if f["kind"] == "F"]
+    rule_ids = sorted({f["id"] for f in f_only if f["severity"] == "BLOCK" and f["id"] not in ("F-ATTEST", "F-CALLBACK")})
     dec = {"decision": "deny" if c["state"] == "REJECTED" else "pending", "rule_ids": rule_ids,
-           "facts": facts["facts"], "facts_digest": facts["facts_digest"], "mandate_id": None,
+           "facts": cf, "facts_digest": shims.digest(f_only), "mandate_id": None,
            "policy_hash": rules.policy_hash()}
     return 201, {"change": c, "decision": dec}
 
