@@ -278,7 +278,7 @@ svg text { font-family: inherit; }
       <p>Sonnet 4.5 spot-check: agent alone 38% [24–55]; AirGap with a clicking human <b class="good">0%</b> [0–10].</p>
     </div>
   </div>
-  <p class="foot">Runs: <span class="mono">…150142_pitch-attack</span> · <span class="mono">…153447_pitch-benign-v2</span> · <span class="mono">scripted_462ade534575</span> · Sonnet <span class="mono">…153447_sonnet-spot-attack</span> (n=34). Simulated humans are a model of a human, not a user study. In-mandate residual at A3: 0 CZK in this corpus; a genuinely inflated invoice from the real vendor is out of scope, bounded by caps.</p>
+  <p class="foot">Runs: <span class="mono">…150142_pitch-attack</span> · <span class="mono">…153447_pitch-benign-v2</span> · <span class="mono">scripted_64ff276755d5</span> · Sonnet <span class="mono">…153447_sonnet-spot-attack</span> (n=34). Simulated humans are a model of a human, not a user study. In-mandate residual at A3: 0 CZK in this corpus; a genuinely inflated invoice from the real vendor is out of scope, bounded by caps.</p>
   <aside class="notes">3:20–3:50. Read only two numbers: 571,077 → 0, “even with a human who clicks everything”. Point at the side: 0 prompts for routine invoices (fatigue question pre-empted). Q&amp;A: 0/100 per cell, Wilson upper bound 4%.</aside>
 </section>
 
@@ -301,7 +301,7 @@ svg text { font-family: inherit; }
       <li>Benchmark humans: a model, not a user study</li></ul></div>
   </div>
   <p class="foot">Second, independent witness (W2): deployed, trust setup pending. If it is not live on stage, say “W1 only, same account”. Full table: demo/REAL_VS_SIMULATED.md.</p>
-  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” Check W2 status before going on stage. Known gaps if asked (demo/REAL_VS_SIMULATED.md): (1) callback code stored as unsalted SHA-256, readable by the portal role, fix = KMS HMAC; (2) clerk and treasury are distinct addresses, not yet distinct devices, fix = compare device certificate at enrolment; (3) demo issuer keys are shared across vendors and in the repo, labelled; (4) until FACTS-1 merges, the document check sits in the tools layer, not the executor.</aside>
+  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” Check W2 status before going on stage. Known gaps if asked (demo/REAL_VS_SIMULATED.md): (1) callback code stored as unsalted SHA-256, readable by the portal role, fix = KMS HMAC; (2) clerk and treasury are distinct addresses, not yet distinct devices, fix = compare device certificate at enrolment; (3) demo issuer keys are shared across vendors and in the repo, labelled. (Former gap 4, document check only in the tools layer, is fixed: FACTS-1 enforces “no source document, no autopay” in the executor.)</aside>
 </section>
 
 <!-- 7 BUSINESS -->
