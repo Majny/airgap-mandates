@@ -5,7 +5,7 @@ CONTRACTS.md v2 §4.5 (tool surface), §9 (AGENT_MODE, AIRGAP_SONNET_BUDGET). Ow
 A plain Bedrock Converse tool loop. Two modes:
 - naive (A0 baseline): the planner sees tool results as returned, including <untrusted> email text.
 - quarantined (CaMeL-style): results of untrusted reads never reach the planner as text. inbox.read is replaced by a
-  typed view (sender address, document ids, and per document the quarantined extractor's validated fields); free text
+  typed view (sender as handles + registered vendor domain, document ids, and per document the quarantined extractor's validated fields); free text
   appears only as opaque handles (txt_...). invoice.extract keeps typed fields only.
 Useful, never decisive: every effect goes through the tools λ and the executor; the agent has no IBAN argument (P3)
 and payment amounts are bound to the document by the tools λ and the executor.
@@ -118,6 +118,9 @@ class ToolsClient:
 # ---------------------------------------------------------------- quarantine
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+# naive + A1: untrusted reads, and effect tools whose errors may echo document-derived text
+_SCREENED_TOOLS = ("inbox.list", "inbox.read", "invoice.extract", "payment.propose", "payee.request_change")
+_KEEP_KEYS = ("kind", "error", "rule_ids", "decision")  # set by our code, not by the sender
 
 
 class Quarantine:
@@ -133,13 +136,28 @@ class Quarantine:
         self.vault[h] = text
         return h
 
+    def sender(self, v: Any, registered: Any = None) -> str | None:
+        """Typed sender: never verbatim sender-chosen text. The local part is a handle; the domain is shown only when
+        it is a registered vendor's domain (the tools λ says so: `registered_vendor_id`), else the whole address is a
+        handle (an attacker-registered domain label is up to 63 chars of words)."""
+        addr = _typed_email(v)
+        if addr is None:
+            return None
+        local, domain = addr.rsplit("@", 1)
+        return f"{self.handle(local)}@{domain}" if registered and _typed_domain(domain) else self.handle(addr)
+
+    def domain(self, v: Any, registered: Any = None) -> str | None:
+        d = _typed_domain(v)
+        return None if d is None else d if registered else self.handle(d)
+
     def view(self, tool: str, args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         if "error" in result:
             return {k: result.get(k) for k in ("error", "rule_ids")}
         if tool == "inbox.list":
             return {"emails": [{"email_id": e.get("email_id"),
-                                "from_addr": _typed_email(e.get("from_addr")),
-                                "from_domain": _typed_domain(e.get("from_domain")),
+                                "from_addr": self.sender(e.get("from_addr"), e.get("registered_vendor_id")),
+                                "from_domain": self.domain(e.get("from_domain"), e.get("registered_vendor_id")),
+                                "registered_vendor_id": _typed_id(e.get("registered_vendor_id")),
                                 "subject": self.handle(str(e.get("subject", ""))),
                                 "received_at": e.get("received_at")} for e in result.get("emails", [])]}
         if tool == "inbox.read":
@@ -155,7 +173,9 @@ class Quarantine:
                     typed = _typed_draft((ex or {}).get("draft") or {})
                     typed.pop("doc_id", None)
                 docs.append({"doc_id": d["doc_id"], "kind": d.get("kind"), **typed})
-            return {"email_id": result.get("email_id"), "from": _typed_email(result.get("from")),
+            reg = result.get("registered_vendor_id")
+            return {"email_id": result.get("email_id"), "from": self.sender(result.get("from"), reg),
+                    "registered_vendor_id": _typed_id(reg),
                     "subject": self.handle(str(result.get("subject", ""))),
                     "content": self.handle(str(result.get("content", ""))), "documents": docs}
         if tool == "invoice.extract":
@@ -168,8 +188,14 @@ def _strip_wrapper(text: str) -> str:
 
 
 def _typed_email(v: Any) -> str | None:
-    m = _EMAIL_RE.search(str(v or ""))
-    return m.group(0).lower() if m else None
+    """The value only if it is exactly one address (no display name to hide a second one in)."""
+    s = str(v or "").strip()
+    return s.lower() if _EMAIL_RE.fullmatch(s) else None
+
+
+def _typed_id(v: Any) -> str | None:
+    s = str(v or "")
+    return s if re.fullmatch(r"ven_[0-9]{8}", s) else None
 
 
 def _typed_domain(v: Any) -> str | None:
@@ -182,6 +208,27 @@ def _typed_draft(draft: dict[str, Any]) -> dict[str, Any]:
 
     v = validate(dict(draft.get("fields") or {}))
     return {"doc_id": draft.get("doc_id"), "fields": v["fields"], "handles": draft.get("handles", {})}
+
+
+def screen_result(tool: str, result: dict[str, Any], *, bedrock: Any = None) -> dict[str, Any]:
+    """A1 on the whole untrusted result (subject, from, content, document names...), not just `content`.
+
+    The JSON is screened once; on intervention every string except ids (`*_id`) and `kind` becomes the placeholder."""
+    text = json.dumps(result, default=str, ensure_ascii=False)
+    shown, verdict = guardrails.screen(text, source=tool, bedrock=bedrock)
+    out = _withhold(result, shown) if verdict.get("action") == "GUARDRAIL_INTERVENED" else dict(result)
+    out["a1"] = verdict
+    return out
+
+
+def _withhold(v: Any, placeholder: str, key: str = "") -> Any:
+    if isinstance(v, dict):
+        return {k: _withhold(x, placeholder, k) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_withhold(x, placeholder, key) for x in v]
+    if isinstance(v, str) and not (key.endswith("_id") or key in _KEEP_KEYS):
+        return placeholder
+    return v
 
 
 # ---------------------------------------------------------------- loop
@@ -226,9 +273,8 @@ def run_agent(task: str = TASK, *, mode: str | None = None, model: str | None = 
             tool_calls.append({"tool": tool, "args": args, "result": out})
             if tool == "payment.propose" and "error" not in out:
                 proposals.append(out)
-            if q is None and guardrails.enabled() and isinstance(out.get("content"), str):
-                out = {**out}
-                out["content"], out["a1"] = guardrails.screen(out["content"], source=tool, bedrock=bedrock)
+            if q is None and guardrails.enabled() and tool in _SCREENED_TOOLS:  # errors too: they may echo documents
+                out = screen_result(tool, out, bedrock=bedrock)
             shown = q.view(tool, args, out) if q else out
             results.append({"toolResult": {"toolUseId": u["toolUseId"],
                                            "content": [{"text": json.dumps(shown, default=str)[:6000]}]}})

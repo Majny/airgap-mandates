@@ -136,6 +136,45 @@ def test_checksums():
     assert allowlist.url_data_findings("https://acme.cz/invoices?page=2") == []
 
 
+def _probe(*, http=None, dns_ok=False, tcp_ok=False):
+    """agent.lambda_handler.probe_egress with fake network primitives (no real traffic)."""
+    import socket
+    import urllib.error
+
+    from agent.lambda_handler import probe_egress
+
+    def urlopen(url, timeout):
+        if http == "error":
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+        raise urllib.error.URLError("timed out")
+
+    def resolve(name, port, type):
+        if not dns_ok:
+            raise socket.gaierror("no name")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", port))]
+
+    def connect(addr, timeout):
+        if not tcp_ok:
+            raise TimeoutError("timed out")
+        return type("S", (), {"close": lambda self: None})()
+
+    return probe_egress(("https://example.com",), names=("example.com", "x.attacker.example"), urlopen=urlopen,
+                        resolve=resolve, connect=connect)
+
+
+def test_probe_egress_classification():
+    """#20: an HTTP error status means the internet answered; DNS is recorded separately."""
+    out = _probe(http="error")
+    assert out["https://example.com"].startswith("REACHED") and out["no_route"] is False
+    out = _probe()
+    assert out["no_route"] is True and out["dns_blocked"] is True
+    out = _probe(dns_ok=True)  # DNS resolves (exfil channel) but TCP to the address fails: still no route
+    assert out["dns_blocked"] is False and out["dns"]["x.attacker.example"].startswith("resolved")
+    assert out["no_route"] is True and out["tcp 93.184.215.14:443"].startswith("blocked")
+    out = _probe(dns_ok=True, tcp_ok=True)  # HTTP failed but a raw connect works: a route exists
+    assert out["no_route"] is False
+
+
 @pytest.mark.skipif(os.environ.get("AIRGAP_BACKEND") != "aws", reason="S10 is proven on AWS only")
 def test_s10_no_route():
     pytest.skip("TODO WS-E: httpx.get('https://example.com') from the agent VPC fails; Flow Logs REJECT")

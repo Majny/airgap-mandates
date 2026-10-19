@@ -28,6 +28,47 @@ def handle_of(text: str) -> str:
     return "txt_" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
+# An invoice number is shown to the agent verbatim only when it looks like one: an optional prefix (1-2 letters, or a
+# usual 3-letter one such as INV), then digits and separators (2..10 digits), and not the start of an IBAN (an IBAN
+# country code with 8+ digits: "CZ-6508000000", "CZ65-0800-0000"). Anything else ("PAYNOW-99", "PAY-12", "IBAN-CZ65")
+# is sender-chosen text and becomes an opaque reference `inv_<8 hex>` that the tools λ resolves back
+# (invoice_no_matches).
+_PLAIN_INVOICE_NO = re.compile(r"(?:([A-Z]{1,3})[-/.]?)?[0-9][0-9/.-]{1,19}")
+_PREFIXES_3 = frozenset({"INV", "FAK", "FAV", "FAP", "ZAL"})
+_IBAN_COUNTRIES = frozenset(
+    "AD AE AL AT AZ BA BE BG BH BI BR BY CH CR CY CZ DE DJ DK DO EE EG ES FI FK FO FR GB GE GI GL GR GT HR HU IE IL "
+    "IQ IS IT JO KW KZ LB LC LI LT LU LV LY MC MD ME MK MN MR MT MU NI NL NO OM PK PL PS PT QA RO RS RU SA SC SD SE SI "
+    "SK SM SO ST SV TL TN TR UA VA VG XK YE".split())
+INVOICE_REF_RE = re.compile(r"inv_[0-9a-f]{8}")
+
+
+def _norm_invoice_no(v: str) -> str:
+    return re.sub(r"\s", "", str(v)).upper()
+
+
+def invoice_no_ref(v: str | None) -> str | None:
+    """The invoice number as the agent may see it: verbatim if plain, else `inv_<8 hex>` of the normalised value."""
+    if not v:
+        return None
+    if INVOICE_REF_RE.fullmatch(str(v)):
+        return str(v)
+    n = _norm_invoice_no(v)
+    digits = sum(c.isdigit() for c in n)
+    m = _PLAIN_INVOICE_NO.fullmatch(n)
+    prefix = (m.group(1) or "") if m else ""
+    if (m and 2 <= digits <= 10 and (len(prefix) < 3 or prefix in _PREFIXES_3)
+            and not (prefix in _IBAN_COUNTRIES and digits >= 8)):
+        return n
+    return "inv_" + hashlib.sha256(n.encode("utf-8")).hexdigest()[:8]
+
+
+def invoice_no_matches(claimed: Any, actual: str | None) -> bool:
+    """claimed is the document's invoice number (case/space-insensitive) or its `inv_` reference."""
+    if not claimed or not actual:
+        return False
+    return _norm_invoice_no(claimed) == _norm_invoice_no(actual) or str(claimed) == invoice_no_ref(actual)
+
+
 def documents(raw: bytes) -> list[dict[str, Any]]:
     """[{doc_id, kind, name, sha256, text}] for the body and text-like attachments of one RFC 822 message."""
     msg = email.message_from_bytes(raw, policy=email.policy.default)
@@ -182,7 +223,8 @@ def check_against_document(draft: dict[str, Any], claimed: dict[str, Any], vendo
     claimed keys (all optional except amount_minor): amount_minor, reason_code, currency, vs, due (or due_date),
     invoice_no. Rules: T-DOC-MISSING (no machine-readable amount/currency: fail closed); T-AMOUNT-MISMATCH (higher than
     the document, or lower without reason_code PARTIAL); T-DOC-MISMATCH (other field differs, or the document's
-    supplier ICO is not the vendor's). Shared by the tools λ (A2) and the facts engine (F-AMOUNT-DOC, A3).
+    supplier ICO is not the vendor's; invoice_no compares case/space-insensitively or as its inv_ reference). Reasons name fields and amounts only,
+    never a document string (they reach the agent as error messages). Shared by the tools λ (A2) and the facts engine (F-AMOUNT-DOC, A3).
     """
     f = draft["fields"]
     if f["amount_minor"] is None or f["currency"] is None:
@@ -194,8 +236,9 @@ def check_against_document(draft: dict[str, Any], claimed: dict[str, Any], vendo
     due = claimed.get("due") or claimed.get("due_date")
     for name, value, field in (("currency", claimed.get("currency"), "currency"), ("vs", claimed.get("vs"), "vs"),
                                ("due", due, "due_date"), ("invoice_no", claimed.get("invoice_no"), "invoice_no")):
-        if value and f[field] and str(value) != str(f[field]):
-            out.append(("T-DOC-MISMATCH", f"{name} {value!r} != document {f[field]!r}"))
+        same = invoice_no_matches(value, f[field]) if name == "invoice_no" else str(value) == str(f[field])
+        if value and f[field] and not same:  # field name only: document strings never reach an error message
+            out.append(("T-DOC-MISMATCH", f"{name} differs from the document"))
     if f["supplier_ico"] and f["supplier_ico"] != vendor_ico:
         out.append(("T-DOC-MISMATCH", "document supplier ICO is not this vendor"))
     return out
