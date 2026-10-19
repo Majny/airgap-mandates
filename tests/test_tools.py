@@ -31,6 +31,10 @@ RAW = (
 ).encode()
 
 
+# FACTS-2: an untrusted read right before a propose feeds F-ANOM, which may step a proposal up. Binding tests here
+# assert document binding, not autopay, so a live proposal is either allowed or waiting for the human.
+LIVE_DECISIONS = ("allow", "challenge")
+
 DATA = Path(__file__).resolve().parents[1] / "data"
 
 
@@ -175,7 +179,7 @@ def test_propose_has_no_iban_and_reaches_executor():
             "hints": [{"source": "agent", "text": "due next week"}]}
     st, r = h.tool("payment.propose", args)
     assert st == 200, r
-    assert r["result"]["decision"] == "allow" and r["result"]["tx_id"]
+    assert r["result"]["decision"] in LIVE_DECISIONS
     st, r = h.tool("payment.propose", {**args, "iban": "CZ6203000000000123456789"})
     assert st == 400  # P3: no IBAN argument
     leaf = [x for x in h.leaves() if x["type"] == "tool_call" and x["data"]["tool"] == "payment.propose"][0]
@@ -268,7 +272,7 @@ def test_partial_cannot_repeat_past_the_document():
     body_id = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "body")
     st, r = h.tool("payment.propose", _propose_args(body_id, invoice_no="AGENT-1", amount_minor=700000,
                                                     reason_code="PARTIAL"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     # a fresh agent invoice_no used to defeat I-DUP; now the invoice_no is the document's, so I-DUP sees the repeat
     st, r = h.tool("payment.propose", _propose_args(body_id, invoice_no="AGENT-2", amount_minor=700000,
                                                     reason_code="PARTIAL"))
@@ -279,7 +283,7 @@ def test_partial_cannot_repeat_past_the_document():
     assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r
     props = h.store.scan("proposals")
     assert {p["invoice"]["invoice_no"] for p in props} == {"DOC-" + body_id[4:]}
-    assert sum(p["invoice"]["amount_minor"] for p in props if p["status"] == "EXECUTED") == 700000
+    assert sum(p["invoice"]["amount_minor"] for p in props if p["status"] in ("EXECUTED", "PENDING_SIG")) == 700000
 
 
 def test_body_and_attachment_of_one_email_are_one_invoice():
@@ -289,11 +293,10 @@ def test_body_and_attachment_of_one_email_are_one_invoice():
     st, r = h.tool("inbox.read", {"email_id": "eml_0001"})
     docs = {d["kind"]: d["doc_id"] for d in r["result"]["documents"]}
     st, r = h.tool("payment.propose", _propose_args(docs["attachment"]))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     st, r = h.tool("payment.propose", _propose_args(docs["body"]))
     assert st == 403 and r["details"]["rule_ids"] == ["T-AMOUNT-MISMATCH"], r  # same email: 1 450 000 already paid
-    executed = [p for p in h.store.scan("proposals") if p["status"] == "EXECUTED"]
-    assert len(executed) == 1
+    assert len(_executed(h)) == 1
 
 
 def test_two_partials_across_body_and_attachment_hit_i_dup_and_the_cap():
@@ -304,7 +307,7 @@ def test_two_partials_across_body_and_attachment_hit_i_dup_and_the_cap():
     part = lambda ref, amt: h.tool("payment.propose", _propose_args(ref, amount_minor=amt,  # noqa: E731
                                                                     reason_code="PARTIAL"))
     st, r = part(docs["attachment"], 700000)
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     st, r = part(docs["body"], 700000)  # same invoice_no + issue_date now: I-DUP sees the repeat
     assert st == 200 and r["result"]["decision"] == "deny" and "I-DUP" in r["result"]["rule_ids"], r
     st, r = part(docs["body"], 800000)  # 700 000 + 800 000 > 1 450 000
@@ -557,7 +560,7 @@ def test_two_invoices_in_one_email_are_capped_separately():
     att = {d["name"]: d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment"}
     st, r = h.tool("payment.propose", _propose_args(att["a.isdoc"], invoice_no="FV-2026-0501", amount_minor=500000,
                                                     vs="20260501"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     st, r = h.tool("payment.propose", _propose_args(att["b.isdoc"], invoice_no="FV-2026-0502", amount_minor=400000,
                                                     vs="20260502"))
     assert st == 200, r  # its own cap (400 000), not the email's
@@ -590,7 +593,7 @@ def test_wordy_invoice_no_is_a_reference_the_tools_resolve():
     ref = r["result"]["draft"]["fields"]["invoice_no"]
     assert ref.startswith("inv_") and "PAYNOW" not in str(r["result"]["draft"]), r
     st, r = h.tool("payment.propose", _propose_args(att, invoice_no=ref))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     assert h.store.scan("proposals")[0]["invoice"]["invoice_no"] == "PAYNOW-99"
     st, r = h.tool("payment.propose", _propose_args(att, invoice_no="inv_00000000"))
     assert st == 403 and r["details"]["rule_ids"] == ["T-DOC-MISMATCH"], r
@@ -643,7 +646,7 @@ def _spayd_mail(spayd: str, text: str = "Upominka, prosime o uhradu:") -> bytes:
 
 def _pay_isdoc_in_full(h: ToolHarness) -> None:
     st, r = h.tool("payment.propose", _propose_args(_isdoc_doc_id(h)))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
 
 
 def _propose_body(h: ToolHarness, email_id: str, raw: bytes, **over):
@@ -654,7 +657,8 @@ def _propose_body(h: ToolHarness, email_id: str, raw: bytes, **over):
 
 
 def _executed(h: ToolHarness) -> list[dict]:
-    return [p for p in h.store.scan("proposals") if p["status"] == "EXECUTED"]
+    """Live proposals (executed, or waiting for the human step-up): what the cumulative cap counts."""
+    return [p for p in h.store.scan("proposals") if p["status"] in ("EXECUTED", "PENDING_SIG")]
 
 
 def test_other_invoices_of_the_vendor_are_not_reminders():
@@ -666,7 +670,7 @@ def test_other_invoices_of_the_vendor_are_not_reminders():
     raw = _spayd_mail("SPD*1.0*ACC:CZ6508000000192000145399*CC:CZK*AM:3000.00*X-VS:20260412*DT:20261130",
                       "Platebni udaje:")
     st, r = _propose_body(h, "eml_0024", raw, amount_minor=300000, vs="20260412", due="2026-11-30")
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     leaf = [x for x in h.leaves() if x["type"] == "tool_call"][-1]
     assert "T-INVOICENO-PRIOR" not in leaf["data"]["rule_ids"]
     raw = (RAW.replace(b"FV-2026-0412", b"FV-2026-0413").replace(b"20260412", b"20260413")
@@ -675,7 +679,7 @@ def test_other_invoices_of_the_vendor_are_not_reminders():
     st, r = h.tool("inbox.read", {"email_id": "eml_0025"})
     att = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment")
     st, r = h.tool("payment.propose", _propose_args(att, invoice_no="FV-2026-0413", vs="20260413"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     assert len(_executed(h)) == 3
 
 
@@ -734,5 +738,28 @@ def test_constant_vs_monthly_invoices_of_the_same_amount_are_paid():
     st, r = h.tool("inbox.read", {"email_id": "eml_0031"})
     att = next(d["doc_id"] for d in r["result"]["documents"] if d["kind"] == "attachment")
     st, r = h.tool("payment.propose", _propose_args(att, invoice_no="FV-2026-1101", due="2026-11-29"))
-    assert st == 200 and r["result"]["decision"] == "allow", r
+    assert st == 200 and r["result"]["decision"] in LIVE_DECISIONS, r
     assert len(_executed(h)) == 2
+
+
+def test_tools_lambda_never_scans_main_entities():
+    """On AWS the tools role may touch `main` only under its own key prefixes (dynamodb:LeadingKeys), which a Scan
+    cannot satisfy: a scan of a `main` entity is an AccessDenied there (it broke every propose on AWS once)."""
+    from executor.config import MAIN_PK_PREFIX
+
+    h = ToolHarness()
+    h.mandate()
+    real_scan = h.store.scan
+
+    def guarded(table):
+        import inspect
+
+        caller = inspect.stack()[1].filename
+        assert not (table in MAIN_PK_PREFIX and caller.endswith("executor/tools/handler.py")), \
+            f"tools λ scanned main entity {table!r}"
+        return real_scan(table)
+
+    h.store.scan = guarded
+    doc_id = _isdoc_doc_id(h)
+    st, r = h.tool("payment.propose", _propose_args(doc_id))
+    assert st == 200, r

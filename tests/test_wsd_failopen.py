@@ -155,14 +155,16 @@ def test_facts2_change_facts_take_the_tool_log():
     assert _facts(fs["facts"])["F-ANOM"][0] == "WARN"
 
 
-@pytest.mark.xfail(strict=True, reason="needs WS-A/WS-E wiring: the executor must pass the session tool log "
-                                       "(anom.session_log) into compute() for POST /proposals and /changes")
 def test_facts2_e2e_untrusted_read_then_propose_steps_up():
     from tests.test_tools import ToolHarness, _isdoc_doc_id, _propose_args
 
     h = ToolHarness()
     h.mandate()
     doc_id = _isdoc_doc_id(h)
+    # decision (b): reading the invoice you pay is expected; reading OTHER untrusted content (here
+    # an older ACME mail, not the cited eml_0001) right before proposing is the injection signal and must step up
+    st_, r = h.tool("inbox.read", {"email_id": "eml_0000"})
+    assert st_ == 200, r
     st_, r = h.tool("payment.propose", _propose_args(doc_id))
     assert st_ == 200, r
     (p,) = h.store.scan("proposals")

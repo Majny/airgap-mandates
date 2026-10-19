@@ -136,8 +136,15 @@ def _untrusted_recent(history: list[dict[str, Any]], step: int, *, store: Any, s
     """Untrusted read within UNTRUSTED_WINDOW steps of this session, or within UNTRUSTED_SECONDS in any session."""
     if any(h.get("untrusted_read") and step - int(h["sk"]) <= UNTRUSTED_WINDOW for h in history):
         return True
-    since = (now(settings) - timedelta(seconds=UNTRUSTED_SECONDS)).strftime(_AT_FMT)
-    return any(r.get("untrusted_read") and str(r.get("at", "")) >= since for r in store.scan("tool_calls"))
+    # per-minute counters, not a scan: the tools role may only touch `main` items under its own key prefixes
+    return any(int((store.get("counters", {"name": n}) or {}).get("value", 0)) for n in _untrusted_minutes(settings))
+
+
+def _untrusted_minutes(settings: Any) -> list[str]:
+    """Counter names covering the last UNTRUSTED_SECONDS (whole minutes, rounded up: conservative)."""
+    t = now(settings)
+    return [f"toolrate#untrusted#{(t - timedelta(minutes=i)).strftime('%Y%m%d%H%M')}"
+            for i in range(UNTRUSTED_SECONDS // 60 + 2)]
 
 
 def _vendors(store: Any) -> list[dict[str, Any]]:
@@ -164,6 +171,8 @@ def _log(name: str, req: dict[str, Any], result: str, rule_ids: list[str], *, un
                              "args_sha256": args_sha256, "result": result, "rule_ids": rule_ids,
                              "untrusted_read": untrusted, "seq": seq,
                              "at": now(settings).strftime(_AT_FMT)})
+    if untrusted and result == "ok":
+        store.increment("counters", {"name": _untrusted_minutes(settings)[0]}, "value")
     return seq
 
 
@@ -195,7 +204,10 @@ def _find_doc(doc_id: str, *, store: Any, settings: Any) -> tuple[str, dict[str,
     raise ApiError(ErrorCode.NOT_FOUND, f"document {doc_id}")
 
 
-def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store: Any, settings: Any) -> dict[str, Any]:
+def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store: Any, settings: Any,
+         session: dict[str, Any] | None = None) -> dict[str, Any]:
+    """session = {session_id, step}: forwarded to /proposals and /changes so F-ANOM scores this agent session."""
+    session = session or {}
     ex = lambda m, p, b=None: _executor(m, p, b, store=store, settings=settings)  # noqa: E731
     if name == "inbox.list":
         out = ex("GET", "/inbox")
@@ -257,13 +269,13 @@ def _run(name: str, args: dict[str, Any], hints: list[dict[str, Any]], *, store:
         # invoices forever (constant-VS vendors, fixed monthly fees). Residual, gated by the executor's I-DUP and the
         # human step-up (infra/PROBES.md "Known residuals").
         _check_cumulative(inv, _invoice_cap(draft, drafts), store=store, settings=settings, rows=rows)
-        out = ex("POST", "/proposals", {"invoice": inv, "hints": hints})
+        out = ex("POST", "/proposals", {"invoice": inv, "hints": hints, **session})
         return {"proposal_id": out["proposal"]["proposal_id"], "decision": out["decision"]["decision"],
                 "rule_ids": out["decision"].get("rule_ids", []), "tx_id": (out.get("tx") or {}).get("tx_id"),
                 "_warn": warn}
     if name == "payee.request_change":
         body = {"vendor_id": args["vendor_id"], "new_iban": re.sub(r"\s", "", args["new_iban"]).upper(),
-                "evidence_ids": args.get("evidence_ids", []), "hints": hints}
+                "evidence_ids": args.get("evidence_ids", []), "hints": hints, **session}
         out = ex("POST", "/changes", body)
         ch = out["change"]
         return {"change_id": ch["change_id"], "state": ch.get("state")}
@@ -537,7 +549,8 @@ def _call_reserved(name: str, request: dict[str, Any], args: dict[str, Any], spe
     try:
         hints = _pop_hints(name, args)
         _validate_args(name, args)
-        result = _run(name, args, hints, store=store, settings=settings)
+        result = _run(name, args, hints, store=store, settings=settings,
+                      session={"session_id": request["session_id"], "step": int(request["step"])})
     except DocMismatch as e:
         seq = log("forbidden", rule_ids + e.rule_ids)
         raise ApiError(e.code, e.message, {"rule_ids": e.rule_ids, "seq": seq}) from e
