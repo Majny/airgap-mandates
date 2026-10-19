@@ -85,3 +85,25 @@ export AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324     # the one switch; unset to go 
 - "Last night we ran S1 on AWS with this device and sealed the audit bundle; it verifies offline." Proof:
   `docs/audit/aws-physical-mon/README.md`.
 - Say "the treasury signer is an emulator in this demo; production refuses emulator keys".
+
+## Rehearsal log
+
+**Mon 19 Oct, AWS dress rehearsal #1** (WS-E conducting; software keys, no device; deployed bundle `48ff9166`).
+Raw logs: `infra/evidence/rehearsal/`.
+
+| Step | Command | Result | Wall time |
+|---|---|---|---|
+| reset | `make demo-reset` | PASS (log size 13, no stale checkpoint) | 72 s |
+| inbox | `python -m infra.load_inbox --url $API` (ingest role) | PASS 8/8 | 5 s |
+| S1 software | `make demo-s1` | PASS: mandate 2/2, 3 paid, 125000.50 step-up executed, replay 403 | 7 s |
+| agent S1 | `make agent-s1` (agent λ in no-NAT VPC, Sonnet, quarantined) | PASS: 3 proposals; after S1, ACME and Beta step up (F-SPLIT / I-SPLIT on the 24 h vendor sum), Gamma allowed | 42 s |
+| agent S2 | `make agent-s2` | PASS: agent declines the BEC email (no proposal) | 14 s |
+| S2 | `make demo-s2` | **FAIL at step 3**: change REJECTED device dark + BEC proposal deny OK; the escalation PAY is now a deny (F-AMOUNT-DOC: its `invoice_ref` is not a real document) instead of a challenge. Owner WS-A/WS-D: needs a document-bound over-cap fixture invoice | 4 s |
+| S3 | `make demo-s3` | PASS: takeover REJECTED (ATT 0/3), legit change ACTIVE after the 20 s cooling-off | 52 s |
+| S5 | `make demo-s5` then `bash tools/offline_demo.sh .local/demo/s5` | PASS (ALL PASS offline, tamper caught at seq 70) after `make .local/bin/noteverify` (Go, online) | 3 s + 1 s |
+| reset | `make demo-reset` | PASS | 73 s |
+
+Total wall time 276 s (beats only: about 2 min; the two resets dominate). Order note: running the agent S1 beat
+after the S1 scene makes ACME/Beta step up (24 h vendor sum); on stage, run the agent beat on a fresh reset or accept
+the challenges as part of the story. Build `noteverify` while online before the stage (`make .local/bin/noteverify`).
+Lambda concurrency in this account is **10 in total** (all functions, all teams): keep AWS runs serialized.
