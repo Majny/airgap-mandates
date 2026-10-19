@@ -71,7 +71,7 @@ Run IDs:
   - the Trezor Safe 3 in my hand (genuine, certificate chain verified);
   - the executor on AWS eu-central-1 with its IAM walls (agent: explicit deny on the tables, KMS and `/signatures`);
   - the agent VPC with no route out;
-  - KMS Ed25519 log and witness keys, and S3 Object Lock;
+  - KMS Ed25519 log and witness keys, every checkpoint cosigned by two witnesses (one is unmodified upstream litewitness), and S3 Object Lock;
   - the offline verifier = upstream Go code.
 - **Simulated, and labelled:**
   - the companies;
@@ -79,7 +79,7 @@ Run IDs:
   - the supplier attestation issuers (real cryptography, fictitious organisations);
   - the VoP responder;
   - the humans in the benchmark.
-- **W2:** the second, independent witness is pending; say "W1 only" if it isn't live.
+- **Witnesses:** every checkpoint is cosigned by W1 and W2 (W2 = unmodified upstream litewitness on its own instance, operator simulated; evidence `docs/audit/aws-main-mon/README.md`). Say "simulated operator", never "independent regulator".
 
 ## Slide 7: Business (3:55-4:00)
 

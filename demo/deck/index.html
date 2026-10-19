@@ -291,7 +291,7 @@ svg text { font-family: inherit; }
       <li>The Trezor Safe 3 in my hand: genuine, certificate chain verified</li>
       <li>Executor on AWS eu-central-1; the agent role is denied tables, KMS, signatures</li>
       <li>Agent VPC with no route out</li>
-      <li>KMS Ed25519 log + witness keys, S3 Object Lock</li>
+      <li>KMS Ed25519 log, two witnesses cosign every checkpoint, S3 Object Lock</li>
       <li>Offline verifier = unmodified upstream Go code</li></ul></div>
     <div><h3 class="muted">Simulated, labelled</h3><ul>
       <li>Companies, domains, accounts, inbox</li>
@@ -300,8 +300,8 @@ svg text { font-family: inherit; }
       <li>VoP responder; the “CFO” voice (Polly)</li>
       <li>Benchmark humans: a model, not a user study</li></ul></div>
   </div>
-  <p class="foot">Second, independent witness (W2): deployed, trust setup pending. If it is not live on stage, say “W1 only, same account”. Full table: demo/REAL_VS_SIMULATED.md.</p>
-  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” Check W2 status before going on stage. Known gaps if asked (demo/REAL_VS_SIMULATED.md): (1) callback code stored as unsalted SHA-256, readable by the portal role, fix = KMS HMAC; (2) clerk and treasury are distinct addresses, not yet distinct devices, fix = compare device certificate at enrolment; (3) demo issuer keys are shared across vendors and in the repo, labelled. (Former gap 4, document check only in the tools layer, is fixed: FACTS-1 enforces “no source document, no autopay” in the executor.)</aside>
+  <p class="foot">Every checkpoint is cosigned by two witnesses: W1, and W2 = unmodified upstream litewitness on its own instance (operator simulated; production runs it at a separate organisation). Full table: demo/REAL_VS_SIMULATED.md.</p>
+  <aside class="notes">3:50–3:55. Five seconds: “Real: the device, the AWS walls, the log you can verify offline. Simulated and labelled: the companies, the second approver’s device, the issuers, the bench humans.” W2 = upstream litewitness, operator simulated: say “simulated operator”. Known gaps if asked (demo/REAL_VS_SIMULATED.md): (1) callback code stored as unsalted SHA-256, readable by the portal role, fix = KMS HMAC; (2) clerk and treasury are distinct addresses, not yet distinct devices, fix = compare device certificate at enrolment; (3) demo issuer keys are shared across vendors and in the repo, labelled. (Former gap 4, document check only in the tools layer, is fixed: FACTS-1 enforces “no source document, no autopay” in the executor.)</aside>
 </section>
 
 <!-- 7 BUSINESS -->
