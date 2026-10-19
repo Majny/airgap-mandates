@@ -162,7 +162,7 @@ class AirgapStack(Stack):
                                     environment={**base_env, **(env or {})},
                                     log_retention=logs.RetentionDays.ONE_WEEK, **extra)
 
-        f_exec = fn("executor", "executor.handler.lambda_handler", r_exec,
+        f_exec = fn("executor", "airgap_entry.handler", r_exec,
                     env={"AIRGAP_GUARDRAIL_ID": guard.attr_guardrail_id,  # egress E-GUARDRAILS 2nd opinion
                          "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})  # GetPublicKey only (vkeys in /health, export)
         # AIRGAP_W1_LOG_VKEY: pinned log vkey, derived from KMS by infra/post_deploy.py and stored in cdk.context.json
@@ -170,8 +170,9 @@ class AirgapStack(Stack):
         w1_env = {"AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id, "AIRGAP_KMS_KEY_ID": ""}
         if ctx("w1_log_vkey"):
             w1_env["AIRGAP_W1_LOG_VKEY"] = ctx("w1_log_vkey")
-        # unauthenticated route (C2SP: the request carries its own log signature): cap its share of the account pool
-        f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1, env=w1_env, reserved_concurrent_executions=5)
+        # unauthenticated route (C2SP: the request carries its own log signature) is throttled at the API stage
+        # (method_options below); no reserved concurrency: this account's pool is too small to carve a share out
+        f_w1 = fn("witness", "witness.witness.lambda_handler", r_w1, env=w1_env)
         f_ckpt = fn("checkpointer", "airgap_scheduled.handler", r_ckpt, timeout=60,
                     env={"AIRGAP_CHECKPOINT_EVERY_N_LEAVES": "10", "AIRGAP_CHECKPOINT_MAX_SECONDS": "30",
                          "AIRGAP_WITNESS_KMS_KEY_ID": k_w1.key_id})
@@ -250,7 +251,7 @@ class AirgapStack(Stack):
                                                       resolver_query_log_config_id=qlog.attr_id, resource_id=vpc.vpc_id)
 
         # ------------------------------------------------------------ private API: /tools/{name} for the agent
-        f_tools = fn("tools", "executor.handler.lambda_handler", r_tools,
+        f_tools = fn("tools", "airgap_entry.handler", r_tools,
                      env={"AIRGAP_EXECUTOR_URL": api_url, "AIRGAP_GATEWAY": "local"})
         papi = apigw.RestApi(
             self, "AgentApi", rest_api_name=f"{PREFIX}agent-api",
@@ -288,6 +289,10 @@ class AirgapStack(Stack):
 
         t["audit"].grant_read_write_data(r_tools)
         main_rw(r_tools, ["toolsession", "counter"])  # toollog rows + tool rate counters only
+        # every leaf append asks checkpoint.latest() whether a checkpoint is due: read-only on checkpoint rows
+        r_tools.add_to_policy(iam.PolicyStatement(
+            actions=["dynamodb:GetItem", "dynamodb:Query"], resources=[t["main"].table_arn],
+            conditions={"ForAllValues:StringLike": {"dynamodb:LeadingKeys": ["checkpoint#*"]}}))
         t["registry"].grant_read_data(r_tools)
         r_tools.add_to_policy(iam.PolicyStatement(actions=["execute-api:Invoke"], resources=[
             invoke("POST", "/proposals"), invoke("POST", "/changes"), invoke("POST", "/egress"),
