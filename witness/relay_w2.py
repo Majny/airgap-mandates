@@ -3,20 +3,23 @@
 W2 = "independent supervisor witness (simulated operator)": stock filippo.io/torchwood/cmd/litewitness v0.10.0 run by
 us on the operator's behalf (witness/w2/README.md). Standard library HTTP only. CONTRACTS.md v2 §7.3. Owner: WS-B.
 
-Contract gap: the executor has no endpoint to store W2's cosignature in its checkpoint note, so the cosignature
-line(s) are returned/printed, not uploaded (proposal: `POST /checkpoint/cosignature?log_id=` in the WS-B report).
+Verified W2 cosignature line(s) are posted back to the executor (row 22b `POST /checkpoint/cosignature`), which checks
+them against AIRGAP_W2_VKEY and appends them to the stored note. The relay has no audit access: W2 refusals are
+reported on stdout/stderr and in the exit code only.
 """
 from __future__ import annotations
 
 import argparse
 import base64
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
+from executor.audit import checkpoint as cp
 from executor.audit import merkle
 
 SIZE_CT = "text/x.tlog.size"
@@ -34,6 +37,9 @@ class RelayResult:
     size: int
     body: str
     cosignatures: list[str] = field(default_factory=list)
+    rollback_suspected: bool = False  # W2 already cosigned a larger tree than the executor now serves
+    unverified: list[str] = field(default_factory=list)  # 200 lines that did not verify against w2_vkey
+    upload_status: int | None = None  # row 22b response status (None = nothing uploaded)
 
 
 def _get(url: str, timeout: float) -> bytes:
@@ -65,8 +71,10 @@ def _request(old: int, proof: list[bytes], note: str) -> bytes:
 
 
 def relay(*, executor_url: str, w2_url: str, log_id: str = "audit", old_size: int | None = None,
-          timeout: float = 10.0) -> RelayResult:
-    """One relay round with details (status, cosignature lines)."""
+          timeout: float = 10.0, w2_vkey: str | None = None, upload: bool = True) -> RelayResult:
+    """One relay round with details (status, cosignature lines). With w2_vkey (default AIRGAP_W2_VKEY) only lines
+    that verify as W2 cosignatures over this checkpoint are returned."""
+    w2_vkey = w2_vkey if w2_vkey is not None else os.environ.get("AIRGAP_W2_VKEY") or None
     base = executor_url.rstrip("/")
     q = urllib.parse.urlencode({"log_id": log_id})
     note = _get(f"{base}/checkpoint?{q}", timeout).decode("utf-8")
@@ -83,20 +91,35 @@ def relay(*, executor_url: str, w2_url: str, log_id: str = "audit", old_size: in
         status, ctype, resp = _post(url, _request(old, proof, note), timeout)
         text = resp.decode("utf-8", "replace")
         if status == 409 and ctype.startswith(SIZE_CT) and text.strip().isdigit() and int(text) != old:
+            if int(text) > size:  # W2 has seen a larger tree: rollback/fork evidence, do not resubmit
+                return RelayResult(status, origin, int(text), size, text, rollback_suspected=True)
             old = int(text)
             _known_size[(w2_url, origin)] = old
             continue
         break
-    cosigs = []
+    cosigs, unverified = [], []
     if status == 200:
         _known_size[(w2_url, origin)] = size
-        cosigs = [line for line in text.splitlines() if line.startswith(DASH + " ")]
-    return RelayResult(status, origin, old, size, text, cosigs)
+        for line in (x for x in text.splitlines() if x.startswith(DASH + " ")):
+            try:
+                ok = w2_vkey is None or bool(cp.verify_note(note + line + "\n", [w2_vkey])["verified"])
+            except cp.NoteError:
+                ok = False
+            (cosigs if ok else unverified).append(line)
+    result = RelayResult(status, origin, old, size, text, cosigs, unverified=unverified)
+    if upload and cosigs:
+        q22 = urllib.parse.urlencode({"log_id": log_id, "size": size})
+        result.upload_status = _post(f"{base}/checkpoint/cosignature?{q22}",
+                                     "".join(c + "\n" for c in cosigs).encode(), timeout)[0]
+    return result
 
 
 def relay_once(*, executor_url: str, w2_url: str) -> int:
     """One relay round; returns the HTTP status from W2 and prints W2's cosignature line(s) (see the contract gap)."""
-    result = relay(executor_url=executor_url, w2_url=w2_url)
+    try:
+        result = relay(executor_url=executor_url, w2_url=w2_url)
+    except urllib.error.HTTPError as exc:  # executor side (e.g. 404 no checkpoint yet)
+        return exc.code
     for line in result.cosignatures:
         print(line)
     return result.status
@@ -110,7 +133,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--old-size", type=int, default=None)
     a = ap.parse_args(argv)
     r = relay(executor_url=a.executor_url, w2_url=a.w2_url, log_id=a.log_id, old_size=a.old_size)
-    print(f"W2 {r.status} origin={r.origin} old={r.old_size} size={r.size}", file=sys.stderr)
+    print(f"W2 {r.status} origin={r.origin} old={r.old_size} size={r.size} upload={r.upload_status}", file=sys.stderr)
+    if r.rollback_suspected:
+        print(f"ALERT: W2 already cosigned size {r.old_size} > executor size {r.size} (rollback/fork?)", file=sys.stderr)
+        return 3
+    if r.unverified:
+        print(f"ALERT: {len(r.unverified)} W2 line(s) do not verify against AIRGAP_W2_VKEY", file=sys.stderr)
     sys.stdout.write("".join(c + "\n" for c in r.cosignatures) if r.status == 200 else r.body)
     return 0 if r.status == 200 else 1
 
