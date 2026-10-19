@@ -23,6 +23,29 @@
       "fw_hash": "19fd7ab4fa23d5248b25647a9016deffe112b46fe0bc26587a3de1fc8a455e1c",
       "label": "Clerk (Trezor Safe 3)",
       "role": "clerk"
+    },
+    {
+      "active": true,
+      "address": "0xfa01a39f8abaeb660c3137f14a310d0b414b2a15",
+      "ceremony": {
+        "authenticity": "emulator: no Optiga",
+        "bootloader_locked": true,
+        "fw_challenge": "7dc490bd68e85fc14ffa9c9b3bd6e674a93dbeb406a1ce44c0a8d92d63089716",
+        "fw_official_match": null,
+        "nonce": "49231DA7",
+        "text": "AG1/DEMO ENROLL\nROLE TREASURY\nN 49231DA7",
+        "transport": "udp:127.0.0.1:21324"
+      },
+      "cert_chain_sha256": null,
+      "derivation_path": "m/44'/60'/0'/0/1",
+      "device": "EMULATOR",
+      "device_model": "T3B1",
+      "enroll_sig": "0x76b7a1b239d3615be27b5d20e70007cef95e8fb14bf38e3a4da3d9012faf33d135348aa77841f2ea9b14f9c731e840ce1ccf493c67c821fa186ea7c3765c7da21b",
+      "enrolled_at": "2026-10-19T12:42:00Z",
+      "firmware_version": "2.12.5",
+      "fw_hash": "6b1cb7803a90d1c2524495f44906e4f0c05b6a1e64291e1310e7e9b959f613e5",
+      "label": "Treasury (Trezor Safe 3, emulator)",
+      "role": "treasury"
     }
   ],
   "version": 1
