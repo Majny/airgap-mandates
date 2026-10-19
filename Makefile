@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now
+.PHONY: help venv data test test-render dev ui bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -73,6 +73,9 @@ checkpoint-now:  ## invoke airgap-checkpointer once (signed checkpoint + W1 cosi
 
 demo-bundle:  ## pre-seal the offline demo bundle into docs/audit/demo (refuses unless it verifies green)
 	$(PY) -m tools.demo_bundle
+
+preflight:  ## stage-laptop checklist: Safe 3 GENUINE + unlocked, treasury emulator, AWS creds + /health hashes, offline bundle, Bedrock
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m tools.preflight $(ARGS)
 
 offline-demo: .local/bin/noteverify  ## "Wi-Fi off" stage check of docs/audit/demo (build noteverify while online)
 	bash tools/offline_demo.sh docs/audit/demo
