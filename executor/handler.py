@@ -770,6 +770,11 @@ def dispatch(method: str, path: str, query: dict[str, str] | None = None, body: 
     """Route a request to the endpoint implementation; ApiError -> (status, error body). Used by Lambda, FastAPI app, bench and tests."""
     ctx = ctx or get_context()
     method = method.upper()
+    if "?" in path:  # in-process callers may pass "/ledger?vendor_id=..." like an HTTP client would
+        from urllib.parse import parse_qsl
+
+        path, qs = path.split("?", 1)
+        query = {**dict(parse_qsl(qs)), **(query or {})}
     path = "/" + path.strip("/") if path != "/" else path
     matched_path = False
     for m, rx, fn, callers in ROUTES:

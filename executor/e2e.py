@@ -65,6 +65,13 @@ def run(call: Call, clerk: Any, treasury: Any, *, now: datetime, log: Callable[[
         return ok(*call("POST", "/signatures", {"nonce": ch["nonce"], "role": ch["role"], "sig": _sig(acct, ch["text"]),
                                                 "displayed_text": ch["text"]}, "host"))
 
+    # I-DUP (amount/date) and I-SPLIT (24 h) make the beat single-shot per ledger: on persistent tables (AWS)
+    # it needs a table reset between runs, by design rather than by accident.
+    st, led = call("GET", "/ledger", None, "host")
+    recent = [t for t in (led.get("txs", []) if st == 200 else [])
+              if t["vendor_id"] == "ven_12345678" and t["executed_at"] > (now - timedelta(hours=24)).isoformat().replace("+00:00", "Z")]
+    assert not recent, (f"{len(recent)} ACME payments in the last 24 h would trip I-SPLIT/I-DUP: reset the tables "
+                        "(make demo-reset) before re-running the S1 beat")
     until = (now + timedelta(days=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     r = ok(*call("POST", "/mandates", {"max_per_payment_minor": 8_000_000, "max_total_minor": 25_000_000,
                                        "max_count": 20, "payee_scope": "existing_only", "valid_until": until,
