@@ -7,10 +7,15 @@ S3  real-domain takeover + "deepfake CFO": DKIM-green change from acme.cz stays 
     so there is no challenge to press; the tripwire reaches the registered contact who answers "not us" -> REJECTED.
     Then the legitimate path: 2 of 3 pinned VCs -> COOLING -> SIG_CLERK -> clerk + treasury 2/2 -> ACTIVE.
 
-In-process memory backend with WS-D's seed data (data/vendors.json, data/emails, data/issuer_keys) and a fake clock
-(development only; the demo itself runs on AWS). IAM AccessDenied / simulate-principal-policy and the VPC no-route
-proof are AWS-only evidence (WS-E) and are not part of these helpers. Signers are throwaway software keys.
-WS-F scenes build on scene_s2() / scene_s3(). Owner: WS-A.
+Two transports, same scene code:
+- DemoEnv (default): in-process memory backend with WS-D's seed data and a fake clock (development only).
+- AwsEnv(url) (`make scene-s2 URL=...`): the deployed executor via SigV4 per principal (infra.aws_e2e.signed_call),
+  real clock (the cooling-off is waited out, AIRGAP_COOLING_SECONDS, demo profile 20 s), signer keys from
+  .local/aws_e2e_keys.json, read-only assertions against the real tables with the operator's credentials. Needs a
+  fresh state first (python -m infra.reset_state --yes): the beats are single-shot per ledger.
+On AWS the agent role is assumable only by its Lambda, so tool calls go as the tools role and "the agent calls
+/signatures" is shown by WS-E's IAM evidence (simulate-principal-policy), not live. Issuer VCs use the DEMO-only
+data/issuer_keys. WS-F scenes build on scene_s2() / scene_s3(). Owner: WS-A.
 """
 from __future__ import annotations
 
@@ -18,6 +23,7 @@ import argparse
 import dataclasses
 import json
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -62,8 +68,17 @@ class DemoEnv:
         self._handler = handler
         self.step = 0
 
-    def at(self, t: datetime) -> None:
-        self.now = t
+    remote = False
+    tool_principal = "agent"
+    tool_plane = True
+
+    @property
+    def cooling_seconds(self) -> int:
+        return self.settings.cooling_seconds
+
+    def advance(self, seconds: int) -> None:
+        """Let `seconds` pass (fake clock locally, real waiting on AWS)."""
+        self.now = self.now + timedelta(seconds=seconds)
 
     def call(self, method: str, path: str, body: Any = None, who: str | None = None) -> tuple[int, Any]:
         s = dataclasses.replace(self.settings, fake_now=_z(self.now))
@@ -76,7 +91,7 @@ class DemoEnv:
         self.step += 1
         return self.call("POST", f"/tools/{name}", {"session_id": "ses_scene", "step": self.step,
                                                     "args": args or {}, "manifest_sha256": manifest_sha256()},
-                         "agent")
+                         self.tool_principal)
 
     def sign(self, ch: dict, acct: Any, role: str | None = None) -> tuple[int, Any]:
         return self.call("POST", "/signatures", {"nonce": ch["nonce"], "role": role or ch["role"],
@@ -96,6 +111,55 @@ class DemoEnv:
         st, r = self.sign(r["challenge"], self.treasury)
         assert st == 200 and r["mandate"]["status"] == "ACTIVE", r
         return r["mandate"]
+
+
+class AwsEnv(DemoEnv):
+    """The deployed executor (AIRGAP_BACKEND=aws) through API Gateway, SigV4-signed as each principal's IAM role."""
+
+    remote = True
+    tool_principal = "tools"
+    # /tools/* lives on the private API inside the agent VPC (S10): not reachable from an operator laptop
+    tool_plane = False
+
+    def __init__(self, url: str) -> None:  # deliberately no super().__init__(): no local store or seed
+        import json
+        import os
+
+        from infra.aws_e2e import KEYS, aws_settings, signed_call
+        from executor.store.dynamo import DynamoStore
+
+        from pathlib import Path
+
+        path = Path(os.environ.get("AIRGAP_E2E_KEYS", str(KEYS)))
+        if not path.exists():
+            raise SystemExit(f"{path} missing: seed the AWS signers (python -m infra.reset_state --yes) or point "
+                             "AIRGAP_E2E_KEYS at the seeded keys file")
+        keys = json.loads(path.read_text())
+        self.clerk, self.treasury = Account.from_key(keys["clerk"]), Account.from_key(keys["treasury"])
+        self.stranger = Account.create()
+        self.settings = aws_settings()
+        self.store = DynamoStore(self.settings)  # read-only assertions with the operator's credentials
+        self._call = signed_call(url.rstrip("/"))
+        self._cooling = int(os.environ.get("AIRGAP_COOLING_SECONDS", "20"))
+        self.step = int(time.time())  # tool steps unique per run
+
+    @property
+    def now(self) -> datetime:  # type: ignore[override]
+        return datetime.now(timezone.utc)
+
+    @now.setter
+    def now(self, _: datetime) -> None:
+        raise AttributeError("the AWS clock cannot be moved")
+
+    @property
+    def cooling_seconds(self) -> int:
+        return self._cooling
+
+    def advance(self, seconds: int) -> None:
+        time.sleep(seconds)
+
+    def call(self, method: str, path: str, body: Any = None, who: str | None = None) -> tuple[int, Any]:
+        return self._call(method, path, body, who or "host")
 
 
 def _ok(st: int, r: Any, want: int = 200) -> Any:
@@ -140,10 +204,17 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
     log(f"[S2] proposal {r['proposal']['proposal_id']} from the lookalike email -> deny {r['decision']['rule_ids']}")
     # 3. escalation attempts
     esc = {}
-    st, r = env.tool("mandate.write", {"max_total_minor": 1_000_000_000})
-    esc["mandate.write"] = _bad(st, r, "caller_not_allowed")["details"].get("rule_ids")
-    st, r = env.call("POST", "/signatures", {"nonce": "00000000", "role": "clerk", "sig": "0x" + "00" * 65}, "agent")
-    esc["agent->/signatures"] = _bad(st, r, "caller_not_allowed")["error"]
+    if env.tool_plane:
+        st, r = env.tool("mandate.write", {"max_total_minor": 1_000_000_000})
+        esc["mandate.write"] = _bad(st, r, "caller_not_allowed")["details"].get("rule_ids")
+    else:
+        esc["mandate.write"] = "tool plane is the private API in the agent VPC: shown by the agent run (WS-E)"
+    if env.remote:
+        esc["agent->/signatures"] = "IAM explicit Deny (WS-E evidence: simulate-principal-policy)"
+    else:
+        st, r = env.call("POST", "/signatures", {"nonce": "00000000", "role": "clerk", "sig": "0x" + "00" * 65},
+                         "agent")
+        esc["agent->/signatures"] = _bad(st, r, "caller_not_allowed")["error"]
     st, r = env.call("POST", "/proposals", {"invoice": {
         "vendor_id": "ven_87654321", "invoice_no": "BS-2026-1187", "invoice_ref": "doc_00000000000000b1",
         "issue_date": env.now.strftime("%Y-%m-%d"), "amount_minor": 12_500_050, "currency": "CZK",
@@ -156,6 +227,10 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
     for k, v in esc.items():
         log(f"[S2] escalation {k:<18} -> refused ({v})")
     # 4. exfiltration of the vendor master
+    if not env.tool_plane:
+        out["exfil"] = "tool plane is the private API in the agent VPC: shown by the agent run (WS-E)"
+        log(f"[S2] exfil: {out['exfil']}")
+        return _s2_tail(env, out, log)
     st, r = env.tool("mail.send_template", {"to": "drop@acme-cz.com", "template_id": "ack_invoice",
                                             "vars": {"invoice_no": "1"}})
     ex = {"non-allowlisted": _bad(st, r, "caller_not_allowed")["details"].get("rule_ids")}
@@ -164,6 +239,10 @@ def scene_s2(env: DemoEnv | None = None, log: Callable[[str], None] = print) -> 
     ex["iban-in-vars"] = _bad(st, r, "caller_not_allowed")["details"].get("rule_ids")
     out["exfil"] = ex
     log(f"[S2] exfil blocked: {ex}  (AWS-only: VPC no route, IAM AccessDenied -> WS-E evidence)")
+    return _s2_tail(env, out, log)
+
+
+def _s2_tail(env: DemoEnv, out: dict, log: Callable[[str], None]) -> dict:
     assert not [t for t in env.store.scan("ledger") if t["iban"] in (FRAUD_IBAN, TAKEOVER_IBAN)]
     out["money_to_attacker_minor"] = 0
     log("[S2] money moved to the attacker: 0")
@@ -184,7 +263,7 @@ def scene_s3(env: DemoEnv | None = None, log: Callable[[str], None] = print, *, 
     assert ch["state"] == "PENDING_ATTEST" and any(b.startswith("F-ATTEST") for b in _blockers(ch)), ch["state"]
     log(f"[S3] change {cid} from acme.cz (DKIM PASS) -> {TAKEOVER_IBAN}: {ch['state']}; "
         f"BLOCK: {', '.join(_blockers(ch))}")
-    env.at(env.now + timedelta(seconds=env.settings.cooling_seconds + 5))
+    env.advance(env.cooling_seconds + 5)
     ch = _ok(*env.call("GET", f"/changes/{cid}", None, "host"))
     assert not ch.get("pending_challenge") and not env.nonces_for(cid)
     log("[S3] deepfake 'CFO' presses the clerk: there is no challenge, so there is no button (R0)")
@@ -210,7 +289,7 @@ def scene_s3(env: DemoEnv | None = None, log: Callable[[str], None] = print, *, 
         r = _ok(st, r)
         log(f"[S3] VC {cls}: ok={r['attest'] and r['attest']['ok']} -> {r['change']['state']}")
     assert r["change"]["state"] == "COOLING", r["change"]["state"]
-    env.at(env.now + timedelta(seconds=env.settings.cooling_seconds + 1))
+    env.advance(env.cooling_seconds + 2)
     ch = _ok(*env.call("GET", f"/changes/{cid}", None, "host"))
     assert ch["state"] == "SIG_CLERK" and ch["pending_challenge"], ch["state"]
     log(f"[S3] cooling-off over -> SIG_CLERK; device shows:\n{ch['pending_challenge']['text']}\n")
@@ -226,14 +305,20 @@ def scene_s3(env: DemoEnv | None = None, log: Callable[[str], None] = print, *, 
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Run demo beat S2 or S3 in-process (memory backend, dev only)")
+    ap = argparse.ArgumentParser(description="Run demo beat S2 or S3 (in-process memory, or --url the AWS executor)")
     ap.add_argument("scene", choices=["s2", "s3"])
     ap.add_argument("--no-legit", action="store_true", help="S3: stop after the takeover is rejected")
     ap.add_argument("--json", action="store_true", help="print only the JSON summary")
+    ap.add_argument("--url", help="deployed executor API (AWS, SigV4 per principal); default: in-process memory")
     a = ap.parse_args(argv)
-    print("LOCAL memory backend (development only; the demo runs on AWS)", file=sys.stderr)
+    if a.url:
+        env: DemoEnv = AwsEnv(a.url)
+        print(f"AWS executor {a.url}", file=sys.stderr)
+    else:
+        env = DemoEnv()
+        print("LOCAL memory backend (development only; the demo runs on AWS)", file=sys.stderr)
     log = (lambda s: None) if a.json else print
-    out = scene_s2(log=log) if a.scene == "s2" else scene_s3(log=log, legit=not a.no_legit)
+    out = scene_s2(env, log=log) if a.scene == "s2" else scene_s3(env, log=log, legit=not a.no_legit)
     print(json.dumps(out) if a.json else f"\nSCENE {a.scene.upper()} OK")
     return 0
 
