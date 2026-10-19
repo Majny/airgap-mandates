@@ -292,3 +292,18 @@ def test_real_true_positives() -> None:
     assert warnlist_fact("Unrelated Vendor s.r.o.", [site], mr_path=REAL)["display_line"] == "WARNLIST HIT"
     assert sanction_fact(sanctioned, "", mr_path=REAL)["display_line"] == "EU SANCTION HIT"
     assert sanction_fact(sanctioned + " s.r.o.", "", mr_path=REAL)["display_line"] == "EU SANCTION HIT"
+
+
+def test_ensure_builds_missing_snapshot_then_noop_then_refuses_mismatch(tmp_path):
+    out = tmp_path / "mr"
+    sha = loader.ensure(str(FIXTURE), str(out))
+    side = (out / "snapshot.sha256").read_text().split()[0]
+    assert sha == side == hashlib.sha256((out / "snapshot.sqlite").read_bytes()).hexdigest()
+    mtime = (out / "snapshot.sqlite").stat().st_mtime_ns
+    assert loader.ensure(str(FIXTURE), str(out)) == sha  # fresh: no rebuild
+    assert (out / "snapshot.sqlite").stat().st_mtime_ns == mtime
+    (out / "snapshot.sqlite").unlink()
+    (out / "snapshot.sha256").write_text("0" * 64 + "  snapshot.sqlite\n")
+    with pytest.raises(loader.SnapshotMismatch):
+        loader.ensure(str(FIXTURE), str(out))
+    assert (out / "snapshot.sha256").read_text().split()[0] == "0" * 64  # committed prov kept
