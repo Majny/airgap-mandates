@@ -508,7 +508,7 @@ def body(st: Any, ident: auth.Identity | None = None) -> None:
         if waiting:
             st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Check the text on the Trezor.")
         m = st.columns(4)
-        m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payments",
+        m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payment{'' if k['paid_n'] == 1 else 's'}",
                     delta_color="off")
         m[1].metric("Paid to unregistered accounts", story.czk(k["attacker_minor"]))
         m[2].metric("Blocked attempts", k["attacks"])

@@ -19,6 +19,8 @@ TOOL_ATTACKS = {
 }
 SIG_ATTACKS = {
     "nonce_reused": ("Replay attack stopped", "an old Trezor signature was sent again; every signature works once"),
+    "expired": ("Replay attack stopped", "a captured approval was sent after its challenge expired; approvals are "
+                                         "valid for minutes and only once"),
     "unknown_signer": ("Forged approval stopped", "signed by a key that is not an enrolled hardware device"),
     "caller_not_allowed": ("Agent tried to approve its own payment", "the agent has no right to submit approvals"),
 }
