@@ -319,6 +319,24 @@ def pain001_batch(st: Any, data: dict[str, Any]) -> None:
                    "carry a hash that is not in the log.")
 
 
+SIGN_TIMEOUT_S = float(os.environ.get("AIRGAP_UI_SIGN_TIMEOUT_S", "90"))
+
+
+def expires_in(challenge: dict[str, Any]) -> int | None:
+    """Seconds left on a challenge (it lives 300 s from the proposal and is never re-issued); None on the seeded
+    memory executor, whose clock is fixed in the past."""
+    from datetime import datetime, timezone
+
+    exp = challenge.get("exp")
+    if not exp or EXECUTOR.startswith("memory:"):
+        return None
+    try:
+        t = datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, int((t - datetime.now(timezone.utc)).total_seconds()))
+
+
 def approve_on_trezor(st: Any, nonce: str, role: str, *, key: str) -> None:
     """Operator presses this to exact-sign a waiting payment on the clerk's Trezor. The honest flow shows the executor
     text on the device and pays on confirm. If the clerk's PC is compromised (host.implant, attacker level H4) the
@@ -326,7 +344,10 @@ def approve_on_trezor(st: Any, nonce: str, role: str, *, key: str) -> None:
     message. Never crashes when no device is attached."""
     from host import signer
 
+    done = st.session_state.setdefault("approve_outcome", {})
     if not st.button("Approve on Trezor", key=f"approve-{key}", type="primary"):
+        if key in done:  # keep the last outcome visible across the auto-refresh reruns
+            getattr(st, done[key][0])(done[key][1])
         return
     driver = None
     try:
@@ -335,30 +356,33 @@ def approve_on_trezor(st: Any, nonce: str, role: str, *, key: str) -> None:
     except Exception:  # noqa: BLE001 - fall back to the physical device path
         driver = None
     note = ("Signing with a software key (test)." if driver is not None
-            else "Check the Trezor: confirm only if payee, IBAN and amount match the invoice.")
+            else "Check the Trezor: confirm only if payee, IBAN and amount match the text above. To reject, press "
+                 "the left button until the first screen, then once more.")
     try:
-        with st.spinner(note):
-            res = signer.sign_challenge(nonce, role, call=_call(), driver=driver)
+        with st.spinner(note):  # well under the 300 s challenge life, so a reject leaves time to approve again
+            res = signer.sign_challenge(nonce, role, call=_call(), driver=driver, timeout=SIGN_TIMEOUT_S)
+        http, err = res.get("_http"), res.get("error")
+        eff = (res.get("effect") or {}).get("type")
+        if http == 200 and eff == "payment_executed":
+            out = ("success", "Paid · confirmed on Trezor.")
+        elif err == "render_mismatch":
+            out = ("error", "Refused by the executor: the Trezor was asked to sign a different payment than the bank "
+                            "issued (the account number was changed on this PC). Nothing was paid. Treat this PC as "
+                            "compromised.")
+        elif err:
+            out = ("error", f"Refused by the executor: {err}. Nothing was paid.")
+        else:
+            out = ("info", f"Signature submitted: {eff or 'done'}.")
     except signer.SignerCancelled:
-        st.warning("You rejected it on the Trezor. Nothing was paid; the payment still waits for approval.")
-        return
+        out = ("warning", "You rejected it on the Trezor. Nothing was paid; the payment still waits for approval.")
     except TimeoutError:
-        st.warning("No confirmation on the Trezor in time. Nothing was paid; the payment still waits for approval.")
-        return
-    except Exception as exc:  # noqa: BLE001 - no device attached, trezorlib missing, transport error: never crash
-        st.error(f"No Trezor connected ({type(exc).__name__}). Attach the clerk's Safe 3 and try again.")
-        return
-    http, err = res.get("_http"), res.get("error")
-    eff = (res.get("effect") or {}).get("type")
-    if http == 200 and eff == "payment_executed":
-        st.success("Paid · confirmed on Trezor.")
-    elif err == "render_mismatch":
-        st.error("Refused by the executor: the Trezor was asked to sign a different payment than the bank issued "
-                 "(the account number was changed on this PC). Nothing was paid. Treat this PC as compromised.")
-    elif err:
-        st.error(f"Refused by the executor: {err}. Nothing was paid.")
-    else:
-        st.info(f"Signature submitted: {eff or 'done'}.")
+        out = ("warning", "No confirmation on the Trezor in time. Nothing was paid; the payment still waits for "
+                          "approval.")
+    except Exception as exc:  # noqa: BLE001 - no device attached, trezorlib missing, device error: never a signature
+        out = ("error", f"Not signed: no usable Trezor ({type(exc).__name__}). Attach and unlock the clerk's Safe 3 "
+                        "and try again.")
+    done[key] = out  # stored before any st.* call: an auto-refresh rerun may stop the script at the next one
+    getattr(st, out[0])(out[1])
 
 
 def tab_payments(st: Any, data: dict[str, Any]) -> None:
@@ -383,8 +407,13 @@ def tab_payments(st: Any, data: dict[str, Any]) -> None:
                 st.markdown(f"Why: {blocks}")
             ch = v.get("challenge")
             if ch and v.get("status") in WAITING_SIG:
-                st.caption("Exactly this text is on the clerk's Trezor. The device signs what it shows, "
-                           "not what this screen shows.")
+                st.caption("The clerk's Trezor must show exactly this text. The device signs what it shows, not "
+                           "what this screen shows: if anything on the Trezor differs, reject it there.")
+                left = expires_in(ch)
+                if left is not None:
+                    st.markdown(f"**Approve within {left // 60}:{left % 60:02d}**" if left > 0 else
+                                "**Expired:** this approval request can no longer be signed; the invoice must be "
+                                "submitted again.")
                 st.markdown(f'<div class="device">{ch["text"]}</div>', unsafe_allow_html=True)
                 if data.get("who") == "host" and ch.get("nonce"):  # operators only; auditors never reach this tab
                     approve_on_trezor(st, ch["nonce"], ch.get("role", "clerk"), key=p["proposal_id"])

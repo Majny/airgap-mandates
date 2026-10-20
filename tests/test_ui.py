@@ -99,3 +99,15 @@ def test_assumed_role_credentials_are_reassumed_before_expiry(monkeypatch: pytes
     assert aws_e2e.role_creds("host").access_key == "AK1"  # expires in 2 min: inside the 5 min margin
     assert aws_e2e.role_creds("host").access_key == "AK2"  # so it is re-assumed
     assert aws_e2e.role_creds("host").access_key == "AK2"  # and the fresh one is reused
+
+
+def test_challenge_countdown(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setattr(ui, "EXECUTOR", "https://example.execute-api.eu-central-1.amazonaws.com/prod")
+    soon = (datetime.now(timezone.utc) + timedelta(seconds=130)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert 125 <= ui.expires_in({"exp": soon}) <= 130
+    assert ui.expires_in({"exp": "2026-01-01T00:00:00Z"}) == 0
+    assert ui.expires_in({}) is None
+    monkeypatch.setattr(ui, "EXECUTOR", "memory:")  # seeded executor: fixed past clock, no countdown
+    assert ui.expires_in({"exp": soon}) is None
