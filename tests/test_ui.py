@@ -111,3 +111,5 @@ def test_challenge_countdown(monkeypatch: pytest.MonkeyPatch):
     assert ui.expires_in({}) is None
     monkeypatch.setattr(ui, "EXECUTOR", "memory:")  # seeded executor: fixed past clock, no countdown
     assert ui.expires_in({"exp": soon}) is None
+    monkeypatch.setattr(ui, "EXECUTOR", "http://127.0.0.1:8000")  # tools/local_stack: same fixed clock
+    assert ui.expires_in({"exp": "2026-01-01T00:00:00Z"}) is None

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 # `streamlit run host/ui.py` puts only host/ on sys.path; infra/ (SigV4 signing) is not an installed package
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -324,12 +324,12 @@ SIGN_TIMEOUT_S = float(os.environ.get("AIRGAP_UI_SIGN_TIMEOUT_S", "90"))
 
 def expires_in(challenge: dict[str, Any]) -> int | None:
     """Seconds left on a challenge (it lives 300 s from the proposal and is never re-issued); None on the seeded
-    memory executor, whose clock is fixed in the past."""
+    executors, whose clock is fixed in the past."""
     from datetime import datetime, timezone
 
     exp = challenge.get("exp")
-    if not exp or EXECUTOR.startswith("memory:"):
-        return None
+    if not exp or EXECUTOR.startswith("memory:") or urlparse(EXECUTOR).hostname in ("127.0.0.1", "localhost"):
+        return None  # the seeded executors (memory:, tools/local_stack) run on a fixed clock in the past
     try:
         t = datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
     except ValueError:
@@ -596,11 +596,14 @@ def body(st: Any, ident: auth.Identity | None = None) -> None:
     data = load(ident)
     if ident.role == "operator":
         k = data["kpis"]
-        waiting = [p for p in data["proposals"] if p.get("status") in WAITING_SIG]
-        waiting += [c for c in data["changes"] if c.get("state") in ("SIG_CLERK", "SIG_TREASURY")]
-        if waiting:
-            st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Open the Payments tab and check the "
-                       "text on the Trezor before you approve.")
+        pend = [p for p in data["proposals"] if p.get("status") in WAITING_SIG]
+        dead = [p for p in pend if expires_in((p.get("decision") or {}).get("challenge") or {}) == 0]
+        n = len(pend) - len(dead) + sum(c.get("state") in ("SIG_CLERK", "SIG_TREASURY") for c in data["changes"])
+        if n:
+            st.warning(f"{n} {'item waits' if n == 1 else 'items wait'} for a hardware signature. Open the Payments "
+                       "tab and check the text on the Trezor before you approve."
+                       + (f" ({len(dead)} older approval request{'' if len(dead) == 1 else 's'} expired and can no "
+                          "longer be signed.)" if dead else ""))
         m = st.columns(4)
         m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payment{'' if k['paid_n'] == 1 else 's'}",
                     delta_color="off")
