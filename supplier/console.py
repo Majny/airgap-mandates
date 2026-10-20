@@ -44,6 +44,8 @@ h1, h2, h3 { color: #1f2933 !important; }
        padding: 8px 14px; margin-bottom: 8px; }
 .row.paid { border-left-color: #067647; } .row.waiting { border-left-color: #1d4ed8; }
 .row.refused, .row.error { border-left-color: #b42318; } .row.expired, .row.rejected { border-left-color: #b54708; }
+.stButton button[kind="primary"] { background: #2d6a4f; border-color: #2d6a4f; color: #ffffff; }
+.stButton button[kind="primary"]:hover { background: #24563f; border-color: #24563f; }
 .row .k { font-weight: 700; } .row .m { color: #6b6f63; font-size: 15px; }
 </style>"""
 
@@ -136,7 +138,7 @@ def _sent_list(call) -> None:
                 if live["kind"] != "error":
                     r["kind"], r["text"] = live["kind"], live["text"]
             st.markdown(f"<div class='row {r['kind']}'><span class='k'>{r['invoice_no']}</span> &middot; {r['vendor']}"
-                        f" &middot; {send.czk(r['amount_minor'])}<br>{r['text']}"
+                        f" &middot; {send.czk(r['amount_minor']).replace(' ', '&nbsp;')}<br>{r['text']}"
                         f"<br><span class='m'>{r['agent']} &middot; {r.get('proposal_id') or 'no proposal'}</span>"
                         "</div>", unsafe_allow_html=True)
 
