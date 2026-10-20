@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2
+.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker local-stack attack-visual
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -44,6 +44,17 @@ ui-visual:  ## visual test: headless Chromium clicks every console tab on seeded
 alerts:  ## post blocked attempts to a Slack/Teams webhook (WEBHOOK=https://...; without it: --dry-run); ALERT_URL=memory: for seeded data
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.alerts --url $(or $(ALERT_URL),$(DEMO_URL)) \
 	  $(if $(WEBHOOK),--webhook $(WEBHOOK) --state-file .local/alerts-state.json,--dry-run) $(ARGS)
+
+local-stack: data  ## seeded in-memory executor over HTTP on :8000 (both consoles share it; ATTACK_URL=http://127.0.0.1:8000)
+	$(PY) -m tools.local_stack --port 8000
+
+attacker:  ## attacker workstation console on :8502 (against $(DEMO_URL) via AWS_PROFILE=hackathon; ATTACK_URL= to override)
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} AIRGAP_ATTACK_URL=$(or $(ATTACK_URL),$(DEMO_URL)) \
+	  .venv/bin/streamlit run attacker/console.py --server.port 8502
+
+attack-visual: data  ## visual e2e: local stack + bank console + attacker console, launch every attack, screenshots in .local/attack-visual/
+	$(PY) -m playwright install chromium >/dev/null
+	$(PY) -m tools.attack_visual
 
 bench:  ## run AgentPayBench
 	$(PY) -m bench.run_bench --out bench/results

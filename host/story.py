@@ -51,6 +51,20 @@ def _reasons(facts: list[dict[str, Any]], severities: tuple[str, ...] = ("BLOCK"
     return "; ".join(plain_fact(f) for f in facts if f.get("kind", "F") == "F" and f.get("severity") in severities)
 
 
+def _lookalike_of(domain: str, reg_domains: dict[str, str]) -> str | None:
+    """The registered supplier domain that `domain` imitates, or None. A lookalike is an unregistered sender domain
+    that carries a registered supplier's core label (acme-cz.com imitates acme.cz)."""
+    d = (domain or "").lower()
+    if not d or d in reg_domains:
+        return None
+    flat = d.replace("-", "").replace(".", "")
+    for rd in reg_domains:
+        core = rd.split(".")[0]
+        if len(core) >= 3 and core in flat:
+            return rd
+    return None
+
+
 def _agent_claims(hints: list[dict[str, Any]]) -> str:
     said = [h.get("text") or h.get("display_line") for h in hints if h.get("text") or h.get("display_line")]
     return f" The agent claimed “{said[0]}”: ignored, the agent's words are never evidence." if said else ""
@@ -61,6 +75,7 @@ def build(bundle: dict[str, Any] | None, vendors: list[dict[str, Any]], changes:
     """-> (kpis, cards newest first)."""
     leaves = sorted((bundle or {}).get("leaves", []), key=lambda leaf: leaf.get("seq", 0))
     names = {v["vendor_id"]: v.get("name") or v["vendor_id"] for v in vendors}
+    reg_domains = {str(v["domain"]).lower(): v.get("name") or v["vendor_id"] for v in vendors if v.get("domain")}
     known_ibans = {v.get("iban") for v in vendors} | {h.get("iban") for v in vendors
                                                       for h in v.get("iban_history") or []}
     by_change = {c["change_id"]: c for c in changes}
@@ -85,7 +100,15 @@ def build(bundle: dict[str, Any] | None, vendors: list[dict[str, Any]], changes:
             if "software key" in str(d.get("label", "")):
                 software.add(str(d.get("address", "")).lower())
         elif typ == "ingest":
-            domains[d.get("email_id", "")] = d.get("from_domain") or "?"
+            dom = d.get("from_domain") or "?"
+            domains[d.get("email_id", "")] = dom
+            imitated = _lookalike_of(dom, reg_domains)
+            if imitated:
+                k["attacks"] += 1
+                cards.append(_card(seq, "attack", f"Email from a lookalike domain: {dom}",
+                                   f"{dom} imitates the registered supplier domain {imitated} "
+                                   f"({reg_domains[imitated]}). It is treated as untrusted: any payment or account "
+                                   "change it asks for is rejected on arrival, and the Trezor stays dark."))
         elif typ == "proposal":
             invoices[sid] = d.get("invoice") or {}
             hints[sid] = d.get("hints") or []
