@@ -97,6 +97,12 @@ def api(path: str, who: str = "host", **query: Any) -> tuple[int, Any]:
         return 0, {"error": "unreachable", "message": f"{type(exc).__name__}: {exc}"[:300]}
 
 
+def _login_expired(resp: Any) -> bool:
+    """Expired operator credentials (SSO token, or a security token API Gateway refuses), not a broken executor."""
+    text = str(resp.get("message", "")) if isinstance(resp, dict) else ""
+    return "expired" in text.lower() and ("token" in text.lower() or "sso" in text.lower())
+
+
 def _list(path: str, key: str, **query: Any) -> list[dict[str, Any]]:
     code, body = api(path, **query)
     return body.get(key, []) if code == 200 and isinstance(body, dict) else []
@@ -535,11 +541,13 @@ def main() -> None:
         cls, label = "banner-aws", f"AWS eu-central-1 · {health.get('deployment')}"
     elif EXECUTOR.startswith("memory:") and backend:
         cls, label = "banner-local", "LOCAL in-process executor (seeded test data)"
+    elif _login_expired(health):
+        cls, label = "banner-local", "AWS sign-in expired"
     else:
         cls, label = "banner-local", f"LOCAL ({backend or 'executor unreachable'})"
     h1, h2 = st.columns([3, 2])
     h1.markdown("## AirGap Mandates  \nPayment control for AI agents")
-    policy = str(health.get("policy_hash"))[:16] if isinstance(health, dict) else "-"
+    policy = str(health.get("policy_hash") or "-")[:16] if isinstance(health, dict) else "-"
     who = "Console: local, no SSO" if ident.mode == "local" else f"Signed in: {ident.email} ({ident.role})"
     h2.markdown(f'<div style="text-align:right"><span class="{cls}">{label}</span><br>'
                 f'<small>policy {policy} · {who}</small></div>', unsafe_allow_html=True)
@@ -548,7 +556,10 @@ def main() -> None:
             st.markdown(f"Signed in as **{ident.email}**  \nRole: **{ident.role}**")
             if st.button("Sign out"):
                 st.logout()
-    if code != 200:
+    if _login_expired(health):
+        st.error("The console's AWS sign-in has expired, so it cannot read the executor. Sign in again "
+                 "(`aws sso login --profile hackathon`), then reload this page.")
+    elif code != 200:
         st.error(f"executor: {health}")
     if emulator_only():
         st.markdown('<span class="banner-local">FALLBACK: EMULATOR CLERK (no physical Safe 3 attached)</span>',

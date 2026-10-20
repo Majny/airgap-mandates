@@ -66,3 +66,36 @@ def test_ui_renders_on_seeded_memory_executor(monkeypatch: pytest.MonkeyPatch):
     at = AppTest.from_file(UI_PATH, default_timeout=60).run()
     assert not at.exception
     assert [m.value for m in at.metric][1] == "0.00 CZK"  # paid to unregistered accounts
+
+
+def test_expired_sign_in_is_named_not_shown_as_unreachable():
+    assert ui._login_expired({"message": "The security token included in the request is expired"})
+    assert ui._login_expired({"error": "unreachable",
+                              "message": "TokenRetrievalError: Error when retrieving token from sso: Token has expired"})
+    assert not ui._login_expired({"error": "unreachable", "message": "ConnectError: connection refused"})
+    assert not ui._login_expired("text")
+
+
+def test_assumed_role_credentials_are_reassumed_before_expiry(monkeypatch: pytest.MonkeyPatch):
+    """A console left open longer than the 1 h STS session must not start failing with 'token expired'."""
+    from datetime import datetime, timedelta, timezone
+
+    from infra import aws_e2e
+
+    issued: list[datetime] = []
+
+    class Sts:
+        def get_caller_identity(self):
+            return {"Account": "503002144042"}
+
+        def assume_role(self, **kw):
+            exp = datetime.now(timezone.utc) + (timedelta(minutes=2) if not issued else timedelta(hours=1))
+            issued.append(exp)
+            return {"Credentials": {"AccessKeyId": f"AK{len(issued)}", "SecretAccessKey": "s", "SessionToken": "t",
+                                    "Expiration": exp}}
+
+    monkeypatch.setattr(aws_e2e.boto3, "client", lambda *a, **k: Sts())
+    monkeypatch.setattr(aws_e2e, "_creds", {})
+    assert aws_e2e.role_creds("host").access_key == "AK1"  # expires in 2 min: inside the 5 min margin
+    assert aws_e2e.role_creds("host").access_key == "AK2"  # so it is re-assumed
+    assert aws_e2e.role_creds("host").access_key == "AK2"  # and the fresh one is reused
