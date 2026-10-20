@@ -22,7 +22,7 @@ from eth_account import Account
 
 REGION = "eu-central-1"
 KEYS = Path(".local/aws_e2e_keys.json")
-_creds: dict[str, Credentials] = {}
+_creds: dict[str, tuple[Credentials, datetime]] = {}  # who -> (assumed-role credentials, expiry)
 
 
 EXPECTED_ACCOUNT = "503002144042"  # the hackathon team account; destructive helpers refuse any other
@@ -36,12 +36,14 @@ def require_team_account() -> None:
 
 
 def role_creds(who: str) -> Credentials:
-    if who not in _creds:
+    """Assumed-role credentials for airgap-<who>, re-assumed 5 min before they expire (long-running consoles)."""
+    cached = _creds.get(who)
+    if cached is None or (cached[1] - datetime.now(timezone.utc)).total_seconds() < 300:
         acct = boto3.client("sts").get_caller_identity()["Account"]
         c = boto3.client("sts").assume_role(RoleArn=f"arn:aws:iam::{acct}:role/airgap-{who.replace('_', '-')}",
                                             RoleSessionName=f"e2e-{who}")["Credentials"]
-        _creds[who] = Credentials(c["AccessKeyId"], c["SecretAccessKey"], c["SessionToken"])
-    return _creds[who]
+        _creds[who] = (Credentials(c["AccessKeyId"], c["SecretAccessKey"], c["SessionToken"]), c["Expiration"])
+    return _creds[who][0]
 
 
 def signed_call(base: str):
