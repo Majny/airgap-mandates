@@ -9,6 +9,13 @@ from attacker import attacks
 from executor.scenes import DemoEnv
 
 
+@pytest.fixture(autouse=True)
+def _isolate_implant(tmp_path, monkeypatch):
+    """Keep attack h's simulated implant (host.implant) out of the repo's .local: give each test a throwaway dir."""
+    monkeypatch.setenv("AIRGAP_IMPLANT_DIR", str(tmp_path / "implant"))
+    yield
+
+
 def _session() -> attacks.Session:
     env = DemoEnv()
     env.active_mandate()  # accepted hardware approvals in the log (so the replay attack has something to capture)

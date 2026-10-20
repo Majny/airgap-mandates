@@ -740,7 +740,7 @@ Q&A framing:
 | H1 | The UI lies |
 | H2 | False `displayed_text` |
 | H3 | Nonce/subject swap between live challenges |
-| H4 | Different text sent to the device (emulator; the human signs what the screen shows) |
+| H4 | Different text sent to the device (emulator; the human signs what the screen shows). Demo: attack h "malware on the clerk's PC" (`host.implant`, Bybit-style signing swap) swaps the IBAN lines of the device text; the Trezor shows the attacker IBAN and, on confirm, the executor refuses it (`render_mismatch`, nonce not consumed) |
 | H5 | The agent's own AWS credentials used directly |
 | H6 | Egress bypass (DNS/HTTP) |
 
