@@ -67,13 +67,15 @@ def arm(iban: str | None = None) -> dict:
     """Drop the implant on the clerk's PC (simulated C2): the next armed PAY signature is swapped to `iban`."""
     rec = {"armed": True, "iban": "".join(str(iban or ATTACKER_IBAN).split()).upper(), "armed_at": _iso(),
            "by": "attacker console"}
+    _remove(_LAST)  # clear any prior verdict so a fresh run shows "waiting", not last time's outcome
     _write(_ARMED, rec)
     return rec
 
 
 def disarm() -> None:
-    """Remove the implant (no outcome recorded)."""
+    """Remove the implant (no outcome recorded) and clear any stale outcome."""
     _remove(_ARMED)
+    _remove(_LAST)
 
 
 def armed() -> dict | None:
