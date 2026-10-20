@@ -23,6 +23,8 @@ SIG_ATTACKS = {
                                          "valid for minutes and only once"),
     "unknown_signer": ("Forged approval stopped", "signed by a key that is not an enrolled hardware device"),
     "caller_not_allowed": ("Agent tried to approve its own payment", "the agent has no right to submit approvals"),
+    "render_mismatch": ("Tampered approval stopped", "this PC sent the Trezor a different payment than the bank "
+                        "issued; the device showed it and the executor only accepts its own text"),
 }
 
 

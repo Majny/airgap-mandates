@@ -245,28 +245,133 @@ def executor_call(executor_url: str | None = None) -> Any:
     return call
 
 
-def sign_challenge(nonce: str, role: str, *, executor_url: str | None = None, transport: str | None = None,
+def sign_challenge(nonce: str, role: str, *, call: Any = None, executor_url: str | None = None,
+                   transport: str | None = None, driver: SignerDriver | None = None,
                    timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """GET /challenges/{nonce}, driver.sign(), POST /signatures; returns the signature_submit.response."""
-    call = executor_call(executor_url)
+    """GET /challenges/{nonce}, sign on the device, POST /signatures; returns the signature_submit response (with an
+    extra `_http` status). `call` lets the console inject its own transport (e.g. the seeded memory executor); `driver`
+    lets it inject a signer (e.g. the test software clerk).
+
+    Malware hook (attacker level H4, host.implant): if an implant is armed and the challenge purpose is PAY, the text
+    sent to the device is tampered (its IBAN lines are swapped to the attacker's) and reported as displayed_text, so the
+    physical Trezor shows the attacker's IBAN. The honest path is unchanged. The implant is one-shot: whatever happens
+    (reject / render_mismatch / paid / timeout), the outcome is recorded and the implant disarms itself."""
+    call = call or executor_call(executor_url)
     st, challenge = call("GET", f"/challenges/{nonce}", None, "host")
     if st != 200:
         raise RuntimeError(f"GET /challenges/{nonce} -> {st} {challenge}")
     if challenge.get("role") and challenge["role"] != role:
         raise ValueError(f"challenge is for role {challenge['role']}, not {role}")
-    driver = get_driver(transport)
+    own_driver = driver is None
+    driver = driver or get_driver(transport)
+    text = challenge_text(challenge)  # honest, sha-checked text (what the bank screen shows)
+
+    from host import implant
+
+    armed = implant.armed() if challenge.get("purpose") == "PAY" else None
+    device_text = implant.tamper(text, armed["iban"]) if armed else text  # swap sent to the device, bypassing sha check
+    subject_id = challenge.get("subject_id")
+    dev_iban = _first_iban(device_text) if armed else None
     try:
-        approval = driver.sign(challenge, role, timeout)
+        address, sig = driver.sign_text(device_text, role, timeout)
+    except SignerCancelled:
+        if armed:
+            implant.record("rejected_on_device", proposal_id=subject_id, device_text_iban=dev_iban)
+        raise
+    except TimeoutError:
+        if armed:
+            implant.record("timeout", proposal_id=subject_id, device_text_iban=dev_iban)
+        raise
     finally:
-        close = getattr(driver, "close", None)
-        if close:
-            close()
-    st, r = call("POST", "/signatures", {"nonce": approval["nonce"], "role": role, "sig": approval["sig"],
-                                         "address": approval["address"],
-                                         "displayed_text": approval["displayed_text"]}, "host")
-    if st != 200:
+        if own_driver:
+            close = getattr(driver, "close", None)
+            if close:
+                close()
+    st, r = call("POST", "/signatures", {"nonce": challenge["nonce"], "role": role, "sig": sig, "address": address,
+                                         "displayed_text": device_text}, "host")
+    if armed:
+        err = r.get("error") if isinstance(r, dict) else None
+        outcome = "paid" if st == 200 else ("refused_by_executor" if err else "error")
+        implant.record(outcome, error=err, proposal_id=subject_id, device_text_iban=dev_iban)
+    elif st != 200:
         raise RuntimeError(f"POST /signatures -> {st} {r}")
-    return r
+    return {**(r if isinstance(r, dict) else {"response": r}), "_http": st}
+
+
+def _first_iban(text: str) -> str | None:
+    from host import implant
+
+    from executor import render as R
+
+    for ln in text.split("\n"):
+        if implant._is_group_line(ln):
+            compact = ln.replace(" ", "")
+            if implant._valid_iban(compact):
+                return R.format_iban(compact)
+    return None
+
+
+# --------------------------------------------------------------------------- software clerk (seeded stack only)
+
+# Deterministic DEMO/TEST clerk key. Never a real signer and never usable against AWS; the seed enrols its address with
+# a label that reads "software key (test)".
+TEST_CLERK_KEY = "0x" + "11" * 32
+
+
+def software_clerk_allowed(executor_url: str | None) -> bool:
+    """A software clerk is allowed ONLY against the seeded memory executor or a loopback http URL, and only when
+    AIRGAP_TEST_SOFTWARE_CLERK=1. Never against the AWS regional API."""
+    import os
+    from urllib.parse import urlparse
+
+    if os.environ.get("AIRGAP_TEST_SOFTWARE_CLERK") != "1":
+        return False
+    u = (executor_url or "").strip().lower()
+    if u.startswith("memory:"):
+        return True
+    if not u.startswith("http://"):
+        return False
+    return (urlparse(u).hostname or "") in ("127.0.0.1", "localhost", "::1")
+
+
+def software_clerk_account() -> Any:
+    from eth_account import Account
+
+    return Account.from_key(TEST_CLERK_KEY)
+
+
+def software_clerk_driver(*, reject: bool = False) -> "SoftwareSignerDriver":
+    return SoftwareSignerDriver(software_clerk_account(), reject=reject)
+
+
+class SoftwareSignerDriver:
+    """SignerDriver backed by an in-process eth_account key, for the seeded memory/loopback stack ONLY (labelled
+    'software key (test)', never AWS). It confirms automatically; `reject=True` simulates pressing X on the device."""
+
+    device_label = "GENUINE"  # enrolled as an ordinary clerk; the "software key" marker is in its enrolment label
+
+    def __init__(self, account: Any, *, label: str = "software key (test)", reject: bool = False) -> None:
+        self.account, self.label, self.reject = account, label, reject
+
+    def get_address(self, key_ref: str | None = None) -> str:
+        return self.account.address.lower()
+
+    def sign_text(self, text: str, key_ref: str, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, str]:
+        if self.reject:
+            raise SignerCancelled("rejected on the device (software clerk, simulated)")
+        from eth_account.messages import encode_defunct
+
+        sig = self.account.sign_message(encode_defunct(text=text)).signature.hex()
+        return self.account.address.lower(), sig if sig.startswith("0x") else "0x" + sig
+
+    def sign(self, challenge: dict, key_ref: str, timeout: float = DEFAULT_TIMEOUT) -> Approval:
+        text = challenge_text(challenge)
+        address, sig = self.sign_text(text, key_ref, timeout)
+        return Approval(nonce=challenge["nonce"], address=address, sig=sig, displayed_text=text,
+                        device=self.device_label)
+
+    def close(self) -> None:
+        pass
 
 
 # --------------------------------------------------------------------------- demo harness and fallback kit
