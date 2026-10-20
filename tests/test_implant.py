@@ -159,7 +159,7 @@ def test_story_card_render_mismatch():
     st, bundle = env.call("GET", "/audit/export?log_id=audit&from_seq=0", None, "auditor")
     _, cards = story.build(bundle, [], [], [])
     titles = [c["title"] for c in cards]
-    assert "Tampered approval stopped" in titles
+    assert any(t.startswith("Tampered approval stopped: Delta Stavby s.r.o. · ") for t in titles), titles
 
 
 def test_fresh_overcap_starts_a_new_approval_request(monkeypatch):

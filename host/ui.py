@@ -9,6 +9,7 @@ Untrusted host (TB3): it only reads the public executor API (`AIRGAP_EXECUTOR_UR
 from __future__ import annotations
 
 import hashlib
+import html
 import io
 import json
 import os
@@ -23,6 +24,7 @@ from urllib.parse import urlencode, urlparse
 # `streamlit run host/ui.py` puts only host/ on sys.path; infra/ (SigV4 signing) is not an installed package
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from executor.audit import explain as X  # noqa: E402
 from host import auth, compromised, story  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +38,7 @@ FSM_PLAIN = {"PENDING_ATTEST": "waiting for 2 of 3 confirmations", "CALLBACK_PEN
 SEV_COLOUR = {"BLOCK": "#b42318", "WARN": "#b54708", "INFO": "#067647"}
 CSS = """<style>
 html, body, [class*="css"] { font-size: 18px; }
-.block-container { padding-top: 3.2rem; max-width: 1400px; }
+.block-container { padding-top: 2.6rem; max-width: 1400px; }
 .device { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 22px; line-height: 1.25; background: #111;
           color: #f5f5f5; padding: 12px 16px; border-radius: 10px; white-space: pre; display: inline-block; }
 .fact { display: inline-block; padding: 3px 9px; margin: 2px; border-radius: 6px; color: white; font-weight: 600;
@@ -50,6 +52,99 @@ html, body, [class*="css"] { font-size: 18px; }
 .card .t { font-weight: 700; font-size: 20px; }
 .card .b { opacity: 0.85; margin-top: 2px; }
 .status { display: inline-block; padding: 2px 10px; border-radius: 999px; color: white; font-weight: 700; }
+.alarm { background: #b42318; color: white; padding: 10px 16px; border-radius: 8px; font-weight: 700;
+         font-size: 19px; margin: 4px 0 12px 0; }
+.alarm small { font-weight: 500; opacity: 0.92; font-size: 16px; }
+.alarm.breach { background: #7a0916; border: 3px solid #fda29b; font-size: 21px; }
+.alarm.calm { background: #067647; }
+.inc { border: 2px solid var(--c); border-left: 10px solid var(--c); border-radius: 8px; padding: 12px 18px 10px;
+       margin: 0 0 16px 0; background: rgba(180,35,24,0.04); }
+.inc-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.inc-badge { background: var(--c); color: white; font-weight: 800; padding: 2px 10px; border-radius: 6px;
+             letter-spacing: 0.03em; font-size: 15px; }
+.inc-kind { font-weight: 800; font-size: 22px; }
+.inc-when { margin-left: auto; opacity: 0.7; font-size: 15px; }
+.inc-title { font-size: 17px; margin: 4px 0 2px 0; }
+.inc-what { font-style: italic; opacity: 0.8; font-size: 16px; margin-bottom: 8px; }
+.inc-grid { display: grid; grid-template-columns: 1fr 1.25fr 0.55fr; gap: 10px 14px;
+            grid-template-areas: "who tried money" "how how money"; }
+.inc-grid .g-who { grid-area: who; } .inc-grid .g-tried { grid-area: tried; }
+.inc-grid .g-how { grid-area: how; } .inc-grid .g-money { grid-area: money; }
+@media (max-width: 1000px) { .inc-grid { grid-template-columns: 1fr; grid-template-areas: "who" "tried" "how" "money"; } }
+.inc-grid > div { background: rgba(127,127,127,0.07); border-radius: 6px; padding: 8px 12px; font-size: 16px; }
+.inc .lbl { text-transform: uppercase; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; opacity: 0.65;
+            margin-bottom: 4px; }
+.inc ul { margin: 0; padding-left: 18px; }
+.inc li { margin: 0 0 4px 0; }
+.inc .kv { font-size: 15px; margin-top: 6px; }
+.inc .kv b.mono { font-family: 'JetBrains Mono', Menlo, monospace; font-weight: 600; }
+.inc .rule { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; opacity: 0.7; }
+.inc .money { text-align: center; }
+.inc .money .big { font-size: 26px; font-weight: 800; color: #067647; }
+.inc .money .big.lost { color: #b42318; }
+.inc-foot { font-size: 14px; opacity: 0.7; margin-top: 8px; }
+.inc-next { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(181,71,8,0.12);
+            border-left: 4px solid #b54708; font-size: 16px; }
+.atk-tag { display: inline-block; background: #b42318; color: #fff; border-radius: 999px; padding: 1px 10px;
+           font-size: 13px; font-weight: 700; margin-left: 6px; }
+.door { font-size: 14px; border: 1px dashed #b42318; border-radius: 8px; padding: 6px 12px; margin: 6px 0 12px; }
+.kinds span { display: inline-block; border: 1px solid #b42318; color: #b42318; border-radius: 999px;
+              padding: 1px 10px; margin: 2px 4px 2px 0; font-size: 15px; font-weight: 600; }
+table.evlog { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+table.evlog col.t { width: 165px; } table.evlog col.l { width: 115px; } table.evlog col.s { width: 120px; }
+table.evlog col.q { width: 80px; }
+table.evlog td.mono.s { white-space: normal; overflow-wrap: anywhere; }
+table.evlog td { padding: 5px 8px; border-bottom: 1px solid rgba(127,127,127,0.2); vertical-align: top; }
+table.evlog tr.ATTACK td, table.evlog tr.ERROR td { background: rgba(180,35,24,0.08); }
+table.evlog tr.demo td { background: rgba(127,127,127,0.08); opacity: 0.8; }
+table.evlog .lv { display: inline-block; min-width: 92px; color: white; font-weight: 700; padding: 1px 6px;
+                  border-radius: 5px; font-size: 13px; white-space: nowrap; }
+table.evlog .why { opacity: 0.75; font-size: 14px; }
+table.evlog .mono { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 13px; white-space: nowrap; }
+/* Security tab, projector layout (summary row, newest incident big, older ones as one-liners) */
+.sumrow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 0 0 10px 0; }
+.sumrow .tile { border: 2px solid #d0d5dd; border-radius: 10px; padding: 4px 12px 6px; text-align: center; }
+.sumrow .n { font-size: 30px; font-weight: 800; line-height: 1.1; }
+.sumrow .g { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.75; }
+.sumrow .tile.hot { border-color: #b42318; background: rgba(180,35,24,0.08); } .sumrow .tile.hot .n { color: #b42318; }
+.sumrow .tile.money { border-color: #067647; background: rgba(6,118,71,0.08); }
+.sumrow .tile.money .n { color: #067647; font-size: 30px; }
+.sumrow .tile.money.lost { border-color: #7a0916; background: rgba(122,9,22,0.15); }
+.sumrow .tile.money.lost .n { color: #7a0916; }
+@media (max-width: 900px) { .sumrow { grid-template-columns: repeat(2, 1fr); } }
+.threat { background: #101828; color: #fff; font-weight: 800; letter-spacing: 0.06em; padding: 3px 12px;
+          border-radius: 6px; font-size: 19px; }
+.threat.sm { font-size: 13px; padding: 1px 8px; letter-spacing: 0.04em; }
+.newest { font-size: 13px; font-weight: 800; text-transform: uppercase; color: #b42318; letter-spacing: 0.1em;
+          margin: 2px 0 2px 2px; }
+.inc .inc-title { font-size: 23px; font-weight: 700; margin: 6px 0 2px 0; line-height: 1.25; }
+.inc .inc-what { margin-bottom: 8px; }
+.inc .inc-grid { grid-template-columns: 1fr 1.1fr 1.4fr 0.62fr; grid-template-areas: "who tried how money"; }
+@media (max-width: 1100px) { .inc .inc-grid { grid-template-columns: 1fr 1fr;
+                             grid-template-areas: "who tried" "how money"; } }
+.inc .layer { font-size: 19px; color: var(--c); } .inc .layer b { font-weight: 800; }
+.inc .because { font-size: 16px; margin: 2px 0 6px 0; }
+.inc .because code.rid { font-size: 14px; font-weight: 700; color: #101828; background: rgba(127,127,127,0.15); }
+.inc .inc-grid > div { font-size: 15px; padding: 6px 10px; line-height: 1.35; }
+.inc li { margin: 0 0 2px 0; }
+.inc .mono { font-family: 'JetBrains Mono', Menlo, monospace; }
+.inc .stake { font-size: 15px; margin-bottom: 4px; }
+.inc .money .big { font-size: 30px; }
+.inc-foot { opacity: 0.8; } .inc-foot code { font-size: 13px; }
+.inc-when .det { color: #067647; font-weight: 700; font-size: 14px; opacity: 1; }
+.inc-when { text-align: right; }
+.earlier { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.65;
+           margin: 6px 0 4px 2px; }
+details.incl { margin: 0 0 6px 0; }
+details.incl > summary { border: 1px solid rgba(127,127,127,0.25); border-left: 8px solid var(--c); border-radius: 6px;
+                         padding: 6px 12px; cursor: pointer; font-size: 17px; list-style: none; }
+details.incl > summary::-webkit-details-marker { display: none; }
+details.incl > summary .to { opacity: 0.8; } details.incl > summary .meta { opacity: 0.6; font-size: 14px; }
+details.incl[open] > summary { margin-bottom: 6px; }
+details.backdrop { margin-top: 14px; opacity: 0.85; }
+details.backdrop > summary { cursor: pointer; font-size: 15px; color: #667085; }
+.waitline { background: rgba(181,71,8,0.12); border-left: 4px solid #b54708; padding: 6px 12px; border-radius: 6px;
+            margin: 0 0 6px 0; font-size: 16px; }
 </style>"""
 STATUS = {  # proposal status -> (plain label, colour)
     "EXECUTED": ("Paid", "#067647"), "CHALLENGED": ("Waiting for Trezor", "#1d4ed8"),
@@ -66,12 +161,13 @@ def _memory_call() -> Any:
 
     @st.cache_resource
     def env() -> Any:
-        from executor import e2e, scenes
+        from executor import e2e, oplog, scenes
         from tools.local_stack import seed_pending_overcap
         e = scenes.DemoEnv()
-        e2e.run(e.call, e.clerk, e.treasury, now=e.now, log=lambda s: None)
-        scenes.scene_s2(e, log=lambda s: None)
-        scenes.scene_s3(e, log=lambda s: None)
+        with oplog.replay("S2+S3"):  # request-level refusals while seeding are the backdrop, not live attacks
+            e2e.run(e.call, e.clerk, e.treasury, now=e.now, log=lambda s: None)
+            scenes.scene_s2(e, log=lambda s: None)
+            scenes.scene_s3(e, log=lambda s: None)
         # test/visual only: enrol the deterministic software clerk so "Approve on Trezor" (and the honest re-sign after
         # attack h) can sign without a physical device. Same gate as tools/local_stack; never reachable against AWS.
         import os
@@ -83,12 +179,43 @@ def _memory_call() -> Any:
                                label="clerk (software key, test)", settings=e.settings)
         # one over-cap payment left PENDING_SIG, so the Approve-on-Trezor button and the attack-h demo have a target
         seed_pending_overcap(e.call, e.now, data_dir=e.settings.data_dir)
+        from tools.local_stack import audit_next_seq
+        e.seed_seq = audit_next_seq(e.call)  # everything from here on is live: earlier attacks are the demo backdrop
         return e
 
-    return env().call
+    global _SEED_SEQ, _STORE
+    e = env()
+    _SEED_SEQ = getattr(e, "seed_seq", None)
+    _STORE = e.store
+    return e.call
 
 
 _CALL: Any = None
+_SEED_SEQ: int | None = None  # first live audit seq on a seeded demo stack; None on AWS (no backdrop)
+_SEED_ASKED = False
+_STORE: Any = None  # the memory: executor's store (its request-level attacks, executor.oplog.recent)
+
+
+def seed_seq() -> int | None:
+    """Where the replayed demo backdrop (scenes S2/S3, the ops log's [demo replay]) ends and live traffic starts:
+    AIRGAP_DEMO_SEED_SEQ, the memory: seeding, or tools.local_stack's /_local/seed on a loopback URL (asked once).
+    None against AWS: every attack there is live."""
+    global _SEED_SEQ, _SEED_ASKED
+    if os.environ.get("AIRGAP_DEMO_SEED_SEQ", "").isdigit():
+        return int(os.environ["AIRGAP_DEMO_SEED_SEQ"])
+    if EXECUTOR.startswith("memory:"):
+        _call()
+        return _SEED_SEQ
+    if not _SEED_ASKED and EXECUTOR.startswith(("http://127.0.0.1", "http://localhost")):
+        _SEED_ASKED = True
+        try:
+            from tools.local_stack import SEED_PATH
+            code, b = _call()("GET", SEED_PATH, None, "auditor")  # read-only; auditors may ask too
+            q = b.get("seed_seq") if code == 200 and isinstance(b, dict) else None
+            _SEED_SEQ = q if isinstance(q, int) and not isinstance(q, bool) else None
+        except Exception:  # noqa: BLE001 - an older stack without the route: no backdrop marking
+            _SEED_SEQ = None
+    return _SEED_SEQ
 
 
 def _call() -> Any:
@@ -282,20 +409,246 @@ def proposal_view(p: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
             "facts": p.get("facts", []), "challenge": dec.get("challenge")}
 
 
-def render_cards(st: Any, cards: list[dict[str, Any]]) -> None:
+def render_cards(st: Any, cards: list[dict[str, Any]], seed: int | None = None) -> None:
+    """seed: first live audit seq; an attack card before it is the replayed demo backdrop, shown grey and quiet."""
     for c in cards:
         icon, colour = story.TONES[c["tone"]]
+        title = c["title"]
+        if seed is not None and c["tone"] in ("attack", "hold") and isinstance(c.get("seq"), int) and c["seq"] < seed:
+            icon, colour, title = "🎬", "#98a2b3", f'<span style="opacity:.75">demo backdrop · {title}</span>'
         body = f'<div class="b">{c["body"]}</div>' if c["body"] else ""
-        st.markdown(f'<div class="card" style="--c:{colour}"><div class="t">{icon} {c["title"]}</div>{body}</div>',
+        st.markdown(f'<div class="card" style="--c:{colour}"><div class="t">{icon} {title}</div>{body}</div>',
                     unsafe_allow_html=True)
         if c.get("device"):
             st.markdown(f'<div class="device">{c["device"]}</div>', unsafe_allow_html=True)
 
 
+_RULE_TAIL = __import__("re").compile(r"\s*\[([^\]]+)\]$")
+
+
+def _seq_txt(seqs: list[int]) -> str:
+    if not seqs:
+        return "no audit entry yet"
+    if len(seqs) > 2 and seqs[-1] - seqs[0] == len(seqs) - 1:
+        return f"audit seq {seqs[0]}–{seqs[-1]}"
+    return "audit seq " + ", ".join(str(q) for q in seqs)
+
+
+def _card_look(c: dict[str, Any]) -> tuple[str, str]:
+    """(colour, badge) of an incident card."""
+    breach = bool(c.get("breach"))  # only money to an account outside the vendor master, never a bank rejection
+    waiting = bool(c.get("next")) and c["headline"].startswith("Attack blocked, payment still waiting")
+    backdrop = bool(c.get("backdrop"))  # replayed demo scene seeded before the stack went live, not a live attack
+    colour = ("#7a0916" if breach else "#667085" if backdrop else "#b54708" if c.get("held") or waiting
+              else "#b42318")
+    badge = ("💥 MONEY LOST" if breach else "🎬 DEMO BACKDROP (seeded scene) · [demo replay]" if backdrop else
+             "⏸ ON HOLD · SUSPECTED ATTACK" if c.get("held") else
+             "🛑 ATTACK BLOCKED · PAYMENT STILL WAITING" if waiting else "🛑 ATTACK STOPPED")
+    return colour, badge
+
+
+def _cap(t: str) -> str:
+    return t[:1].upper() + t[1:]
+
+
+def _proof_line(c: dict[str, Any]) -> str:
+    """Explainability footer: deterministic, replayable, where the proof is."""
+    e = html.escape
+    if c.get("request_level"):
+        where = ("refused at the door: no audit entry, so it lives in the executor's operations log (CloudWatch on "
+                 "AWS, the local stack's terminal), on a line marked 🛑 ATTACK")
+    else:
+        pol = str(c.get("policy") or "")
+        proof = c.get("proof") or "log"
+        # say only what tools.verify_audit really re-checks: decide() replays decision leaves only
+        what = {"decision": "decision replayed offline", "signature": "signatures re-verified offline"}.get(
+            proof, "log integrity re-verified offline (hash chain + witnesses)")
+        where = (f"{e(_seq_txt(c['seqs']))} in the signed, witnessed audit log · {what}: "
+                 f"<code>{e(X.REPLAY_CMD)}</code>"
+                 + (f" · policy <code>sha256:{e(pol[:8])}…</code>" if pol and proof == "decision" else ""))
+    return f'<div class="inc-foot">✔ {e(_cap(X.DETERMINISTIC))} · {where}</div>'
+
+
+def _evidence_html(ev: str) -> str:
+    """'render_mismatch: the Trezor signed …' -> rule id in mono, the value in plain words (wraps less)."""
+    e = html.escape
+    rid, sep, rest = ev.partition(": ")
+    if sep and len(rid) <= 40 and " " not in rid.replace(", ", ","):
+        return f'<code class="rid">{e(rid)}</code> {e(rest)}'
+    return e(ev)
+
+
+def incident_html(c: dict[str, Any], *, steps: int = 3) -> str:
+    """One incident card, readable from the back of a room: threat label, what happened in one line, who / from
+    where, what they tried, which defence layer stopped it and the evidence, money at stake vs moved, and the proof
+    (deterministic, replayable, audit seq, policy hash). Every value is escaped except the `who` lines, which
+    story.security() escapes itself."""
+    e = html.escape
+    colour, badge = _card_look(c)
+    kind = c["kind"].rstrip("?")
+    threat = c.get("threat") or ""
+    who = "".join(f"<li>{w}</li>" for w in c["who"])
+    kv = "".join(f'<div class="kv">{e(k)}: <b class="{"" if k in ("Supplier", "Amount") else "mono"}">{e(v)}</b></div>'
+                 for k, v in c["facts"])
+    stopped = []
+    for seq, why in c["stopped"][-steps:]:
+        m = _RULE_TAIL.search(why)
+        text, rules = (why[:m.start()], m.group(1)) if m else (why, "")
+        tag = " · ".join(t for t in (rules, f"seq {seq}" if seq is not None else "") if t)
+        stopped.append(f"<li>{e(_cap(text))}" + (f' <span class="rule">[{e(tag)}]</span>' if tag else "") + "</li>")
+    verb = "Held by" if c.get("held") else "Stopped by"
+    layer = (f'<div class="layer">{verb} <b>{e(c["layer"])}</b></div>' if c.get("layer") else "")
+    because = f'<div class="because">because {_evidence_html(c["evidence"])}</div>' if c.get("evidence") else ""
+    moved, stake = c["moved_minor"], c.get("at_stake_minor")
+    money = ((f'<div class="stake">at stake <b>{e(story.czk(stake))}</b></div>' if stake else "")
+             + f'<div class="big{" lost" if moved else ""}">{e(story.czk(moved))}</div><div>moved to the attacker</div>')
+    return (f'<div class="inc" style="--c:{colour}">'
+            f'<div class="inc-head">' + (f'<span class="threat">{e(threat)}</span>' if threat else "")
+            + f'<span class="inc-badge">{badge}</span><span class="inc-kind">{e(_cap(kind))}</span>'
+            f'<span class="inc-when">{e(c["when"])} · {e(_seq_txt(c["seqs"]) if c["seqs"] else "no audit entry")}'
+            '<br><span class="det">✔ deterministic · verifiable offline</span></span></div>'
+            f'<div class="inc-title">{e(c["title"])}</div>'
+            + (f'<div class="inc-what">{e(c["what"])}</div>' if c.get("what") else "")
+            + '<div class="inc-grid">'
+            f'<div class="g-who"><div class="lbl">Who / from where</div><ul>{who}</ul></div>'
+            f'<div class="g-tried"><div class="lbl">What they tried</div>{e(c["tried"])}{kv}</div>'
+            f'<div class="g-how"><div class="lbl">{"Why it is held" if c.get("held") else "How it was stopped"}'
+            f'</div>{layer}{because}<ul>{"".join(stopped)}</ul></div>'
+            f'<div class="g-money money"><div class="lbl">Money</div>{money}</div>'
+            "</div>"
+            + (f'<div class="inc-next"><b>Your next step:</b> {e(c["next"])}</div>' if c.get("next") else "")
+            + _proof_line(c) + "</div>")
+
+
+def incident_line_html(c: dict[str, Any]) -> str:
+    """An older incident as one line (threat · what happened → stopped by layer · seq) that opens into its card."""
+    e = html.escape
+    colour, _ = _card_look(c)
+    verb = "held by" if c.get("held") else "stopped by"
+    stop = f' <span class="to">→ {verb} {e(c["layer"])}</span>' if c.get("layer") else ""
+    seq = e(_seq_txt(c["seqs"]) if c["seqs"] else "no audit entry")
+    return (f'<details class="incl" style="--c:{colour}"><summary>'
+            f'<span class="threat sm">{e(c.get("threat") or "ATTACK")}</span> <b>{e(c["title"])}</b>{stop}'
+            f' <span class="meta">{e(c["when"][11:] if len(c["when"]) > 11 else c["when"])} · {seq}</span>'
+            f"</summary>{incident_html(c)}</details>")
+
+
+def security_summary_html(sec: dict[str, Any]) -> str:
+    """One glance: live attacks per threat group (the Track 3 brief's three + fraud & tampering) and money moved."""
+    e = html.escape
+    groups = sec.get("groups") or {}
+    lost = sec.get("attacker_minor") or 0
+    tiles = "".join(f'<div class="tile{" hot" if n else ""}"><div class="n">{n}</div><div class="g">{e(g)}</div></div>'
+                    for g, n in groups.items())
+    money = (f'<div class="tile money{" lost" if lost else ""}"><div class="n">{e(story.czk(lost))}</div>'
+             f'<div class="g">moved to attackers</div></div>')
+    return f'<div class="sumrow">{tiles}{money}</div>'
+
+
+def attack_tag(inc: dict[str, Any]) -> str:
+    """Red tag on a Payments / Approvals row whose payment is part of an incident on the Security tab."""
+    seq = max(inc.get("seqs") or [], default=None)
+    return (' <span class="atk-tag">🛑 linked to attack: ' + html.escape(inc.get("kind", "").rstrip("?"))
+            + (f" (seq {seq})" if seq is not None else "") + "</span>")
+
+
+def attack_banner(st: Any, sec: dict[str, Any] | None) -> None:
+    """One red line on every page while live attacks exist (the demo backdrop never counts); loud when money reached
+    an attacker."""
+    if not sec or not sec.get("n"):
+        return
+    n, lost, latest = sec["n"], sec["attacker_minor"], sec.get("latest") or {}
+    last = (f" · latest: {html.escape(latest.get('threat') or latest.get('kind', '').rstrip('?'))}, "
+            f"{html.escape(latest.get('when', '')[11:] or latest.get('when', ''))}") if latest else ""
+    if lost:
+        st.markdown(f'<div class="alarm breach">💥 {html.escape(story.czk(lost))} REACHED AN ACCOUNT OUTSIDE THE VENDOR '
+                    f"MASTER · {n} incident{'' if n == 1 else 's'} in the log{last}. Open the Security tab now.</div>",
+                    unsafe_allow_html=True)
+        return
+    st.markdown(f'<div class="alarm">🛑 Under attack: {n} incident{"" if n == 1 else "s"} blocked · 0.00 CZK reached an '
+                f"attacker{last} · <small>details on the <b>Security</b> tab</small></div>", unsafe_allow_html=True)
+
+
+def tab_security(st: Any, data: dict[str, Any]) -> None:
+    """Projector layout: summary row, the newest live incident as one big card, older incidents as one-liners that
+    open on click, the demo backdrop collapsed at the bottom. Refreshes with the console (AIRGAP_UI_REFRESH_S)."""
+    sec = data.get("security") or {}
+    if data.get("bundle") is None:
+        st.info("audit export unavailable")
+        return
+    cards = sec.get("incidents") or []
+    live = [c for c in cards if not c.get("backdrop")]
+    demo = [c for c in cards if c.get("backdrop")]
+    st.markdown(security_summary_html(sec), unsafe_allow_html=True)
+    if not live:
+        st.markdown('<div class="alarm calm">✅ No live attacks. Every payment so far went through the mandate or a '
+                    "person on a Trezor.</div>", unsafe_allow_html=True)
+    else:
+        waiting = [c for c in live[1:] if c.get("next")]
+        if waiting:
+            st.markdown(f'<div class="waitline">⚠ {len(waiting)} more payment{"" if len(waiting) == 1 else "s"} '
+                        "touched by an attack still wait for approval: open the card below for the next step."
+                        "</div>", unsafe_allow_html=True)
+        st.markdown('<div class="newest">Newest</div>' + incident_html(live[0], steps=1), unsafe_allow_html=True)
+        if live[1:]:
+            st.markdown(f'<div class="earlier">Earlier ({len(live) - 1}) · click a line for the full card</div>'
+                        + "".join(incident_line_html(c) for c in live[1:]), unsafe_allow_html=True)
+    if not data.get("refusals_live"):
+        st.caption("Requests refused at the door (stolen AI-agent credentials, an account number smuggled into a "
+                   "request) write no audit entry; on AWS they are in CloudWatch: Logs Insights "
+                   "`fields @timestamp, @message | filter @message like /ATTACK/ | sort @timestamp desc`.")
+    if demo:
+        st.markdown(f'<details class="backdrop"><summary>🎬 Demo backdrop: {len(demo)} attack'
+                    f'{"" if len(demo) == 1 else "s"} from the seeded scenes (replayed before the stack went live, '
+                    "[demo replay] in the ops log), not counted above</summary>"
+                    + "".join(incident_line_html(c) for c in demo) + "</details>", unsafe_allow_html=True)
+
+
+EVLOG_MAX = 300
+
+
+def event_log_html(rows: list[Any], seed: int | None = None) -> str:
+    """seed: first live audit seq (seed_seq()); earlier rows are the replayed demo backdrop, tagged [demo replay]."""
+    e = html.escape
+    out = ['<table class="evlog"><colgroup><col class="t"><col class="l"><col><col class="s"><col class="q">'
+           "</colgroup>"]
+    for x in rows[:EVLOG_MAX]:
+        icon, label, colour = story.LEVEL_LOOK.get(x.level, ("•", x.level, "#475467"))
+        why = f'<div class="why">{e(x.why)}</div>' if x.why else ""
+        demo = seed is not None and x.seq is not None and x.seq < seed
+        out.append(f'<tr class="{e(x.level)}{" demo" if demo else ""}"><td class="mono">{e(str(x.ts or "")[:19].replace("T", " "))}</td>'
+                   f'<td><span class="lv" style="background:{colour}">{icon} {label}</span></td>'
+                   f'<td>{f"<span class=\"threat sm\">{e(x.threat)}</span> " if x.threat else ""}'
+                   f'<b>{"[demo replay] " if demo else ""}{e(x.title)}</b>{why}</td><td class="mono s">{e(str(x.subject or ""))}</td>'
+                   f'<td class="mono">seq {x.seq if x.seq is not None else "-"}</td></tr>')
+    out.append("</table>")
+    return "".join(out)
+
+
+def event_log(st: Any, data: dict[str, Any]) -> None:
+    st.markdown("**Event log** · every audit entry in plain words, newest first")
+    show = st.radio("Show", list(story.LOG_FILTERS), index=1, horizontal=True, key="eventlog-filter",
+                    label_visibility="collapsed")
+    rows = story.event_log(data.get("bundle"), data.get("vendors") or [], data.get("changes") or [],
+                           data.get("proposals") or [], show=show)
+    counts = {lv: sum(1 for x in rows if x.level == lv) for lv in story.LEVEL_LOOK}
+    n_inc = (data.get("security") or {}).get("n", 0)
+    st.caption(f"{len(rows)} audit entr{'y' if len(rows) == 1 else 'ies'} shown: "
+               + " · ".join(f"{story.LEVEL_LOOK[lv][0]} {story.LEVEL_LOOK[lv][1]} {n}" for lv, n in counts.items()
+                            if n)
+               + (f" · the attack entries are grouped into {n_inc} incident{'' if n_inc == 1 else 's'} on the "
+                  "Security tab" if n_inc else "")
+               + (f" · showing the newest {EVLOG_MAX}" if len(rows) > EVLOG_MAX else ""))
+    if not rows:
+        st.info("nothing to show" if data.get("bundle") is not None else "audit export unavailable")
+        return
+    st.markdown(event_log_html(rows, seed_seq()), unsafe_allow_html=True)
+
+
 def tab_overview(st: Any, data: dict[str, Any]) -> None:
     if not data["cards"]:
         st.info("No activity yet.")
-    render_cards(st, data["cards"])
+    render_cards(st, data["cards"], seed_seq())
 
 
 def pain001_batch(st: Any, data: dict[str, Any]) -> None:
@@ -388,6 +741,7 @@ def approve_on_trezor(st: Any, nonce: str, role: str, *, key: str) -> None:
 def tab_payments(st: Any, data: dict[str, Any]) -> None:
     if not data["proposals"]:
         st.info("No payment proposals yet.")
+    linked = story.linked(data.get("security"))
     pain001_batch(st, data)
     for p in data["proposals"]:
         v = view(proposal_view(p, data["names"]))
@@ -395,11 +749,14 @@ def tab_payments(st: Any, data: dict[str, Any]) -> None:
         if v.get("status") == "EXECUTED":
             label += " · confirmed on Trezor" if v.get("decision") == "challenge" else " · within mandate"
         inv = p.get("invoice") or {}
+        inc = linked.get(str(p.get("proposal_id")))
         with st.container(border=True):
             c1, c2 = st.columns([4, 2])
             c1.markdown(f"**{v['vendor_name']}** · invoice {inv.get('invoice_no', '-')} · "
                         f"**{story.czk(v['amount_minor'])}**")
-            c2.markdown(status_chip(label, colour), unsafe_allow_html=True)
+            c2.markdown(status_chip(label, colour) + (attack_tag(inc) if inc else ""), unsafe_allow_html=True)
+            if inc and inc.get("next"):
+                st.error(f"Linked to an attack ({inc['kind'].rstrip('?')}): {inc['next']}")
             blocks = story._reasons(v.get("facts", []), ("BLOCK", "WARN"))
             if blocks and v.get("status") == "EXECUTED":
                 st.markdown(f"{blocks}: the clerk confirmed the exact amount and account on the Trezor.")
@@ -468,6 +825,7 @@ def tab_approvals(st: Any, data: dict[str, Any]) -> None:
         st.info("audit export unavailable")
         return
     labels = device_labels(bundle)
+    linked = story.linked(data.get("security"))
     sigs = [leaf for leaf in bundle.get("leaves", []) if (leaf.get("event") or {}).get("type") == "signature"]
     if not sigs:
         st.caption("no approvals yet")
@@ -478,9 +836,10 @@ def tab_approvals(st: Any, data: dict[str, Any]) -> None:
         label = labels.get(addr, "NOT ENROLLED" if addr else "-")
         ok = d.get("accepted")
         outcome = status_chip("accepted", "#067647") if ok else status_chip(f"refused: {d.get('error')}", "#b42318")
+        inc = linked.get(str(ev.get("subject_id")))
         st.markdown(f"{_ts(ev.get('ts'))} · **{d.get('purpose')}** · {d.get('role')} · "
-                    f"`{addr[:10]}…` {device_chip(label)} {outcome} · `{ev.get('subject_id')}`",
-                    unsafe_allow_html=True)
+                    f"`{addr[:10]}…` {device_chip(label)} {outcome} · `{ev.get('subject_id')}`"
+                    + (f" {attack_tag(inc)}" if inc else ""), unsafe_allow_html=True)
 
 
 def tab_mandate(st: Any, data: dict[str, Any]) -> None:
@@ -524,6 +883,8 @@ def tab_receipts(st: Any, who: str = "host") -> None:
 
 
 def tab_audit(st: Any, data: dict[str, Any]) -> None:
+    with st.container(border=True):
+        event_log(st, data)
     code, note = api("/checkpoint", data.get("who", "host"), log_id="audit")
     st.markdown("**Latest signed checkpoint** (log key + witnesses)")
     st.code(note if code == 200 else f"unavailable: {note}", language="text")
@@ -571,8 +932,11 @@ def tab_reports(st: Any) -> None:
 def load(ident: auth.Identity) -> dict[str, Any]:
     """Operators: everything. Auditors: the audit export only, read with the auditor principal (no vendor master,
     proposals or payee changes are fetched for them, so none can leak into the page)."""
+    refusals = recent_attacks()
     if ident.role == "auditor":
-        return {"who": ident.principal, "bundle": export_bundle()}
+        bundle = export_bundle()
+        return {"who": ident.principal, "bundle": bundle, "refusals_live": refusals is not None,
+                "security": story.security(bundle, seed_seq=seed_seq(), refusals=refusals or [])}
     vendors = _list("/vendors", "vendors")
     proposals = _list("/proposals", "proposals", limit=50)
     changes = _list("/changes", "changes")
@@ -582,11 +946,29 @@ def load(ident: auth.Identity) -> dict[str, Any]:
     return {"who": ident.principal, "vendors": vendors,
             "names": {v["vendor_id"]: v.get("name") or v["vendor_id"] for v in vendors},
             "proposals": proposals, "changes": changes, "ledger": ledger, "bundle": bundle,
-            "rail": rail_hashes(bundle), "kpis": kpis, "cards": cards}
+            "rail": rail_hashes(bundle), "kpis": kpis, "cards": cards,
+            "refusals_live": refusals is not None,
+            "security": story.security(bundle, vendors, changes, proposals, seed_seq=seed_seq(),
+                                       refusals=refusals or [])}
+
+
+def recent_attacks() -> list[dict[str, Any]] | None:
+    """Request-level attacks that wrote no audit leaf (executor.oplog ring): in-process on memory:, the loopback
+    stack's RECENT_PATH on a local URL; None against AWS (they are CloudWatch lines there)."""
+    from executor import oplog
+
+    if ".execute-api." in EXECUTOR:
+        return None
+    if EXECUTOR.startswith("memory:"):
+        _call()
+        return oplog.recent(scope=_STORE)
+    if EXECUTOR.startswith(("http://127.0.0.1", "http://localhost")):
+        return oplog.fetch_recent(_call())
+    return None
 
 
 TAB_RENDER = {
-    "Overview": tab_overview, "Payments": tab_payments, "Payee changes": tab_changes, "Approvals": tab_approvals,
+    "Overview": tab_overview, "Security": tab_security, "Payments": tab_payments, "Payee changes": tab_changes, "Approvals": tab_approvals,
     "Mandate": tab_mandate, "Audit": tab_audit, "Reports": lambda st, data: tab_reports(st),
 }
 
@@ -594,6 +976,7 @@ TAB_RENDER = {
 def body(st: Any, ident: auth.Identity | None = None) -> None:
     ident = ident or auth.Identity("local", "operator")
     data = load(ident)
+    attack_banner(st, data.get("security"))
     if ident.role == "operator":
         k = data["kpis"]
         pend = [p for p in data["proposals"] if p.get("status") in WAITING_SIG]
@@ -608,7 +991,8 @@ def body(st: Any, ident: auth.Identity | None = None) -> None:
         m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payment{'' if k['paid_n'] == 1 else 's'}",
                     delta_color="off")
         m[1].metric("Paid to unregistered accounts", story.czk(k["attacker_minor"]))
-        m[2].metric("Blocked attempts", k["attacks"])
+        m[2].metric("Incidents blocked", (data.get("security") or {}).get("n", 0), "see the Security tab",
+                    delta_color="off")
         m[3].metric("Paid without a human", f"{k['auto_n']} of {k['paid_n']}", "inside the signed mandate",
                     delta_color="off")
     names = list(ident.tabs)

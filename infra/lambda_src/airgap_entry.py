@@ -1,6 +1,6 @@
 """Lambda entry for executor/tools: executor.handler.lambda_handler plus CloudWatch lines for every botocore
-ClientError (operation + error code + message, never request payloads). dispatch() maps exceptions to a bare
-500 {"message": "<ExceptionType>"}; this keeps the cause visible in the function's logs. Owner: WS-E."""
+ClientError (operation + error code + message, never request payloads), and the explained ops log (executor.oplog:
+one line per audit leaf / refused request, a traceback + error_id per 500; plain text, no colour). Owner: WS-E."""
 from __future__ import annotations
 
 from typing import Any
@@ -18,6 +18,13 @@ def _logged_init(self: Any, error_response: dict, operation_name: str) -> None:
 
 
 _bex.ClientError.__init__ = _logged_init
+
+try:  # cold start; never fail the function over logging
+    from executor import oplog
+
+    oplog.configure()
+except Exception as _e:  # noqa: BLE001
+    print(f"AIRGAP_OPLOG_DISABLED {type(_e).__name__}: {_e}"[:300])
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:

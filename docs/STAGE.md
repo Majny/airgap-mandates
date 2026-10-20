@@ -145,6 +145,104 @@ export AIRGAP_TREZOR_PATH=udp:127.0.0.1:21324     # the one switch; unset to go 
 | `offline verify` red | wrong or stale `docs/audit/demo` | `make demo-bundle` (online), then `make offline-demo` |
 | 403 `unknown_signer` on a device signature | the device address is not enrolled/active in this deployment | check the reset seeded `data/enrollment.json`; never "fix" it on stage by enrolling ad hoc |
 
+## Reading the logs
+
+Track 3 asks for "a live attack that fails, and logs that show why". Every attack line, card and alert says it the
+same way (`executor/audit/explain.py`): **threat** in the brief's words · what happened · **stopped by** which defence
+layer, **because** of which evidence · money at stake vs moved.
+
+| threat | examples | layer that stops it |
+|---|---|---|
+| `PROMPT INJECTION` | instruction hidden in an invoice (attack c), decoy tool `mandate.write` (`T-DECOY`), `T-TAINT`, `F-ANOM` | input sanitisation (agent hints never evidence) · permission scoping · anomaly detection on agent actions |
+| `DATA EXFILTRATION` | `T-MAIL-*`, egress `E-ALLOWLIST` / DLP | permission scoping (tool policy) · egress gateway |
+| `PRIVILEGE ESCALATION` | stolen agent credentials (`caller_not_allowed`, attack d), an IBAN smuggled into a request, IAM deny | permission scoping |
+| `PAYMENT FRAUD (BEC)` | lookalike domain (attack a), VoP no match, sanctions / warn list | executor facts + policy |
+| `ACCOUNT TAKEOVER` | real supplier mailbox asks for a new account (attack b, held), "not us" tripwire | executor facts + policy |
+| `REPLAY / FORGERY` | replayed approval (e), foreign key (f), fake supplier attestation (g) | hardware signature · executor facts + policy |
+| `HOST TAMPERING` | malware on the clerk's PC swaps the account sent to the Trezor (h) | hardware signature (`render_mismatch`) |
+| `LOG TAMPERING` | witness refuses to cosign / log fork | transparency log |
+
+Three screens show it while the attack runs:
+
+- **Attacker console** (`:8502`): under every attack, a white box "THE BANK'S LOG": the bank's own lines for that
+  attack, read back from the executor (audit export + explain, plus the refused-at-the-door ring below), threat
+  label, layer, evidence, audit seq. Attack h's box fills in when the clerk approves on the bank console.
+- **Bank console, Security tab** (`:8501`, refreshes every `AIRGAP_UI_REFRESH_S`): one row of tiles (prompt injection ·
+  data exfiltration · privilege escalation · fraud & tampering · **0.00 CZK moved to attackers**), then the **newest
+  live incident as one big card** (threat, what happened, who / from where, what they tried, stopped by <layer>
+  because <evidence>, money at stake vs moved, "✔ deterministic · verifiable offline", audit seq and policy hash), older
+  incidents as one-liners that open on click, and the seeded S2/S3 scenes collapsed at the bottom as "Demo backdrop"
+  (never counted in the tiles, the red banner or the "Incidents blocked" KPI: a fresh stack opens calm; one incident
+  groups the attempts on one payment, change or agent session, so 8 attack runs give more incidents than runs). "Your next
+  step" on a card never vouches for a payment: verify with the supplier on the contact registered in the vendor
+  master, and the Trezor screen is the only truth. **Audit → Event log**: every audit entry in plain words.
+- **Executor ops log** (terminal of `make local-stack` / `make dev`; CloudWatch on AWS):
+
+  ```
+  2026-10-20T10:31:05.019Z 🛑 ATTACK  PRIVILEGE ESCALATION · Stolen agent credentials? The AI agent's account (agent) tried to submit an approval (only a person on a Trezor can) → stopped by permission scoping: caller_not_allowed: role 'agent' is not on the caller allowlist of POST /signatures · 0 CZK moved — refused: that role may not do it; nothing happened [caller_not_allowed]  | kind="stolen agent credentials" rule=caller_not_allowed principal=agent status=403 req=r5a58ad threat="PRIVILEGE ESCALATION" layer="permission scoping"
+  2026-10-20T10:31:05.083Z 🛑 ATTACK  PAYMENT FRAUD (BEC) · Payment blocked: ACME s.r.o. · 48 900.00 CZK (invoice email from acme-cz.com) → stopped by executor facts + policy: F-DOMAIN: Sender domain acme-cz.com imitates vendor domain acme.cz · 48 900.00 CZK at stake, 0 CZK moved — …  | seq=41 subject=prp_3 kind="lookalike domain (BEC)" …
+  ```
+
+  Level tags: `🛑 ATTACK` hostile and stopped · `⛔ BLOCKED` refused, not necessarily hostile (a duplicate invoice; it
+  still names layer and evidence) · `✋ HUMAN` waiting for a person / Trezor (`⚠ Linked to an attack` when the payment
+  came from one) · `💸 PAID` · `✅ OK` · `•  INFO` · `💥 ERROR` the system failed (a 500, an order that did not reach
+  the bank, a bank rejection: not attacks). The `key=value` tail: `seq=` audit entry, `subject=`, `kind=`, `rule=`,
+  `principal=`, `status=`, `req=` one id per API request (grep it), `threat=`, `layer=`, `scene=` + `[demo replay]`
+  for the seeded backdrop (everything after "ready on ..." is live). A 500 logs its traceback under `error_id=err_…`,
+  also in the response `details`. IBANs are masked (`LT48 …1234`); signatures, callback codes, VCs and e-mail bodies
+  are never logged. Env: `AIRGAP_LOG_FORMAT=text|json`, `AIRGAP_LOG_LEVEL=INFO|DEBUG|WARNING`.
+
+**Explainability (responsible AI).** No LLM sits in the decision path: facts, Cedar policy and the signature checks
+are deterministic, so every decision replays offline: `python -m tools.verify_audit <export.json>` re-runs `decide()`
+at the logged policy hash (`policy sha256:d33008c4…`, shown on the cards whose entries include a decision). A card
+without a decision (a refused signature, a fake attestation) says what the verifier does re-check for it: the
+signatures, or the hash chain and witness checkpoints. The agent's own words ("CFO approved") are
+logged as ignored hints, never as evidence.
+
+**Requests refused at the door** (attack d: `caller_not_allowed`, an IBAN field in a request) write **no audit
+entry**. That is deliberate: CONTRACTS §7.2 defines `iam_deny_mirror` as a mirror of an AWS IAM decision (`source`
+simulate | boto3 | cloudtrail, role ARNs), not of the executor's own caller check, and a leaf per refused request would
+let any credential holder grow the signed log at will. Instead the executor keeps them in a small in-memory ring
+(`executor.oplog.recent()`), served read-only by the loopback stack at `/_local/recent-attacks` (`make local-stack`,
+`make dev`; never on AWS, no contract change). The bank console, the attacker console and `make alerts` read it, so
+locally they show these attacks too. On AWS (one ring per Lambda instance, no such route) they are CloudWatch lines;
+the attacker console then explains the executor's own refusal response with the same `explain.refusal`.
+
+### Tailing the log
+
+```
+make local-stack                      # the terminal IS the ops log (colour on a TTY, NO_COLOR=1 to turn it off)
+make local-stack 2>&1 | grep --line-buffered ATTACK              # only the attacks
+AIRGAP_LOG_FORMAT=json make -s local-stack | jq -R 'fromjson? | select(.level=="ATTACK") | {threat, title, layer, evidence}'
+curl -s localhost:8000/_local/recent-attacks | jq .              # the refused-at-the-door ring
+aws logs tail /aws/lambda/<executor function> --follow --filter-pattern ATTACK --profile hackathon
+```
+
+(`aws logs describe-log-groups --log-group-name-prefix /aws/lambda/airgap --profile hackathon` lists the executor and
+tools log groups.)
+
+### CloudWatch Logs Insights
+
+Select the executor and the tools log groups, then:
+
+```
+fields @timestamp, @message
+| filter @message like /ATTACK/
+| sort @timestamp desc
+```
+
+Per threat class (text format):
+
+```
+fields @timestamp, @message
+| filter @message like /ATTACK/
+| parse @message /threat="(?<threat>[^"]+)"/
+| stats count() by threat
+```
+
+Only the refused-at-the-door attempts: `| filter @message like /ATTACK/ and @message like /status=4/`. With
+`AIRGAP_LOG_FORMAT=json` the fields are direct: `filter level = "ATTACK" | stats count() by threat, layer`.
+
 ## What we say about the device (true, with proof)
 
 - "A genuine Trezor Safe 3: its secure element's certificate chain checks out against Trezor's root, and its firmware

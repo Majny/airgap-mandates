@@ -17,6 +17,7 @@ an attacker-controlled change). If an attack ever SUCCEEDS, `AttackResult.blocke
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -61,9 +62,17 @@ class AttackResult:
     labels: list[str] = field(default_factory=list)  # e.g. ["scripted agent"]
     notes: list[str] = field(default_factory=list)
     breach: str | None = None  # set iff the attack got further than it should have
+    # what the BANK's log said about this attack, read back from the executor (bank_log()): explained lines, oldest
+    # first. `bank_mark` is where the log stood before the attack (attack h: its lines arrive when the clerk signs)
+    bank_log: list[dict[str, Any]] = field(default_factory=list)
+    bank_mark: dict[str, Any] = field(default_factory=dict)
 
     def czk(self) -> str:
-        return f"{self.money_to_attacker_minor / 100:,.2f} CZK".replace(",", " ")
+        return czk_minor(self.money_to_attacker_minor)
+
+
+def czk_minor(minor: int | None) -> str:
+    return f"{(minor or 0) / 100:,.2f} CZK".replace(",", " ")
 
 
 class Session:
@@ -397,8 +406,9 @@ def replay_approval(s: Session) -> AttackResult:
     if st == 200:
         res.blocked = False
         res.breach = "a replayed signature was ACCEPTED"
-    res.verdict = (f"Refused: {_err(r)} (every signature works once)." if res.blocked
-                   else "UNEXPECTED: the replay was not refused")
+    res.verdict = (f"Refused: {_err(r)}: the captured approval was already used"
+                   + (" and its challenge has expired" if _err(r) == "expired" else "")
+                   + " (every signature works once)." if res.blocked else "UNEXPECTED: the replay was not refused")
     return res
 
 
@@ -466,7 +476,8 @@ def fake_supplier_portal(s: Session) -> AttackResult:
     if counted or state in ("ACTIVE", "COOLING", "SIG_CLERK", "SIG_TREASURY"):
         res.blocked = False
         res.breach = f"the forged attestation was counted (state {state})"
-    res.verdict = ("Forged attestation rejected / not counted; the change stayed blocked at PENDING_ATTEST."
+    res.verdict = ("Forged attestation rejected and not counted: the change is still held, waiting for 2 of 3 genuine "
+                   "confirmations; there is no approval button."
                    if res.blocked else "UNEXPECTED: the forged attestation advanced the change")
     return res
 
@@ -522,13 +533,176 @@ ATTACKS: dict[str, Callable[[Session], AttackResult]] = {
 
 
 def run_attack(key: str, s: Session) -> AttackResult:
-    """Run one attack, measuring money to the attacker IBANs before and after (the ledger is the ground truth)."""
+    """Run one attack, measuring money to the attacker IBANs before and after (the ledger is the ground truth), and
+    read back what the bank's log recorded about it (bank_log)."""
     start = len(s.requests)
     before = _money_to_attacker(s.call)
+    mark = bank_mark(s.call)
     res = ATTACKS[key](s)
     res.requests = s.requests[start:]
     res.money_to_attacker_minor = _money_to_attacker(s.call) - before
     if res.money_to_attacker_minor > 0:
         res.blocked = False
         res.breach = (res.breach or "") + f" money moved to the attacker: {res.czk()}"
+    res.bank_mark = mark
+    res.bank_log = bank_log(s.call, mark, res.requests)
     return res
+
+
+# --------------------------------------------------------------------------- the bank's log, as the bank sees it
+
+BANK_LEVELS = ("ATTACK", "ERROR", "BLOCKED", "HUMAN")
+
+
+def _export(call: Call, from_seq: int) -> list[dict[str, Any]]:
+    st, b = call("GET", f"/audit/export?log_id=audit&from_seq={from_seq}", None, "auditor")
+    return b.get("leaves") or [] if st == 200 and isinstance(b, dict) else []
+
+
+def bank_mark(call: Call) -> dict[str, Any]:
+    """Where the bank's log stands now: next audit seq and the last request-level attack number. Never raises."""
+    from executor import oplog
+
+    try:
+        leaves = _export(call, 0)
+        seq = max((int(le["seq"]) for le in leaves), default=-1) + 1
+    except Exception:  # noqa: BLE001
+        seq = None
+    try:
+        n = max((int(d.get("n") or 0) for d in oplog.fetch_recent(call)), default=0)
+    except Exception:  # noqa: BLE001
+        n = 0
+    return {"seq": seq, "n": n}
+
+
+def mark_at_last(call: Call, error: str = "render_mismatch") -> dict[str, Any] | None:
+    """A bank_mark at the newest refused signature with this error (attack h after a console reload lost its mark)."""
+    try:
+        seqs = [int(le["seq"]) for le in _export(call, 0) if (le.get("event") or {}).get("type") == "signature"
+                and ((le.get("event") or {}).get("data") or {}).get("error") == error]
+        return {"seq": max(seqs), "n": 10**9} if seqs else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _line(x: Any, source: str, order: float) -> dict[str, Any]:
+    d = x if isinstance(x, dict) else x.as_dict()
+    return {"level": d.get("level"), "threat": d.get("threat") or "", "headline": d.get("headline") or d.get("title"),
+            "title": d.get("title"), "why": d.get("why") or "", "layer": d.get("layer") or "",
+            "evidence": d.get("evidence") or "", "kind": d.get("kind"), "seq": d.get("seq"), "source": source,
+            "subject": d.get("subject"), "money_minor": d.get("money_minor"), "_order": order}
+
+
+def bank_log(call: Call, mark: dict[str, Any], requests: list[Request] = ()) -> list[dict[str, Any]]:
+    """The bank's log lines this attack produced, read back from the executor through the read-only paths the bank
+    console uses: the audit export (auditor) entries from mark["seq"] on, explained in the context of the whole log by executor.audit.explain with GET /vendors
+    and /changes as context; held payee changes with red flags (change_risk); and the request-level attacks that wrote
+    no leaf (executor.oplog ring at RECENT_PATH). Against AWS the ring is not reachable: a refused request is then
+    explained from the executor's own refusal response (the same explain.refusal the executor logs to CloudWatch).
+    Levels ATTACK, ERROR, BLOCKED, HUMAN; oldest first. Never raises."""
+    from executor import oplog
+    from executor.audit import explain as X
+
+    try:
+        seq0 = mark.get("seq")
+        # the whole log as context (a replayed approval is only a replay next to the earlier accepted one), only the
+        # attack's own entries shown
+        every = _export(call, 0) if isinstance(seq0, int) else []
+        leaves = [le for le in every if int(le.get("seq", -1)) >= seq0] if isinstance(seq0, int) else []
+        st, vb = call("GET", "/vendors", None, "auditor")
+        vendors = vb.get("vendors") or [] if st == 200 and isinstance(vb, dict) else []
+        st, cb = call("GET", "/changes", None, "auditor")
+        changes = cb.get("changes") or [] if st == 200 and isinstance(cb, dict) else []
+        out = [_line(x, "audit log", float(x.seq if x.seq is not None else 0))
+               for x in X.explain_all(every, vendors, changes, tool_calls=_tool_calls(requests))
+               if x.level in BANK_LEVELS and x.seq is not None and x.seq >= seq0]
+        ring = oplog.fetch_recent(call, int(mark.get("n") or 0))
+        for d in ring:
+            if d.get("subject") and any(o.get("subject") == d["subject"] and o.get("level") == "ATTACK" for o in out):
+                continue  # an audit-log line already tells this subject's attack, with its seq
+            out.append(_line(d, _ring_source(d, leaves), (d.get("after_seq") or 0) + 0.5))
+        if not ring:  # AWS: the executor's refusal responses themselves, unless an audit leaf already tells it
+            kinds = {d.get("kind") for d in out}
+            tool_leaf = bool(kinds & {"data exfiltration", "hijacked agent", "tampered tool manifest",
+                                      "replayed tool call"})  # a refused tool call writes its own tool_call leaf
+            for r in requests:
+                if tool_leaf and r.path.startswith("/tools/"):
+                    continue
+                if r.status and r.status >= 400 and isinstance(r.response, dict):
+                    x = X.refusal(r.method, r.path, r.principal, r.status, r.response.get("error"),
+                                  r.response.get("message"))
+                    if x.level == "ATTACK" and x.kind not in kinds:
+                        kinds.add(x.kind)
+                        out.append(_line(x, "executor refusal (also in CloudWatch)", 10**9))
+        told = {d.get("subject") for d in out if d.get("level") == "ATTACK"}
+        touched = {str(_dict_get(le, "subject_id")) for le in leaves}
+        for c in changes:
+            risk = X.change_risk(c)
+            if risk is not None and c.get("change_id") in touched and c.get("change_id") not in told:
+                out.append(_line(risk, _ring_source({"status": 201, "subject": c.get("change_id")}, leaves),
+                                 max((float(le["seq"]) for le in leaves), default=0) + .4))
+        out.sort(key=lambda d: d.pop("_order", 0))
+        return out
+    except Exception as e:  # noqa: BLE001 - the excerpt is a reading aid; the attack result stands without it
+        return [{"level": "ERROR", "headline": f"could not read the bank's log: {type(e).__name__}", "why": "",
+                 "threat": "", "layer": "", "evidence": "", "seq": None, "source": "attacker console"}]
+
+
+def _ring_source(d: dict[str, Any], leaves: list[dict[str, Any]]) -> str:
+    """Where a line without its own audit seq comes from: a request refused at the door (4xx: no audit entry), or a
+    request that was accepted and held (2xx: the audit seqs of its subject's own entries)."""
+    if int(d.get("status") or 0) >= 400:
+        return "refused at the door (no audit entry)"
+    seqs = sorted(int(le["seq"]) for le in leaves if d.get("subject") and str(_dict_get(le, "subject_id")) == d["subject"])
+    return f"held · audit seq {', '.join(map(str, seqs))}" if seqs else "held (no audit entry yet)"
+
+
+def _tool_calls(requests: list[Request]) -> dict[str, dict[str, str]]:
+    """{"session#step": recipient / masked IBAN} of the tool calls this attack sent (a tool_call leaf has only the
+    hash of its arguments)."""
+    from executor.audit import explain as X
+
+    out: dict[str, dict[str, str]] = {}
+    for r in requests or []:
+        b = r.body if isinstance(r.body, dict) else {}
+        if r.path.startswith("/tools/") and b.get("session_id") is not None:
+            info = X.tool_args(b.get("session_id"), b.get("step"), r.path.rsplit("/", 1)[-1], b.get("args"))
+            if info:
+                out[f"{b.get('session_id')}#{b.get('step')}"] = info
+    return out
+
+
+def _dict_get(le: Any, key: str) -> Any:
+    ev = le.get("event") if isinstance(le, dict) else None
+    return ev.get(key) if isinstance(ev, dict) else None
+
+
+def bank_log_html(lines: list[dict]) -> str:
+    """The bank's log lines this attack produced (attacks.bank_log: read back from the executor), big and red for
+    ATTACK, dim for the rest. Every value escaped: the log quotes attacker-controlled text."""
+    import html
+
+    e = html.escape
+    if not lines:
+        return ("<div class='banklog'><div class='h'>&#127974; The bank's log</div><div class='l calm'>nothing new in "
+                "the bank's log yet</div></div>")
+    out = []
+    for d in lines:
+        if d.get("level") == "ATTACK":
+            verb = "held by" if str(d.get("kind") or "").endswith("?") else "stopped by"
+            stop = (f"<div class='stop'>&rarr; {verb} <b>{e(d.get('layer') or '')}</b>"
+                    + (f": <span class='ev'>{e(d.get('evidence') or '')}</span>" if d.get("evidence") else "")
+                    + "</div>") if d.get("layer") else ""
+            money = (f" &middot; at stake {e(czk_minor(d['money_minor']))}" if d.get("money_minor") else "")
+            out.append(f"<div class='l'><span class='thr'>{e(d.get('threat') or 'ATTACK')}</span>"
+                       f"<span class='t'>{e(d.get('title') or d.get('headline') or '')}</span>{stop}"
+                       f"<div class='src'>&#128721; ATTACK &middot; 0 CZK moved{money} &middot; "
+                       f"{'audit seq ' + str(d['seq']) if d.get('seq') is not None else e(d.get('source') or '')}"
+                       "</div></div>")
+        else:  # BLOCKED / HUMAN: the short why too (a blocked duplicate is bookkeeping, not collateral damage)
+            short = d.get("evidence") or re.sub(r"\s*\[[^\]]*\]$", "", str(d.get("why") or "")).split("; ")[0]
+            out.append(f"<div class='l calm'>{e(str(d.get('level')))} &middot; {e(d.get('title') or '')}"
+                       + (f" &mdash; {e(short[:140])}" if short else "")
+                       + (f" <span class='src'>seq {d['seq']}</span>" if d.get("seq") is not None else "") + "</div>")
+    return ("<div class='banklog'><div class='h'>&#127974; The bank's log &mdash; what the executor recorded, read back "
+            "from it live</div>" + "".join(out) + "</div>")

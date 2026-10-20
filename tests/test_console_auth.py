@@ -39,7 +39,7 @@ def test_operator_wins_over_auditor():
 
 
 def test_tabs_per_role():
-    assert auth.Identity("sso", "auditor", "a@b.c").tabs == ("Audit", "Reports")
+    assert auth.Identity("sso", "auditor", "a@b.c").tabs == ("Security", "Audit", "Reports")
     assert auth.Identity("sso", "auditor", "a@b.c").principal == "auditor"
     assert auth.Identity("local", "operator").tabs == auth.ALL_TABS
     assert auth.Identity("local", "operator").label == "local, no SSO"
@@ -156,7 +156,7 @@ def test_auditor_sees_audit_and_reports_only(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(ui, "_CALL", fake_call)
     at =st_testing.AppTest.from_function(_auditor_page, default_timeout=60).run()
     assert not at.exception
-    assert [t.label for t in at.tabs] == ["Audit", "Reports"]
+    assert [t.label for t in at.tabs] == ["Security", "Audit", "Reports"]
     assert not at.metric  # payment KPIs are operator-only
     assert seen and all(who == "auditor" for _, who in seen)  # read with the auditor principal only
     assert not {"/vendors", "/proposals", "/changes", "/ledger"} & {p for p, _ in seen}

@@ -1,0 +1,128 @@
+@startuml architecture
+' AirGap Mandates: trust boundaries, components and the main flows (docs/ARCHITECTURE.md §2).
+' Render: plantuml -tsvg docs/diagrams/architecture.puml
+title AirGap Mandates · "AI may propose. Policy may block. Only a human-held key may move money."
+
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam ArrowColor #475467
+skinparam ArrowFontSize 11
+skinparam rectangleFontSize 12
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+left to right direction
+
+skinparam rectangle<<tb3>> {
+  BackgroundColor #FEF3F2
+  BorderColor #B42318
+}
+skinparam rectangle<<tb1>> {
+  BackgroundColor #ECFDF3
+  BorderColor #067647
+}
+skinparam rectangle<<tb2>> {
+  BackgroundColor #EFF8FF
+  BorderColor #1D4ED8
+}
+skinparam rectangle<<tb0>> {
+  BackgroundColor #FFFAEB
+  BorderColor #B54708
+}
+skinparam rectangle<<tb4>> {
+  BackgroundColor #F4F3FF
+  BorderColor #5925DC
+}
+skinparam rectangle<<tb5>> {
+  BackgroundColor #F2F4F7
+  BorderColor #344054
+}
+
+rectangle "TB3 · UNTRUSTED (everything here is a hint [H])" <<tb3>> {
+  rectangle "Supplier console :8503\n(supplier/console.py)\nDKIM-signed invoice e-mail" as SUP
+  rectangle "Attacker workstation :8502\n(attacker/console.py)\nattacks a–h, H1–H6" as ATK
+  rectangle "Agent VPC · no IGW, no NAT" as AVPC {
+    rectangle "AP-Clerk agent λ (agent/)\nplanner: Claude Sonnet 4.5 (Bedrock eu.)\nquarantined extractor: Qwen3-235B, no tools" as AGENT
+  }
+  rectangle "Host laptop (U2)\nbank console :8501 (host/ui.py)\nsigner worker (host/signer.py)\ncan lie: H1 UI, H4 implant" as HOST
+}
+
+rectangle "TB1 · EXECUTOR · AWS eu-central-1 (executor roles only)" <<tb1>> {
+  rectangle "airgap-api (REGIONAL, AWS_IAM)\n+ airgap-agent-api (PRIVATE, VPCE)" as API
+  rectangle "tools λ\nCedar tool policy, decoys,\ndoc binding, step reservation\n→ every call = tool_call leaf (F-ANOM)" as TOOLS
+  rectangle "executor λ · dispatch()  (executor/handler.py)" as EXEC {
+    rectangle "/ingest\nDKIM verdict over\ndns_snapshot → [F]" as INGEST
+    rectangle "facts/\nF-DOMAIN F-DKIM F-VOP F-BANK\nF-VAT F-WARNLIST F-SANCTION\nF-ANOM F-DUP F-AMOUNT-DOC …" as FACTS
+    rectangle "policy/  Cedar (cedarpy)\nhard_deny · mandate_allow · change\npure decide(), policy_hash pinned\n→ allow | challenge | deny (R0)" as POLICY
+    rectangle "render/ safe3-mono-16x4\nsole source of device text\nsig/ EIP-191 recover + nonce" as RENDER
+    rectangle "change/ FSM v2\n2-of-3 SD-JWT VCs or break-glass\n→ cooling-off → clerk + treasury" as CHANGE
+    rectangle "egress/ gateway\nallowlist + DLP (mod-97, IČO)" as EGRESS
+    rectangle "bank/ledger · tx_execute\nONE TransactWriteItems:\nleaf + head + debit + ledger + proposal" as LEDGER
+    rectangle "rail/ pain.001.001.09\n(mock ACTC)" as RAIL
+    rectangle "audit/ log + oplog\nRFC 6962 leaves\nreadable ops log (CloudWatch)" as AUDIT
+  }
+  database "DynamoDB\nledger · mandates · audit\nregistry · main · portal" as DDB
+  rectangle "checkpointer λ\nEventBridge tick 1 min,\nanchor 5 min" as CKPT
+  rectangle "KMS Ed25519\nalias/airgap-log" as KMSLOG
+  rectangle "S3 Object Lock\n(anchors) + inbox" as S3
+}
+
+rectangle "TB2 · WITNESSES" <<tb2>> {
+  rectangle "W1 witness λ\nown role, own KMS key\n(alias/airgap-w1), witness_state" as W1
+  rectangle "W2 litewitness (Go, unmodified)\nEC2 t4g.nano, via SSM" as W2
+}
+
+rectangle "TB0 · HUMAN + DEVICE" <<tb0>> {
+  rectangle "Trezor Safe 3 (clerk, physical)\nT3B1 emulator (treasury)\nshows exact text, hold-to-confirm" as TREZOR
+}
+
+rectangle "TB4 · SUPPLIER SIDE (pinned issuer keys)" <<tb4>> {
+  rectangle "Issuers: supplier-erp · supplier-bank · registry\nSD-JWT VCs bound to change nonce" as ISS
+  rectangle "Vendor portal :8100 (vendor/portal.py)\ncallback code · NOT-US tripwire · break-glass" as PORTAL
+}
+
+rectangle "TB5 · OFFLINE SUPERVISOR (Wi-Fi off)" <<tb5>> {
+  rectangle "tools/verify_audit.py --replay\nnoteverify (Go sumdb/note)\nwitness/supervisor.py" as VERIFY
+}
+
+' ---- flows
+SUP --> API : (1) invoice e-mail\nPOST /ingest
+ATK ..> API : attacks: BEC, takeover,\ninjection, stolen creds,\nreplay, forgery
+API --> INGEST
+AGENT --> API : (2) MCP tool calls only\nPOST /tools/{name} (SigV4)
+API --> TOOLS
+TOOLS --> EXEC : (3) POST /proposals | /changes\n(vendor_id, never an IBAN)
+TOOLS --> EGRESS : mail.send_template
+INGEST --> FACTS
+FACTS --> POLICY : (4) [F] facts\n([H] hints can only tighten, S3)
+POLICY --> LEDGER : allow: inside ACTIVE\n2/2-signed mandate (S1)
+POLICY --> RENDER : challenge: step-up
+POLICY --> AUDIT : deny: no challenge,\ndevice stays dark (R0)
+CHANGE --> RENDER : CHG challenges
+HOST --> API : (5) GET /challenges/{nonce}\nPOST /signatures
+HOST <--> TREZOR : USB: ethereum.sign_message\n(exact executor text, S2)
+RENDER --> LEDGER : verified exact-sign,\nnonce consumed once (S5)
+LEDGER --> RAIL : (6) pain.001
+LEDGER --> DDB : atomic (S6)
+AUDIT --> DDB
+ISS --> CHANGE : VCs\nPOST /changes/{id}/attestations
+PORTAL --> CHANGE : callback / NOT-US
+CKPT --> KMSLOG : (7) sign C2SP checkpoint
+CKPT --> W1 : add-checkpoint\n(+ consistency proof, S8)
+CKPT --> W2 : relay via SSM
+CKPT --> S3 : anchor
+DDB --> VERIFY : (8) GET /audit/export bundle
+W1 --> VERIFY : cosignatures
+W2 --> VERIFY : cosignatures
+
+legend right
+  |= Boundary |= Trusted for |
+  | TB0 Trezor | "this person saw exactly these bytes and held to confirm" |
+  | TB1 executor | computing [F], deciding, rendering, verifying, executing, logging |
+  | TB2 witnesses | append-only, no split view (S8) |
+  | TB3 agent / host / mail | nothing: every value is a hint [H] |
+  | TB4 issuers | one attestation each; any 2 distinct classes required |
+  | TB5 auditor | independent offline verification + decision replay (S12) |
+  No LLM and no blockchain in the decision path.
+endlegend
+@enduml

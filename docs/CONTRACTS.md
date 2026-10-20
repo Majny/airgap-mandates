@@ -873,6 +873,8 @@ demo scene unless `backend == "aws"` and `aws_region == "eu-central-1"`; the UI 
 | `AIRGAP_MOSTLYRIGHT_CSV` | — | MostlyRight CSV source for `tools/load_mostlyright.py` (path or `s3://`; else `data/mostlyright/*.csv`, the team copy, then S3). The CSV is never committed |
 | `AIRGAP_SMS_OUTBOX_FILE` | — | SIMULATED SMS outbox (jsonl) of the vendor portal; unset = in-memory only |
 | `AIRGAP_FAKE_NOW` | — | ISO datetime; freezes the executor clock (ignored when `aws`) |
+| `AIRGAP_LOG_FORMAT` | `text` | executor ops log (`executor/oplog.py`, logger `airgap`, stdout / CloudWatch): `text` (one line per event, `key=value` tail) \| `json` (one object per line) |
+| `AIRGAP_LOG_LEVEL` | `INFO` | `INFO`: attacks, refusals, approvals, payments; `DEBUG` adds routine NOISE and every request line; `WARNING`: attacks and errors only. `NO_COLOR` turns colour off (never on Lambda) |
 | `AIRGAP_EXECUTOR_URL` | `http://127.0.0.1:8000` | host/agent/bench → executor (the private API URL in the demo) |
 | `AIRGAP_BEDROCK_MODEL_ID` | `eu.anthropic.claude-sonnet-4-5-20250929-v1:0` | planner (verify with `aws bedrock list-inference-profiles --region eu-central-1`) |
 | `AIRGAP_QWEN_MODEL` | `qwen.qwen3-235b-a22b-2507-v1:0` | quarantined extractor, bulk bench, red team (Bedrock) |

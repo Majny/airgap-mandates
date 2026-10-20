@@ -61,6 +61,9 @@ def append(event: dict[str, Any], *, store: Any, settings: Any) -> int:
     for _ in range(20):
         seq = next_seq(store, log_id)
         if store.transact(leaf_ops(event, seq)):
+            from executor import oplog
+
+            oplog.leaf({**event, "seq": seq}, seq)
             return seq
     raise TxConflict("audit head contention")
 

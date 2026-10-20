@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from host import alerts, story
+from host import alerts
 
 EXPECTED = ("Payment blocked", "Account-change attack stopped", "Mailbox takeover stopped", "Replay attack stopped",
             "Forged approval stopped", "Hijacked agent")
@@ -34,9 +34,8 @@ class Hook:
 def _attack_cards(call: alerts.Call) -> list[dict[str, Any]]:
     get = lambda p, k: call("GET", p, None, "auditor")[1][k]  # noqa: E731
     bundle = call("GET", "/audit/export?log_id=audit&from_seq=0", None, "auditor")[1]
-    _, cards = story.build(bundle, get("/vendors", "vendors"), get("/changes", "changes"),
-                           get("/proposals?limit=200", "proposals"))
-    return [c for c in cards if c["tone"] == "attack"]
+    return alerts.alert_items(bundle["leaves"], get("/vendors", "vendors"), get("/changes", "changes"),
+                              get("/proposals?limit=200", "proposals"))
 
 
 def test_from_start_posts_every_blocked_attempt_once(call: alerts.Call):
@@ -135,3 +134,82 @@ def test_cli_posts_to_a_real_http_receiver():
 def test_cli_refuses_plain_http_webhook():
     with pytest.raises(SystemExit):
         alerts.main(["--url", "memory:", "--webhook", "http://hooks.example/x", "--once"])
+
+
+def test_messages_name_the_attack_and_how_it_was_stopped(call: alerts.Call):
+    """Same vocabulary as the console's Security tab and the ops log: kind, what this is, how stopped, money moved."""
+    hook = Hook()
+    alerts.Watcher(call, hook, "https://hooks.example/x", deployment="DEMO", from_start=True, out=lambda s: None).poll()
+    texts = [m["text"] for m in hook.got]
+    assert all(("stopped · " in t or "suspected, on hold" in t) and "Money moved to the attacker: 0.00 CZK" in t
+               for t in texts)
+    assert any("Payment fraud (BEC) stopped · lookalike domain (BEC)" in t and "How it was stopped:" in t
+               for t in texts)
+    assert any("Replay / forgery stopped · replayed approval" in t for t in texts)
+    assert any("What this is: Business email fraud" in t for t in texts)
+    # Track 3: the defence layer and its evidence, and the explainability line
+    assert any("Stopped by: executor facts + policy, because F-DOMAIN:" in t for t in texts)
+    assert any("Stopped by: hardware signature, because nonce_reused:" in t for t in texts)
+    assert all("deterministic: no LLM in the decision path" in t for t in texts)
+
+
+def test_breach_and_explainer_only_attacks_are_posted():
+    """A payment to an account outside the vendor master is a loud breach message; a fake attestation (no story card)
+    still alerts."""
+    vendors = [{"vendor_id": "ven_1", "name": "ACME", "iban": "CZ6508000000192000145399", "domain": "acme.cz"}]
+    leaves = [{"seq": 1, "event": {"type": "execution", "subject_id": "tx_1", "ts": "2026-10-20T09:00:00Z",
+                                   "data": {"amount_minor": 500000, "iban": "LT483999000000001234",
+                                            "vendor_id": "ven_1", "proposal_id": "prp_1", "tx_id": "tx_1",
+                                            "authorization": {"kind": "mandate", "mandate_id": "mnd_1"}}}},
+              {"seq": 2, "event": {"type": "change_event", "subject_id": "chg_1", "ts": "2026-10-20T09:01:00Z",
+                                   "data": {"change_id": "chg_1", "event": "vc_rejected",
+                                            "detail": {"error": "vc_invalid"}}}}]
+    items = alerts.alert_items(leaves, vendors, [], [])
+    texts = [alerts.message(i, "DEMO")["text"] for i in items]
+    assert "MONEY LEFT THE BANK" in texts[0] and "5 000.00 CZK" in texts[0] and "LT48 …1234" in texts[0]
+    assert "Replay / forgery stopped · fake attestation" in texts[1]
+
+
+def test_held_mailbox_takeover_is_posted():
+    """Attack b (held payee change with takeover red flags) has no ATTACK leaf until "not us", but the Security tab
+    shows it, so the webhook gets it too, keyed by the change's CREATE leaf so the watermark still works."""
+    leaves = [{"seq": 4, "event": {"type": "change_event", "subject_id": "chg_1", "ts": "2026-10-20T09:00:00Z",
+                                   "data": {"change_id": "chg_1", "event": "facts_computed"}}},
+              {"seq": 6, "event": {"type": "state_transition", "subject_id": "chg_1", "ts": "2026-10-20T09:00:01Z",
+                                   "data": {"change_id": "chg_1", "event": "CREATE", "to": "PENDING_ATTEST"}}}]
+    changes = [{"change_id": "chg_1", "vendor_id": "ven_1", "vendor_name": "ACME s.r.o.", "state": "PENDING_ATTEST",
+                "new_iban": "LT493250000000005678", "attest_count": 0,
+                "facts": [{"id": "F-VOP", "kind": "F", "severity": "WARN", "label": "VoP close match"},
+                          {"id": "F-BANK", "kind": "F", "severity": "WARN", "label": "foreign bank"}]}]
+    items = alerts.alert_items(leaves, [], changes, [])
+    assert [(i["seq"], i["kind"]) for i in items] == [(6, "mailbox takeover?")]
+    text = alerts.message(items[0], "DEMO")["text"]
+    assert "Account takeover suspected, on hold · mailbox takeover" in text and "LT49 …5678" in text
+    assert "Held by: executor facts + policy, because F-BANK:" in text and "+1 more red flag" in text
+    assert "0.00 CZK" in text and "LT493250000000005678" not in text
+    changes[0]["state"] = "REJECTED"  # once decided, the leaf explainer takes over
+    assert alerts.alert_items(leaves, [], changes, []) == []
+
+
+def test_request_level_attacks_are_posted(tmp_path, monkeypatch):
+    """Attack d (stolen agent credentials) writes no audit leaf: the executor's ring (executor.oplog) carries it, so
+    the webhook still gets "Privilege escalation stopped", once, with the refused request named."""
+    from attacker import attacks
+    from executor import scenes
+
+    monkeypatch.setenv("AIRGAP_IMPLANT_DIR", str(tmp_path / "implant"))
+    env = scenes.DemoEnv()
+    env.active_mandate()
+    hook = Hook()
+    w = alerts.Watcher(env.call, hook, "https://hooks.example/x", deployment="DEMO", out=lambda s: None)
+    assert w.poll() == 0  # baseline
+    attacks.run_attack("stolen_agent_creds", attacks.Session(env.call, data_dir=env.settings.data_dir))
+    w.poll()
+    texts = [m["text"] for m in hook.got]
+    door = [t for t in texts if "refused at the door" in t]
+    assert any("Privilege escalation stopped · stolen agent credentials" in t and "POST /signatures by agent" in t
+               and "caller_not_allowed" in t for t in door), texts
+    assert any("IBAN injection" in t and "no IBAN argument" in t for t in door)
+    assert any("Data exfiltration stopped" in t for t in texts)  # the tool calls do write leaves
+    n = len(hook.got)
+    assert w.poll() == 0 and len(hook.got) == n  # nothing re-sent

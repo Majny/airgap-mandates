@@ -7,9 +7,9 @@ provider's free-form claims:
     AIRGAP_UI_OPERATORS = "alice@corp.example, ap-team.corp.example"   # emails or whole domains
     AIRGAP_UI_AUDITORS  = "audit.corp.example"
 
-An operator sees every tab; an auditor sees Audit and Reports only. Anyone signed in but on neither list is refused
-(fail closed, also when both lists are empty). Without `[auth]` the console runs in "local, no SSO" mode exactly as
-before (development, the stage laptop); `AIRGAP_UI_REQUIRE_SSO=1` (set in Dockerfile.console) refuses that mode.
+An operator sees every tab; an auditor sees Security, Audit and Reports only (all three read the audit export
+alone). Anyone signed in but on neither list is refused (fail closed, also when both lists are empty). Without
+`[auth]` the console runs in "local, no SSO" mode exactly as before (development, the stage laptop); `AIRGAP_UI_REQUIRE_SSO=1` (set in Dockerfile.console) refuses that mode.
 
 Access control is a convenience wall, not the money wall: the console is an untrusted host (TB3). It holds no key
 that moves money; payments still need the executor's policy and a Trezor signature.
@@ -22,8 +22,8 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-ALL_TABS = ("Overview", "Payments", "Payee changes", "Approvals", "Mandate", "Audit", "Reports")
-TABS = {"operator": ALL_TABS, "auditor": ("Audit", "Reports")}
+ALL_TABS = ("Overview", "Security", "Payments", "Payee changes", "Approvals", "Mandate", "Audit", "Reports")
+TABS = {"operator": ALL_TABS, "auditor": ("Security", "Audit", "Reports")}
 
 
 @dataclass(frozen=True)

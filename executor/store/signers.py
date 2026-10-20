@@ -26,6 +26,9 @@ def enroll(store: Any, row: dict[str, Any], *, settings: Any, actor: str = "exec
     for _ in range(20):
         seq = next_seq(store)
         if store.transact(leaf_ops(event, seq) + [Put("enrolled_signers", {**row, "enroll_seq": seq})]):
+            from executor import oplog
+
+            oplog.leaf({**event, "seq": seq}, seq)
             shims.after_commit(store=store, settings=settings)
             return seq
     raise TxConflict("audit head contention while enrolling")

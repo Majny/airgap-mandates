@@ -15,6 +15,7 @@ from typing import Any
 
 import jsonschema
 
+from executor import oplog
 from executor.canonical import canonical_json, sha256_hex
 from executor.config import now
 from executor.egress import allowlist
@@ -161,6 +162,8 @@ def _reserve(name: str, req: dict[str, Any], *, store: Any, settings: Any) -> bo
 def _log(name: str, req: dict[str, Any], result: str, rule_ids: list[str], *, untrusted: bool,
          store: Any, settings: Any, row: bool = True) -> int:
     args_sha256 = sha256_hex(canonical_json(req.get("args") or {}))
+    if result == "forbidden":  # the ops log may name the recipient / a masked IBAN; the leaf keeps only the hash
+        oplog.tool_call(req.get("session_id"), req.get("step"), name, req.get("args"))
     data = {"session_id": req["session_id"], "step": req["step"], "tool": name, "args_sha256": args_sha256,
             "result": result, "rule_ids": rule_ids, "untrusted_read": untrusted}
     seq = shims.append(shims.make_event("tool_call", data, subject_id=req["session_id"], actor="tools",

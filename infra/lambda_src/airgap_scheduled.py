@@ -3,6 +3,13 @@ from __future__ import annotations
 
 from typing import Any
 
+try:  # cold start; checkpoint / witness_refusal leaves get explained lines too
+    from executor import oplog
+
+    oplog.configure()
+except Exception as _e:  # noqa: BLE001
+    print(f"AIRGAP_OPLOG_DISABLED {type(_e).__name__}: {_e}"[:300])
+
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     from executor.audit import anchor, log
@@ -23,4 +30,10 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         out["w2"] = w2
         if w2.get("error"):
             print(f"W2 relay: {w2['error']}")
+            try:  # explained line: ATTACK for a fork / refusal, ERROR otherwise; never fails the tick
+                from executor import oplog as _oplog
+
+                _oplog.witness_error("W2", w2["error"])
+            except Exception:  # noqa: BLE001
+                pass
     return out

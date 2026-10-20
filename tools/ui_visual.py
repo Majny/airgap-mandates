@@ -22,16 +22,21 @@ ROOT = Path(__file__).resolve().parent.parent
 CHECKS = {
     "Overview": ["Paid automatically", "Needs a human", "Account-change attack stopped", "Mailbox takeover stopped",
                  "Replay attack stopped", "Hijacked agent", "New account active", "Mandate signed on hardware"],
+    # nothing live yet: zero tiles, a calm line, the seeded scenes collapsed at the bottom (opened for the shot)
+    "Security": ["No live attacks", "PROMPT INJECTION", "DATA EXFILTRATION", "PRIVILEGE ESCALATION",
+                 "MOVED TO ATTACKERS", "Demo backdrop", "PAYMENT FRAUD (BEC)", "REPLAY / FORGERY", "ACCOUNT TAKEOVER",
+                 "Stopped by", "Deterministic: no LLM in the decision path"],
     "Payments": ["Paid · within mandate", "Paid · confirmed on Trezor", "Blocked", "Beta Servis", "imitates vendor domain",
                  "pain.001 (ISO 20022)", "pain.001 files (zip", "hash matches the signed audit log"],
     "Payee changes": ["rejected", "active", "0 of 3 independent confirmations", "not us"],
     "Approvals": ["accepted", "refused: nonce_reused", "GENUINE"],
     "Mandate": ["Per payment", "80 000.00 CZK", "existing payees only"],
-    "Audit": ["Latest signed checkpoint", "Verify the full audit log now"],
+    "Audit": ["Event log", "Mailbox takeover stopped", "Needs a human on the Trezor", "Latest signed checkpoint",
+              "Verify the full audit log now"],
     "Reports": ["Attack benchmark"],
 }
 HEADER = ["AirGap Mandates", "Paid to registered suppliers", "Paid to unregistered accounts", "0.00 CZK",
-          "Blocked attempts", "local, no SSO"]
+          "Incidents blocked", "local, no SSO"]  # no "Under attack": the seeded attacks are the demo backdrop
 
 
 def _free_port() -> int:
@@ -110,8 +115,19 @@ def run(url: str, out: Path, strict: bool) -> list[str]:
                     for exp in panel.get_by_text("Facts checked by the executor").all()[:3]:
                         exp.click()
                     page.wait_for_timeout(400)
+                if tab == "Security":  # above the fold first, then open the demo backdrop and its first card
+                    page.screenshot(path=str(out / "02a-security-fold.png"))
+                    panel.locator("details.backdrop > summary").first.click()
+                    page.wait_for_timeout(300)
+                    panel.locator("details.backdrop details.incl > summary").first.click()
+                    page.wait_for_timeout(400)
                 shot = out / f"{i + 1:02d}-{tab.lower().replace(' ', '-')}.png"
-                page.screenshot(path=str(shot), full_page=True)
+                if tab in ("Security", "Audit"):  # long pages: grow the viewport (Streamlit scrolls internally)
+                    from tools.attack_visual import _tall_shot
+                    _tall_shot(page, shot)
+                    page.set_viewport_size({"width": 1600, "height": 1000})
+                else:
+                    page.screenshot(path=str(shot), full_page=True)
                 content = panel.inner_text()
                 for text in texts if strict else []:
                     if text not in content:

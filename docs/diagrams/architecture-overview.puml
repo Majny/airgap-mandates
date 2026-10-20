@@ -1,0 +1,112 @@
+@startuml architecture-overview
+' Presentation-grade architecture: the real components and where they run (details: architecture.puml).
+' Render: plantuml -tsvg docs/diagrams/architecture-overview.puml
+!pragma layout smetana
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 17
+skinparam shadowing false
+skinparam roundCorner 22
+skinparam nodesep 45
+skinparam ranksep 65
+skinparam ArrowColor #667085
+skinparam ArrowThickness 2.2
+skinparam ArrowFontSize 14
+skinparam ArrowFontColor #344054
+skinparam TitleFontSize 28
+skinparam TitleFontStyle bold
+skinparam rectangle {
+  BorderThickness 2
+  StereotypeFontSize 0
+}
+skinparam database {
+  BorderThickness 2
+  StereotypeFontSize 0
+}
+top to bottom direction
+
+title AirGap Mandates · architecture
+
+skinparam rectangle<<zone>> {
+  BackgroundColor #FCFCFD
+  BorderColor #D0D5DD
+  FontColor #344054
+}
+skinparam rectangle<<untrusted>> {
+  BackgroundColor #FEF3F2
+  BorderColor #F04438
+  FontColor #7A271A
+}
+skinparam rectangle<<guard>> {
+  BackgroundColor #ECFDF3
+  BorderColor #12B76A
+  FontColor #054F31
+}
+skinparam database<<guard>> {
+  BackgroundColor #ECFDF3
+  BorderColor #12B76A
+  FontColor #054F31
+}
+skinparam rectangle<<human>> {
+  BackgroundColor #FFFAEB
+  BorderColor #F79009
+  FontColor #7A2E0E
+}
+skinparam rectangle<<proof>> {
+  BackgroundColor #EFF8FF
+  BorderColor #2E90FA
+  FontColor #194185
+}
+skinparam rectangle<<supplier>> {
+  BackgroundColor #F4F3FF
+  BorderColor #7A5AF8
+  FontColor #3E1C96
+}
+
+rectangle "<size:20><b>Outside the bank</b></size>" <<zone>> as OUT {
+  rectangle "<b><&envelope-closed> Supplier mail</b>\ninvoice arrives as a signed e-mail\n<size:13><color:#667085>DKIM · ISDOC · PDF</color></size>" <<untrusted>> as MAIL
+  rectangle "<b><&people> Supplier identity</b>\n3 independent attesters + call-back portal\n<size:13><color:#667085>SD-JWT credentials · vendor portal</color></size>" <<supplier>> as ISS
+}
+
+rectangle "<size:20><b>AWS · eu-central-1</b></size>" <<zone>> as AWS {
+  rectangle "<size:18><b>Agent zone · untrusted</b></size>\n<size:13>no internet · cannot write bank state</size>" <<untrusted>> as AZ {
+    rectangle "<b><&cog> AI agent</b>\nreads the inbox and proposes payments\n<size:13><color:#667085>Bedrock: Claude Sonnet + Qwen extractor</color></size>" <<untrusted>> as AGENT
+  }
+  rectangle "<size:18><b>Executor zone · trusted</b></size>" <<guard>> as EZ {
+    rectangle "<b><&shield> Tool gateway</b>\nlets the agent call only allowed tools\n<size:13><color:#667085>Lambda · Cedar tool policy</color></size>" <<guard>> as TOOLS
+    rectangle "<b><&task> Executor</b>\nchecks facts · decides · renders the device text · pays\n<size:13><color:#667085>Lambda · Cedar policy · no LLM</color></size>" <<guard>> as EXEC
+    rectangle "<b><&envelope-open> Egress gateway</b>\noutgoing mail only to allowlist\n<size:13><color:#667085>DLP for IBAN · IČO</color></size>" <<guard>> as EGRESS
+    database "<b>Bank state</b>\nvendors · mandates · ledger · audit log\n<size:13><color:#667085>DynamoDB</color></size>" <<guard>> as DB
+    rectangle "<b><&key> Log signer</b>\nseals the log every minute\n<size:13><color:#667085>Lambda · KMS Ed25519</color></size>" <<guard>> as CKPT
+  }
+  rectangle "<size:18><b>Witnesses</b></size>" <<proof>> as WZ {
+    rectangle "<b>W1 witness</b>\ncosigns, refuses forks\n<size:13><color:#667085>Lambda · own KMS key</color></size>" <<proof>> as W1
+    rectangle "<b>W2 witness</b>\nindependent cosigner\n<size:13><color:#667085>litewitness · EC2</color></size>" <<proof>> as W2
+    rectangle "<b><&lock-locked> Archive</b>\nwrite-once copy\n<size:13><color:#667085>S3 Object Lock</color></size>" <<proof>> as S3
+  }
+}
+
+rectangle "<size:20><b>Bank office</b></size>" <<zone>> as OFF {
+  rectangle "<b><&laptop> Bank console</b>\nshows proposals and incidents · untrusted\n<size:13><color:#667085>Streamlit · SSO</color></size>" <<untrusted>> as UI
+  rectangle "<b><&lock-locked> Trezor Safe 3</b>\na person confirms exactly what is shown\n<size:13><color:#667085>clerk + treasury · 2 devices</color></size>" <<human>> as TREZOR
+  rectangle "<b><&monitor> Offline auditor</b>\nverifies the log and replays decisions\n<size:13><color:#667085>Wi-Fi off · Go + Python verifiers</color></size>" <<proof>> as AUD
+}
+
+rectangle "<b><&dollar> Payment rail</b>\npayment order to the bank\n<size:13><color:#667085>ISO 20022 pain.001</color></size>" <<zone>> as RAIL
+
+MAIL --> EXEC : ingest
+MAIL --> AGENT : inbox
+AGENT --> TOOLS : tool calls only
+TOOLS --> EXEC : propose\n(no IBAN)
+TOOLS --> EGRESS : send mail
+ISS --> EXEC : attest new\naccount
+EXEC --> DB : one atomic write
+EXEC --> RAIL : pay
+UI --> EXEC : approval request
+UI <--> TREZOR : USB signature
+DB --> CKPT
+CKPT --> W1
+CKPT --> W2
+CKPT --> S3
+DB ..> AUD : export
+W1 ..> AUD
+@enduml

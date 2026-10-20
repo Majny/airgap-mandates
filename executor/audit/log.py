@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from executor import config
+from executor import config, oplog
 from executor.audit import merkle
 from executor.canonical import canonical_json
 from executor.models import DECISION_RELEVANT_EVENTS, AuditEventType
@@ -83,6 +83,7 @@ def append(event: dict[str, Any], *, store: Any, settings: Any, checkpoint: bool
             pass
     else:
         raise TxConflict(f"could not append to {log_id} after 50 attempts")
+    oplog.leaf({**event, "seq": seq}, seq)
     if checkpoint:
         from executor.audit import checkpoint as cp
 

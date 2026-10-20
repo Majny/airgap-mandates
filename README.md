@@ -18,6 +18,13 @@ mandate, waiting for the clerk's Trezor above the cap, or refused); the **attack
 :8502) attacks the bank from outside. Nobody keys payments by hand. `make local-stack` runs all three without AWS;
 `make attack-visual` drives the whole flow headless. Details: [`docs/STAGE.md`](docs/STAGE.md).
 
+Who attacked and what happened, in the Track 3 brief's words (prompt injection, data exfiltration, privilege
+escalation, plus the fraud classes): the bank console's **Security** tab (threat tiles, the newest incident as one big
+card: stopped by which layer, because of which evidence, 0 CZK moved, deterministic and replayable), the attacker
+console's "the bank's log" box under every attack, and the executor's ops log on stdout / CloudWatch (`🛑 ATTACK
+PROMPT INJECTION · … → stopped by input sanitisation: … · 0 CZK moved`; `AIRGAP_LOG_FORMAT`, `AIRGAP_LOG_LEVEL`). See "Reading the logs" in
+[`docs/STAGE.md`](docs/STAGE.md#reading-the-logs).
+
 ## For contributors
 
 - Design (what and why): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

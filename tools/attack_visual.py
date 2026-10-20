@@ -3,7 +3,10 @@ over HTTP (tools.local_stack), the supplier console (supplier/console.py), the b
 and the attacker console (attacker/console.py), then drives headless Chromium: the supplier sends a new over-cap
 invoice (it waits for the Trezor), click Launch on each attack in the attacker console, then open the bank console and
 assert the Overview shows the corresponding blocked cards and that "Paid to unregistered accounts" stays 0.00 CZK;
-attack h (malware on the clerk PC) is run on the supplier's waiting invoice. Screenshots of all three apps land in
+attack h (malware on the clerk PC) is run on the supplier's waiting invoice. Then the Security tab must show one
+incident card per attack kind and the Audit tab's event log ("Attacks only") the refused approvals; the attacker
+console must show, under every attack, the bank's own log lines for it (threat, layer, evidence). Before any attack
+the bank console must not say "Under attack" (the seeded scenes are backdrop). Screenshots of all three apps land in
 .local/attack-visual/. Exit 1 on any missing text or page error.
 
 Mirrors tools/ui_visual.py (same subprocess + playwright helpers). Owner: WS-F.
@@ -26,6 +29,17 @@ ROOT = Path(__file__).resolve().parent.parent
 # texts the bank console's Overview must show after the seeded scenes + the launched attacks
 BANK_HEADER = ["AirGap Mandates", "Paid to registered suppliers", "Paid to unregistered accounts", "0.00 CZK"]
 BANK_OVERVIEW = ["Account-change attack stopped", "Mailbox takeover stopped", "lookalike domain"]
+# the Security tab after every attack (incl. h): one card per attack, in the explainer's words
+BANK_SECURITY = ["Under attack", "NEWEST", "ATTACK STOPPED", "PROMPT INJECTION", "DATA EXFILTRATION",
+                 "PRIVILEGE ESCALATION", "FRAUD & TAMPERING", "MOVED TO ATTACKERS", "0.00 CZK", "HOST TAMPERING",
+                 "Tampered approval stopped", "Stopped by", "hardware signature", "render_mismatch",
+                 "Deterministic: no LLM in the decision path", "tools.verify_audit", "EARLIER",
+                 "Stolen agent credentials?", "no audit entry", "REPLAY / FORGERY", "ACCOUNT TAKEOVER",
+                 "Demo backdrop"]
+# the attacker console: under each attack, the bank's own log lines for it (read back from the executor)
+ATTACKER_BANKLOG = ["THE BANK'S LOG", "PAYMENT FRAUD (BEC)", "ACCOUNT TAKEOVER", "PROMPT INJECTION",
+                    "PRIVILEGE ESCALATION", "DATA EXFILTRATION", "REPLAY / FORGERY", "stopped by",
+                    "caller_not_allowed", "unknown_signer", "nonce_reused", "F-DOMAIN"]
 SUPPLIER_NAME, SUPPLIER_AMOUNT = "Delta Stavby s.r.o.", "118750"  # over the 80,000 CZK cap -> waits for the Trezor
 
 
@@ -84,6 +98,20 @@ def run(out: Path) -> list[str]:
             # 0. supplier console: a registered supplier sends a new over-cap invoice email; it waits for the Trezor
             sup_pid, sup_failures = _supplier_sends(browser, sup_port, out)
             failures += sup_failures
+            # 0b. bank console before anyone attacked: the seeded scenes are backdrop, so no red banner (issue: a
+            # stack that opens "Under attack" before the pitch starts)
+            pre = browser.new_page(viewport={"width": 1600, "height": 1000})
+            pre.goto(f"http://127.0.0.1:{bank_port}/", wait_until="networkidle")
+            pre.get_by_text("Paid to registered suppliers").wait_for(timeout=120_000)
+            pre.wait_for_timeout(1000)
+            if "Under attack" in pre.inner_text("body"):
+                failures.append("bank console shows 'Under attack' before any live attack (backdrop counted)")
+            pre.get_by_role("tab", name="Security").click()
+            pre.wait_for_timeout(1200)
+            if "No live attacks" not in pre.inner_text("body"):
+                failures.append("bank Security before the attacks: missing 'No live attacks'")
+            pre.screenshot(path=str(out / "00b-bank-before-attacks.png"))
+            pre.close()
             # 1. attacker console: launch every attack
             atk = browser.new_page(viewport={"width": 1500, "height": 1100})
             errors: list[str] = []
@@ -105,6 +133,13 @@ def run(out: Path) -> list[str]:
             for bad in ("ATTACK GOT THROUGH", "*** BREACH"):
                 if bad in body:
                     failures.append(f"attacker console reports a breach: {bad!r}")
+            for t in ATTACKER_BANKLOG:
+                if t not in body:
+                    failures.append(f"attacker console bank log: missing {t!r}")
+            logs = atk.locator(".banklog")
+            for i in range(min(logs.count(), 7)):
+                logs.nth(i).scroll_into_view_if_needed()
+                logs.nth(i).screenshot(path=str(out / f"01{chr(97 + i)}-attacker-banklog.png"))
             # every verdict must read 0.00 CZK
             if body.count("Money moved to attacker: 0.00 CZK") < n:
                 failures.append("not every attack verdict shows 0.00 CZK to the attacker")
@@ -183,6 +218,7 @@ def run(out: Path) -> list[str]:
                 if "Tampered approval stopped" not in panel2:
                     failures.append("attack h: bank Overview missing 'Tampered approval stopped'")
                 bankpg.screenshot(path=str(out / "03-bank-attack-h.png"), full_page=True)
+                failures += _bank_security(bankpg, out)
                 # attacker console: the outcome is refused, money to attacker 0.00 CZK
                 atk.reload(wait_until="networkidle")
                 atk.wait_for_timeout(2500)
@@ -192,6 +228,14 @@ def run(out: Path) -> list[str]:
                 if "render_mismatch" not in atkbody and "refused" not in atkbody.lower():
                     failures.append("attack h: attacker console does not show the refused outcome")
                 atk.screenshot(path=str(out / "04-attacker-h-outcome.png"), full_page=True)
+                hlog = atk.locator(".banklog")
+                if hlog.count():
+                    hlog.last.scroll_into_view_if_needed()
+                    hlog.last.screenshot(path=str(out / "04b-attacker-h-banklog.png"))
+                    if "HOST TAMPERING" not in hlog.last.inner_text():
+                        failures.append("attack h: the attacker console's bank log does not show HOST TAMPERING")
+                else:
+                    failures.append("attack h: no bank log under the implant outcome")
             failures += [f"bank page error: {e}" for e in berrors]
     finally:
         for proc in (supplier, attacker, bank, executor):
@@ -200,6 +244,54 @@ def run(out: Path) -> list[str]:
                 proc.wait(timeout=10)
             except Exception:  # noqa: BLE001
                 proc.kill()
+    return failures
+
+
+def _tall_shot(page, path: Path, width: int = 1600) -> None:  # noqa: ANN001 - playwright Page
+    """Streamlit scrolls inside its own container, so full_page stops at the viewport: grow the viewport to the
+    content height (capped) for the screenshot, then restore it."""
+    h = page.evaluate("Math.max(...[...document.querySelectorAll('section, [data-testid=stMain], "
+                      "[data-testid=stAppViewContainer]')].map(e => e.scrollHeight), 1000)")
+    page.set_viewport_size({"width": width, "height": min(int(h) + 200, 9000)})
+    page.wait_for_timeout(800)
+    page.screenshot(path=str(path))
+    page.set_viewport_size({"width": width, "height": 1100})
+
+
+def _bank_security(bankpg, out: Path) -> list[str]:  # noqa: ANN001 - playwright Page
+    """Security tab (incident cards) and the Audit tab's event log filtered to attacks, with screenshots."""
+    failures: list[str] = []
+    bankpg.get_by_role("tab", name="Security").click()
+    bankpg.wait_for_timeout(1500)
+    panel = bankpg.locator("[role='tabpanel']:visible").first
+    text = bankpg.inner_text("body")
+    for t in BANK_SECURITY:
+        if t not in text:
+            failures.append(f"bank Security: missing {t!r}")
+    bankpg.set_viewport_size({"width": 1600, "height": 1000})
+    bankpg.wait_for_timeout(500)
+    bankpg.screenshot(path=str(out / "05a-bank-security-fold.png"))  # what a projector shows without scrolling
+    lines = panel.locator("details.incl > summary")
+    if lines.count():
+        lines.first.click()  # an older incident opens into its full card
+        bankpg.wait_for_timeout(400)
+    _tall_shot(bankpg, out / "05-bank-security.png")
+    cards = panel.locator(".inc")
+    if cards.count():
+        cards.first.screenshot(path=str(out / "05b-bank-security-card.png"))
+    bankpg.get_by_role("tab", name="Audit").click()
+    bankpg.wait_for_timeout(1200)
+    panel = bankpg.locator("[role='tabpanel']:visible").first
+    try:
+        panel.get_by_text("Attacks only").first.click()
+        bankpg.wait_for_timeout(1500)
+    except Exception:  # noqa: BLE001
+        failures.append("bank Audit: no 'Attacks only' event-log filter")
+    log = bankpg.locator("[role='tabpanel']:visible").first.inner_text()
+    for t in ("Event log", "Tampered approval stopped", "Forged approval stopped", "ATTACK"):
+        if t not in log:
+            failures.append(f"bank Audit event log: missing {t!r}")
+    _tall_shot(bankpg, out / "06-bank-event-log.png")
     return failures
 
 

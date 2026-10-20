@@ -233,7 +233,12 @@ def executor_call(executor_url: str | None = None) -> Any:
     if ".execute-api." in base:
         from infra.aws_e2e import signed_call
 
-        return signed_call(base)
+        call = signed_call(base)
+        try:
+            call.airgap_remote = True  # executor.oplog.fetch_recent: no loopback-only route to probe on AWS
+        except AttributeError:
+            pass
+        return call
     import httpx
 
     client = httpx.Client(base_url=base, timeout=30)

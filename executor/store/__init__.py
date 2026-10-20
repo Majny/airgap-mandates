@@ -205,6 +205,9 @@ def tx_execute(store: Store, *, leaf_event: dict[str, Any], expected_seq: int, l
     token = request_token(tx_id, ops[0].item["leaf_hash"])  # ops[0] is the audit leaf Put
     if not store.transact(ops, client_request_token=token):
         raise TxConflict(f"execution transaction for {tx_id} cancelled")
+    from executor import oplog
+
+    oplog.leaf({**leaf_event, "seq": expected_seq}, expected_seq)  # after commit only (never logs a cancelled one)
     return expected_seq
 
 

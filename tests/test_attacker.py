@@ -72,3 +72,39 @@ def test_lookalike_story_card() -> None:
     assert story._lookalike_of("acme-cz.com", reg) == "acme.cz"
     assert story._lookalike_of("acme.cz", reg) is None
     assert story._lookalike_of("vendor-review-partners.example", reg) is None
+
+
+@pytest.mark.parametrize("key", [k for k in attacks.ATTACKS if k != "clerk_pc_malware"])
+def test_attack_result_carries_the_banks_log(key: str) -> None:
+    """Under every attack the attacker console shows the bank's own log lines for it, read back from the executor
+    (audit export + explain, and the ring of request-level refusals that wrote no leaf): threat, layer, evidence."""
+    from tests.log_helpers import ATTACK_THREATS
+
+    res = attacks.run_attack(key, _session())
+    threat, layer = ATTACK_THREATS[key]
+    hits = [d for d in res.bank_log if d["level"] == "ATTACK" and d["threat"] == threat and d["layer"] == layer]
+    assert hits, [(d["level"], d["threat"], d["layer"], d["headline"]) for d in res.bank_log]
+    page = attacks.bank_log_html(res.bank_log)
+    assert "The bank's log" in page and threat in page.replace("&amp;", "&")
+    assert f"stopped by <b>{layer}</b>" in page or f"held by <b>{layer}</b>" in page
+    if key == "stolen_agent_creds":  # refused at the door: no audit entry, still in the bank's log
+        door = [d for d in res.bank_log if d["source"].startswith("refused at the door")]
+        assert {d["kind"] for d in door} >= {"stolen agent credentials", "IBAN injection"}
+        assert "caller_not_allowed" in page
+
+
+def test_bank_log_on_aws_falls_back_to_the_refusal_response(monkeypatch) -> None:
+    """Against AWS the ring is not reachable: a refused request is explained from the executor's own refusal body
+    (the same explain.refusal the executor writes to CloudWatch), never twice for a kind a leaf already tells."""
+    from executor import oplog
+
+    monkeypatch.setattr(oplog, "fetch_recent", lambda call, after=0: [])
+    res = attacks.run_attack("stolen_agent_creds", _session())
+    aws = [d for d in res.bank_log if "CloudWatch" in d["source"]]
+    assert {d["kind"] for d in aws} == {"stolen agent credentials", "IBAN injection"}
+
+
+def test_bank_log_html_escapes_attacker_text() -> None:
+    page = attacks.bank_log_html([{"level": "ATTACK", "threat": "PROMPT INJECTION", "title": "<img src=x>",
+                                   "layer": "input sanitisation", "evidence": "<script>", "seq": 3, "kind": "x"}])
+    assert "<img" not in page and "<script>" not in page and "&lt;img" in page

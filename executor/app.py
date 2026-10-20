@@ -19,6 +19,9 @@ def create_app(settings: Any = None) -> Any:
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse, Response
 
+    from executor import oplog
+
+    oplog.configure()  # ops log on stdout (AIRGAP_LOG_FORMAT / AIRGAP_LOG_LEVEL)
     settings = settings or Settings.from_env()
     ctx = handler.configure(settings)
     if settings.backend == "memory":
@@ -26,6 +29,10 @@ def create_app(settings: Any = None) -> Any:
 
         seed.seed_demo(ctx.store)
     app = FastAPI(title="AirGap Mandates executor (local dev)", docs_url=None, redoc_url=None)
+
+    @app.get(oplog.RECENT_PATH)
+    async def recent_attacks(after: int = 0) -> Any:  # read-only ring of request-level attacks (no audit leaf)
+        return JSONResponse({"attacks": oplog.recent(after, ctx.store)})
 
     @app.api_route("/{path:path}", methods=["GET", "POST"])
     async def catch_all(path: str, request: Request) -> Any:

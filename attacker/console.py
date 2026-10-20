@@ -47,6 +47,18 @@ h1, h2, h3 { color: #ff5a4d !important; }
 .verdict-bad { background:#2a0b08; border:1px solid #b42318; color:#ff8a7e; padding:10px 16px; border-radius:8px;
                font-size:20px; font-weight:800; }
 .watch { color:#f0a; opacity:.85; margin-top:6px; }
+.banklog { background:#f8fafc; color:#101828; border-radius:10px; border:3px solid #b42318; padding:10px 16px 8px;
+           margin:10px 0 4px 0; }
+.banklog .h { font-weight:800; font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:#475467;
+              margin-bottom:6px; }
+.banklog .l { border-left:8px solid #b42318; background:#fef3f2; border-radius:6px; padding:6px 12px; margin:6px 0; }
+.banklog .l.calm { border-left-color:#98a2b3; background:#f2f4f7; opacity:.85; font-size:16px; }
+.banklog .thr { background:#101828; color:#fff; font-weight:800; letter-spacing:.05em; padding:2px 10px;
+                border-radius:6px; font-size:16px; margin-right:6px; }
+.banklog .t { font-weight:700; font-size:19px; }
+.banklog .stop { font-size:17px; margin-top:3px; } .banklog .stop b { color:#b42318; }
+.banklog .ev { font-family:'JetBrains Mono',Menlo,monospace; font-size:14px; }
+.banklog .src { font-size:13px; color:#667085; margin-top:2px; }
 </style>"""
 
 
@@ -104,9 +116,14 @@ def _render_result(res: attacks.AttackResult) -> None:
                 f"{res.verdict}</div>", unsafe_allow_html=True)
     if not good:
         st.error(f"ATTACK GOT THROUGH — real finding: {res.breach or 'see above'}")
+    _render_bank_log(res.bank_log)
     st.markdown("<div class='watch'>&#128064; now watch the bank console (it auto-refreshes every few seconds): "
                 "this attempt appears as a blocked card and 'Paid to unregistered accounts' stays 0.00 CZK.</div>",
                 unsafe_allow_html=True)
+
+
+def _render_bank_log(lines: list[dict]) -> None:
+    st.markdown(attacks.bank_log_html(lines), unsafe_allow_html=True)
 
 
 CARDS = [
@@ -178,7 +195,7 @@ def _money_czk(call) -> str:
     return f"{attacks._money_to_attacker(call) / 100:,.2f} CZK".replace(",", " ")
 
 
-def _malware_outcome(call) -> None:
+def _malware_outcome(call, mark: dict | None = None) -> None:
     """Live view of the implant outcome, polled from last.json (written by the bank console when the clerk approves)."""
     from host import implant
 
@@ -202,6 +219,9 @@ def _malware_outcome(call) -> None:
             bad = out.get("outcome") == "paid"
             st.markdown(f"<div class='verdict-{'bad' if bad else 'ok'}'>Money to attacker: {_money_czk(call)}<br>"
                         f"{msg}</div>", unsafe_allow_html=True)
+            m = mark or (attacks.mark_at_last(call) if out.get("outcome") == "refused_by_executor" else None)
+            if m:
+                _render_bank_log(attacks.bank_log(call, m))
         elif not armed:
             st.caption("not armed")
 
@@ -236,7 +256,7 @@ def _malware_card(session: attacks.Session) -> None:
             st.markdown(f"<div style='opacity:.85'>&bull; {n}</div>", unsafe_allow_html=True)
         for r in res.requests:
             _render_request(r)
-    _malware_outcome(session.call)
+    _malware_outcome(session.call, res.bank_mark if isinstance(res, attacks.AttackResult) else None)
     st.divider()
 
 

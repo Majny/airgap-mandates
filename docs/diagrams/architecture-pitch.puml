@@ -1,0 +1,79 @@
+@startuml architecture-pitch
+' Pitch version of docs/diagrams/architecture.puml: the same design, told for a non-technical audience.
+' Render: plantuml -tsvg docs/diagrams/architecture-pitch.puml
+!pragma layout smetana
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 18
+skinparam shadowing false
+skinparam roundCorner 24
+skinparam nodesep 60
+skinparam ranksep 70
+skinparam ArrowColor #667085
+skinparam ArrowThickness 2.5
+skinparam ArrowFontSize 15
+skinparam ArrowFontColor #344054
+skinparam TitleFontSize 30
+skinparam TitleFontStyle bold
+skinparam rectangle {
+  BorderThickness 2
+  FontSize 18
+  StereotypeFontSize 0
+}
+top to bottom direction
+
+title AI may propose. Policy may block. Only a human-held key may move money.
+
+skinparam rectangle<<untrusted>> {
+  BackgroundColor #FEF3F2
+  BorderColor #F04438
+  FontColor #7A271A
+}
+skinparam rectangle<<guard>> {
+  BackgroundColor #ECFDF3
+  BorderColor #12B76A
+  FontColor #054F31
+}
+skinparam rectangle<<human>> {
+  BackgroundColor #FFFAEB
+  BorderColor #F79009
+  FontColor #7A2E0E
+}
+skinparam rectangle<<proof>> {
+  BackgroundColor #EFF8FF
+  BorderColor #2E90FA
+  FontColor #194185
+}
+skinparam rectangle<<money>> {
+  BackgroundColor #FFFFFF
+  BorderColor #98A2B3
+}
+
+rectangle "<size:22><b>Assume it is hacked</b></size>" <<untrusted>> as U {
+  rectangle "<&envelope-closed> <b>Supplier e-mails & invoices</b>\nincl. fake domains, hacked mailboxes,\nhidden instructions in PDFs" <<untrusted>> as MAIL
+  rectangle "<&cog> <b>AI agent</b>\nreads the inbox, prepares payments\n<i>can only propose, holds no key</i>" <<untrusted>> as AI
+  rectangle "<&laptop> <b>Bank laptop</b>\nmay show lies or run malware" <<untrusted>> as PC
+}
+
+rectangle "<size:22><b>AirGap guard</b></size>\n<size:15>runs separately in the bank's cloud</size>" <<guard>> as G {
+  rectangle "<b>1 · Checks the facts itself</b>\nIs the sender the real supplier?\nIs it the registered account?\nSanctions, warnings, duplicates" <<guard>> as FACTS
+  rectangle "<b>2 · Fixed rules, no AI</b>\nsame input → same decision,\nreplayable by an auditor" <<guard>> as RULES
+}
+
+rectangle "<&lock-locked> <b>3 · A person confirms on a Trezor</b>\nthe device shows exactly what will be paid;\nnew bank accounts need two people\n+ independent confirmations" <<human>> as TREZOR
+
+rectangle "<&check> <b>Supplier paid</b>\nonly to the registered account" <<money>> as PAID
+rectangle "<&ban> <b>Attacker: 0 CZK</b>\nrefused, the device stays dark" <<money>> as BLOCKED
+
+rectangle "<&document> <b>4 · Tamper-proof record</b>\nevery step logged in plain words,\nsealed by independent witnesses,\nverifiable offline by a supervisor" <<proof>> as LOG
+
+MAIL --> AI : invoice
+AI --> G : proposes a payment
+PC ..> G : anything it claims\nis only a hint
+FACTS --> RULES
+RULES --> PAID : <b>small & known</b>\npaid automatically\n(inside a signed limit)
+RULES --> TREZOR : <b>unusual</b>\nask a human
+TREZOR --> PAID : confirmed
+RULES --> BLOCKED : <b>suspicious</b>\nblocked
+G --> LOG : every decision
+TREZOR --> LOG
+@enduml

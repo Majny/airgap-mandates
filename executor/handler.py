@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from executor import config
+from executor import config, oplog
 from executor.config import Settings, iso
 from executor.errors import ApiError, ErrorCode
 from executor.models import ChangeEvent, MandateStatus, ProposalStatus
@@ -238,7 +238,8 @@ def _submit_rail(ctx: Context, tx: dict) -> dict:
         r = submit.submit(tx, store=ctx.store, settings=ctx.settings)
         return {**tx, "rail": {"status": r["status"] if r["status"] != "DUPL" else tx["rail"]["status"],
                                "xml_c14n_sha256": r["xml_c14n_sha256"]}}
-    except Exception:  # noqa: BLE001 - committed; recover_unsubmitted() picks it up
+    except Exception as e:  # noqa: BLE001 - committed; recover_unsubmitted() picks it up
+        oplog.rail_failed(e, tx)
         return tx
 
 
@@ -826,7 +827,31 @@ _route("GET", "/health", get_health)
 def dispatch(method: str, path: str, query: dict[str, str] | None = None, body: dict[str, Any] | None = None,
              headers: dict[str, str] | None = None, *, principal: str | None = None,
              ctx: Context | None = None) -> tuple[int, dict[str, Any] | bytes]:
-    """Route a request to the endpoint implementation; ApiError -> (status, error body). Used by Lambda, FastAPI app, bench and tests."""
+    """Route a request to the endpoint implementation; ApiError -> (status, error body). Used by Lambda, FastAPI app, bench and tests.
+    Every request runs in an executor.oplog scope: refusals and failures get one explained ops-log line, a 500 its
+    traceback and an error_id (also in the response `details`)."""
+    try:
+        scope = (ctx or get_context()).store
+    except Exception:  # noqa: BLE001 - _dispatch reports a missing context itself
+        scope = None
+    token = oplog.begin(method, path, principal, scope)
+    status: int = 500
+    out: Any = None
+    try:
+        status, out = _dispatch(method, path, query, body, principal=principal, ctx=ctx)
+        return status, out
+    finally:
+        oplog.end(token, status, out)
+
+
+def _internal(e: BaseException, message: str, method: str, path: str, principal: str | None) -> dict[str, Any]:
+    """500 body with the error_id under which the traceback was logged (schema common.json#/$defs/error details)."""
+    return ApiError(ErrorCode.INTERNAL_ERROR, message,
+                    {"error_id": oplog.internal_error(e, method, path, principal)}).to_body()
+
+
+def _dispatch(method: str, path: str, query: dict[str, str] | None, body: dict[str, Any] | None, *,
+              principal: str | None, ctx: Context | None) -> tuple[int, dict[str, Any] | bytes]:
     ctx = ctx or get_context()
     method = method.upper()
     if "?" in path:  # in-process callers may pass "/ledger?vendor_id=..." like an HTTP client would
@@ -852,9 +877,9 @@ def dispatch(method: str, path: str, query: dict[str, str] | None = None, body: 
         except ApiError as e:
             return e.status, e.to_body()
         except NotImplementedError as e:
-            return 500, ApiError(ErrorCode.INTERNAL_ERROR, f"not implemented yet: {e}").to_body()
+            return 500, _internal(e, f"not implemented yet: {e}", method, path, principal)
         except Exception as e:  # noqa: BLE001 - fail closed, no effect beyond what committed
-            return 500, ApiError(ErrorCode.INTERNAL_ERROR, f"{type(e).__name__}").to_body()
+            return 500, _internal(e, f"{type(e).__name__}", method, path, principal)
     if matched_path:
         return 404, ApiError(ErrorCode.NOT_FOUND, f"no {method} on {path}").to_body()
     return 404, ApiError(ErrorCode.NOT_FOUND, f"unknown path {path}").to_body()

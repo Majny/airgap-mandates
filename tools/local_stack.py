@@ -81,15 +81,38 @@ def build_env(*, scenes: bool = True, log=print):
     return settings, env.store
 
 
-def build_app(settings, store):
+SEED_PATH = "/_local/seed"  # loopback stack only, outside the executor API (no contract, never on AWS)
+
+
+def audit_next_seq(call) -> int | None:
+    """The next audit seq (= number of leaves), read with the auditor principal; None if the export fails."""
+    st, b = call("GET", "/audit/export?log_id=audit&from_seq=0", None, "auditor")
+    if st != 200 or not isinstance(b, dict):
+        return None
+    return max((int(le["seq"]) for le in b.get("leaves") or []), default=-1) + 1
+
+
+def build_app(settings, store, *, seed: dict | None = None):
     """A minimal FastAPI app forwarding to handler.dispatch over the given (pre-seeded) store. Mirrors
-    executor.app.create_app but never re-seeds and never rebuilds the store."""
+    executor.app.create_app but never re-seeds and never rebuilds the store. `seed` ({"seed_seq", "scene"}: where
+    the replayed demo backdrop ends and live traffic starts) is served at SEED_PATH for the bank console;
+    the request-level attacks of executor.oplog.recent() at oplog.RECENT_PATH (consoles, alert watcher)."""
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse, Response
+
+    from executor import oplog
 
     ctx = handler.Context(settings, store)
     handler.configure(settings, store)  # also set the process-wide context
     app = FastAPI(title="AirGap Mandates executor (local stack)", docs_url=None, redoc_url=None)
+
+    @app.get(SEED_PATH)
+    async def seed_boundary():  # noqa: ANN202
+        return JSONResponse(seed or {"seed_seq": None, "scene": None})
+
+    @app.get(oplog.RECENT_PATH)
+    async def recent_attacks(after: int = 0):  # noqa: ANN202 - read-only, masked lines (executor.oplog.recent)
+        return JSONResponse({"attacks": oplog.recent(after, store)})
 
     @app.api_route("/{path:path}", methods=["GET", "POST"])
     async def catch_all(path: str, request: Request):  # noqa: ANN202
@@ -121,10 +144,24 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     import uvicorn
 
-    settings, store = build_env(scenes=not a.no_scenes)
+    from executor import oplog
+    from executor.audit import explain
+
+    oplog.configure()  # explained ops log on stdout: every audit leaf, refused request and 500 (AIRGAP_LOG_*)
+    oplog.emit("INFO", "seeding the demo backdrop" + ("" if a.no_scenes else " (scenes S2 + S3: the attacks below "
+               "are the replayed scenes, not live traffic)"))
+    with oplog.replay("seed" if a.no_scenes else "S2+S3"):  # scene=..., [demo replay]: never mistaken for live
+        # the scene narration goes to stderr, IBANs masked: stdout is the ops log alone (`... | jq` reads it line by line)
+        settings, store = build_env(scenes=not a.no_scenes,
+                                    log=lambda m: print(explain.mask_ibans(str(m)), file=sys.stderr))
+    seed_seq = audit_next_seq(lambda m, p, b, who: handler.dispatch(m, p, None, b, principal=who,
+                                                                     ctx=handler.Context(settings, store)))
+    oplog.emit("INFO", f"ready on http://{a.host}:{a.port}: everything below is live traffic (audit seq {seed_seq} "
+               "onward; the console marks earlier attacks as demo backdrop)")
     print(f"local stack: seeded memory executor on http://{a.host}:{a.port}  (backend=memory, fixed clock)",
           file=sys.stderr)
-    uvicorn.run(build_app(settings, store), host=a.host, port=a.port, log_level="warning")
+    seed = {"seed_seq": seed_seq, "scene": "seed" if a.no_scenes else "S2+S3"}
+    uvicorn.run(build_app(settings, store, seed=seed), host=a.host, port=a.port, log_level="warning")
     return 0
 
 
