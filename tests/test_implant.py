@@ -84,6 +84,8 @@ def test_e2e_swap_refused_then_honest_pays():
     assert env.store.get("nonces", {"nonce": nonce})["used"] is False  # nonce NOT consumed
     assert not [t for t in env.store.scan("ledger") if t["iban"] in attacks.ATTACKER_IBANS]
     assert implant.last()["outcome"] == "refused_by_executor" and implant.last()["error"] == "render_mismatch"
+    # the recorded IBAN is the attacker IBAN the device was actually shown (not None): the console recap reads it out
+    assert implant.last()["device_text_iban"] == R.format_iban(ATTACKER_IBAN)
     assert implant.armed() is None  # one-shot: disarmed after use
     # the rejected signature is logged as a render_mismatch leaf
     st, exp = env.call("GET", "/audit/export?log_id=audit&from_seq=0", None, "auditor")
@@ -110,6 +112,38 @@ def test_e2e_rejected_on_device():
     assert env.store.get("nonces", {"nonce": nonce})["used"] is False
     assert env.store.scan("ledger") == [] or not [t for t in env.store.scan("ledger")
                                                   if t["iban"] in attacks.ATTACKER_IBANS]
+
+
+def test_one_shot_disarms_on_device_error():
+    """A generic device/driver failure (not cancel/timeout) must still disarm the one-shot implant and record 'error',
+    so a later unrelated PAY signature is never silently swapped."""
+    class _Boom:
+        label = "software key (test)"
+
+        def sign_text(self, text, key_ref, timeout=signer.DEFAULT_TIMEOUT):
+            raise RuntimeError("device error")
+
+    env = DemoEnv()
+    env.active_mandate()
+    nonce, _ = _pending_delta(env)
+    implant.arm(ATTACKER_IBAN)
+    with pytest.raises(RuntimeError):
+        signer.sign_challenge(nonce, "clerk", call=env.call, driver=_Boom())
+    assert implant.armed() is None  # disarmed despite the exception
+    assert implant.last()["outcome"] == "error" and implant.last()["error"] == "RuntimeError"
+    assert env.store.get("nonces", {"nonce": nonce})["used"] is False
+
+
+def test_arm_disarm_clear_stale_outcome():
+    """arm() and disarm() clear a prior last.json, so a repeated live demo shows 'waiting', not the previous verdict."""
+    implant.arm(ATTACKER_IBAN)
+    implant.record("refused_by_executor", error="render_mismatch", device_text_iban="LT48 ...")
+    assert implant.last() is not None
+    implant.arm(ATTACKER_IBAN)  # re-arm must wipe the old verdict
+    assert implant.last() is None
+    implant.record("paid")
+    implant.disarm()  # disarm must wipe it too
+    assert implant.last() is None
 
 
 def test_story_card_render_mismatch():
