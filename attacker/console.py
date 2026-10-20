@@ -171,6 +171,74 @@ def main() -> None:
             _render_result(res)
         st.divider()
 
+    _malware_card(session)
+
+
+def _money_czk(call) -> str:
+    return f"{attacks._money_to_attacker(call) / 100:,.2f} CZK".replace(",", " ")
+
+
+def _malware_outcome(call) -> None:
+    """Live view of the implant outcome, polled from last.json (written by the bank console when the clerk approves)."""
+    from host import implant
+
+    def render() -> None:
+        armed = implant.armed()
+        out = implant.last()
+        if armed:
+            st.markdown("<div class='watch'>&#9203; implant armed &mdash; waiting for the clerk to approve a payment on "
+                        "the bank console (:8501)&hellip;</div>", unsafe_allow_html=True)
+        if out:
+            msg = {
+                "refused_by_executor": "The clerk confirmed on the Trezor, but the executor refused it "
+                f"(render_mismatch): the device was shown IBAN {out.get('device_text_iban')}, not the bank's text. "
+                "The nonce was never consumed; nothing was paid. The clerk's PC should be treated as compromised.",
+                "rejected_on_device": "The clerk saw the wrong IBAN on the Trezor and pressed X. Nothing was paid; the "
+                "payment still waits for approval.",
+                "timeout": "No confirmation on the device in time. Nothing was paid.",
+                "paid": "!!! the swap was PAID — this must never happen (real finding)",
+                "error": "Signing errored on the clerk's PC. Nothing was paid.",
+            }.get(out.get("outcome"), str(out.get("outcome")))
+            bad = out.get("outcome") == "paid"
+            st.markdown(f"<div class='verdict-{'bad' if bad else 'ok'}'>Money to attacker: {_money_czk(call)}<br>"
+                        f"{msg}</div>", unsafe_allow_html=True)
+        elif not armed:
+            st.caption("not armed")
+
+    if hasattr(st, "fragment"):
+        st.fragment(run_every=2)(render)()
+    else:
+        if st.button("Refresh outcome", key="btn_malware_refresh"):
+            pass
+        render()
+
+
+def _malware_card(session: attacks.Session) -> None:
+    from host import implant
+
+    st.markdown(
+        "<div class='acard'><span class='t'>h. Malware on the clerk's PC (signing swap)</span>"
+        "<span class='lbl'>one-shot</span><span class='lbl'>simulated</span>"
+        "<div class='control'>In Feb 2025 attackers took about $1.5bn from Bybit this way: the signers' screen showed "
+        "a normal transfer while their hardware wallets were asked to sign a different one. Here the implant rewrites "
+        "the IBAN sent to the clerk's Trezor, so the device shows the attacker's account. The bank screen keeps showing "
+        "the real payment — nothing on it reveals the implant; only the device shows the truth.</div></div>",
+        unsafe_allow_html=True)
+    cols = st.columns([1, 1, 4])
+    if cols[0].button("Arm implant", key="btn_malware", type="primary"):
+        st.session_state["malware_res"] = attacks.run_attack("clerk_pc_malware", session)
+    if cols[1].button("Disarm", key="btn_malware_disarm"):
+        implant.disarm()
+        st.session_state.pop("malware_res", None)
+    res = st.session_state.get("malware_res")
+    if isinstance(res, attacks.AttackResult):
+        for n in res.notes:
+            st.markdown(f"<div style='opacity:.85'>&bull; {n}</div>", unsafe_allow_html=True)
+        for r in res.requests:
+            _render_request(r)
+    _malware_outcome(session.call)
+    st.divider()
+
 
 def _title_control(key: str) -> tuple[str, str, list[str]]:
     """Title, control line and labels for a card, without running the attack (read from a dry AttackResult)."""
