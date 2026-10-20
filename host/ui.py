@@ -72,6 +72,15 @@ def _memory_call() -> Any:
         e2e.run(e.call, e.clerk, e.treasury, now=e.now, log=lambda s: None)
         scenes.scene_s2(e, log=lambda s: None)
         scenes.scene_s3(e, log=lambda s: None)
+        # test/visual only: enrol the deterministic software clerk so "Approve on Trezor" (and the honest re-sign after
+        # attack h) can sign without a physical device. Same gate as tools/local_stack; never reachable against AWS.
+        import os
+        if os.environ.get("AIRGAP_TEST_SOFTWARE_CLERK") == "1":
+            from executor.store import seed
+            from host.signer import software_clerk_account
+            acct = software_clerk_account()
+            seed.enroll_signer(e.store, acct.address, "clerk", device="GENUINE",
+                               label="clerk (software key, test)", settings=e.settings)
         # one over-cap payment left PENDING_SIG, so the Approve-on-Trezor button and the attack-h demo have a target
         seed_pending_overcap(e.call, e.now, data_dir=e.settings.data_dir)
         return e
