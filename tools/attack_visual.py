@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -58,11 +59,15 @@ def run(out: Path) -> list[str]:
     ex_url = f"http://127.0.0.1:{ex_port}"
     failures: list[str] = []
     out.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(ROOT / ".local" / "implant", ignore_errors=True)  # start attack h from a clean implant state
 
+    # attack h needs the test software clerk: the executor enrols it and the bank console signs with it (loopback only,
+    # never AWS). Refresh off so the transient approval message is not cleared mid-interaction.
+    soft = {"AIRGAP_TEST_SOFTWARE_CLERK": "1"}
     executor = subprocess.Popen([sys.executable, "-m", "tools.local_stack", "--port", str(ex_port)],
-                                cwd=ROOT, env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                                cwd=ROOT, env={**os.environ, **soft, "PYTHONUNBUFFERED": "1"},
                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    bank = _streamlit("host/ui.py", bank_port, {"AIRGAP_EXECUTOR_URL": ex_url, "AIRGAP_UI_REFRESH_S": "2"})
+    bank = _streamlit("host/ui.py", bank_port, {"AIRGAP_EXECUTOR_URL": ex_url, "AIRGAP_UI_REFRESH_S": "0", **soft})
     attacker = _streamlit("attacker/console.py", atk_port, {"AIRGAP_ATTACK_URL": ex_url})
     try:
         _wait_http(f"{ex_url}/health")
@@ -94,6 +99,16 @@ def run(out: Path) -> list[str]:
             # every verdict must read 0.00 CZK
             if body.count("Money moved to attacker: 0.00 CZK") < n:
                 failures.append("not every attack verdict shows 0.00 CZK to the attacker")
+            # attack h: arm the clerk-PC implant (the clerk approves on the bank console below)
+            arm = atk.get_by_role("button", name="Arm implant")
+            if arm.count():
+                arm.first.click()
+                try:
+                    atk.get_by_text("implant armed").first.wait_for(timeout=30_000)
+                except Exception:  # noqa: BLE001
+                    failures.append("attack h: implant did not report armed")
+            else:
+                failures.append("attack h: no 'Arm implant' button on the attacker console")
             atk.screenshot(path=str(out / "01-attacker-console.png"), full_page=True)
             failures += [f"attacker page error: {e}" for e in errors]
 
@@ -119,6 +134,41 @@ def run(out: Path) -> list[str]:
             if bankpg.locator("[data-testid='stException']").count():
                 failures.append("bank console: Streamlit exception on the page")
             bankpg.screenshot(path=str(out / "02-bank-console.png"), full_page=True)
+
+            # attack h: the clerk approves the waiting payment on the Trezor; the armed implant swaps the IBAN, so the
+            # executor refuses it (render_mismatch). The bank screen must NOT reveal the implant; the Overview shows the
+            # blocked card and no attacker money.
+            bankpg.get_by_role("tab", name="Payments").click()
+            bankpg.wait_for_timeout(1200)
+            approve = bankpg.get_by_role("button", name="Approve on Trezor")
+            if not approve.count():
+                failures.append("attack h: no 'Approve on Trezor' button on the bank console (no pending payment?)")
+            else:
+                approve.first.click()
+                try:
+                    bankpg.get_by_text("Refused by the executor").first.wait_for(timeout=30_000)
+                except Exception:  # noqa: BLE001 - the persistent Overview card is the real check below
+                    pass
+                bankpg.goto(f"http://127.0.0.1:{bank_port}/", wait_until="networkidle")
+                bankpg.get_by_text("Paid to registered suppliers").wait_for(timeout=120_000)
+                hdr2 = bankpg.inner_text("body")
+                if "Paid to unregistered accounts" in hdr2 and "0.00 CZK" not in hdr2:
+                    failures.append("attack h: 'Paid to unregistered accounts' is not 0.00 CZK after the swap")
+                bankpg.get_by_role("tab", name="Overview").click()
+                bankpg.wait_for_timeout(1500)
+                panel2 = bankpg.locator("[role='tabpanel']:visible").first.inner_text()
+                if "Tampered approval stopped" not in panel2:
+                    failures.append("attack h: bank Overview missing 'Tampered approval stopped'")
+                bankpg.screenshot(path=str(out / "03-bank-attack-h.png"), full_page=True)
+                # attacker console: the outcome is refused, money to attacker 0.00 CZK
+                atk.reload(wait_until="networkidle")
+                atk.wait_for_timeout(2500)
+                atkbody = atk.inner_text("body")
+                if "Money to attacker: 0.00 CZK" not in atkbody:
+                    failures.append("attack h: attacker console does not show 'Money to attacker: 0.00 CZK'")
+                if "render_mismatch" not in atkbody and "refused" not in atkbody.lower():
+                    failures.append("attack h: attacker console does not show the refused outcome")
+                atk.screenshot(path=str(out / "04-attacker-h-outcome.png"), full_page=True)
             failures += [f"bank page error: {e}" for e in berrors]
     finally:
         for proc in (attacker, bank, executor):
