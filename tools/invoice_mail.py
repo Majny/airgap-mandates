@@ -100,3 +100,27 @@ def attachment_doc_id(raw: bytes) -> str:
 def cite(invoice: dict[str, Any], raw: bytes, email_id: str) -> dict[str, Any]:
     """The invoice citing its source email and document: + email_id, invoice_ref = attachment doc_id."""
     return {**invoice, "email_id": email_id, "invoice_ref": attachment_doc_id(raw)}
+
+
+def new_invoice(vendor_id: str, amount_minor: int, *, invoice_no: str | None = None, due_date: str | None = None,
+                now: datetime | None = None) -> dict[str, Any]:
+    """A NEW legitimate invoice from a registered vendor, issued today: a fresh invoice number (INV-<MMDDHHMMSS>) and
+    the caller's amount keep it clear of the duplicate check. Due today unless `due_date` (YYYY-MM-DD) says otherwise."""
+    now = now or datetime.now(timezone.utc)
+    return {"vendor_id": vendor_id, "invoice_no": invoice_no or f"INV-{now:%m%d%H%M%S}",
+            "issue_date": f"{now:%Y-%m-%d}", "due_date": due_date or f"{now:%Y-%m-%d}",
+            "amount_minor": int(amount_minor), "currency": "CZK", "reason_code": "DUE"}
+
+
+def send_and_propose(call: Any, invoice: dict[str, Any], *, data_dir: str | Path | None = None,
+                     agent: Any = None) -> tuple[int, Any]:
+    """The one path for a new legitimate invoice: its DKIM-signed email is ingested (POST /ingest as "ingest"), then
+    the bank's agent proposes it. Default agent step is scripted: POST /proposals as "tools" with the cited invoice
+    (the path the agent uses). `agent(cited_invoice) -> (status, response)` replaces that step (e.g. the real agent
+    Lambda on AWS). Returns the proposal response: (201, {"proposal", "decision", "tx"?}) or an error."""
+    from executor import e2e
+
+    cited = e2e.cite(call, invoice, data_dir=data_dir) if data_dir else e2e.cite(call, invoice)
+    if agent is not None:
+        return agent(cited)
+    return call("POST", "/proposals", {"invoice": cited, "hints": []}, "tools")

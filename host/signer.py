@@ -684,15 +684,11 @@ def fresh_overcap(url: str | None, *, vendor_id: str = "ven_77665546", amount_mi
     """A NEW legitimate over-cap invoice from a registered vendor: its DKIM-signed email is ingested and proposed via
     the tools API (the path the agent uses), so a fresh 300 s approval request starts now. For the attack h beat when
     the previous one expired. A new invoice number and a different amount keep it clear of the duplicate check."""
-    from datetime import datetime, timezone
-
-    from executor import e2e
+    from tools.invoice_mail import new_invoice, send_and_propose
 
     call = executor_call(url)
-    now = datetime.now(timezone.utc)
-    inv = {"vendor_id": vendor_id, "invoice_no": f"INV-{now:%m%d%H%M%S}", "issue_date": f"{now:%Y-%m-%d}",
-           "due_date": f"{now:%Y-%m-%d}", "amount_minor": amount_minor, "currency": "CZK", "reason_code": "DUE"}
-    st, r = call("POST", "/proposals", {"invoice": e2e.cite(call, inv), "hints": []}, "tools")
+    inv = new_invoice(vendor_id, amount_minor)
+    st, r = send_and_propose(call, inv)
     dec = (r.get("decision") or {}) if isinstance(r, dict) else {}
     if st == 201 and dec.get("decision") == "allow" and not require_challenge:
         print(f"{inv['invoice_no']} {amount_minor / 100:.2f} CZK -> paid automatically under the mandate "

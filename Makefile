@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker local-stack attack-visual overcap pending invoice
+.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker supplier local-stack attack-visual overcap pending invoice
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -51,6 +51,10 @@ local-stack: data  ## seeded in-memory executor over HTTP on :8000 (both console
 attacker:  ## attacker workstation console on :8502 (against $(DEMO_URL) via AWS_PROFILE=hackathon; ATTACK_URL= to override)
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} AIRGAP_ATTACK_URL=$(or $(ATTACK_URL),$(DEMO_URL)) \
 	  .venv/bin/streamlit run attacker/console.py --server.port 8502
+
+supplier:  ## supplier invoicing console on :8503 (sends invoice emails to $(DEMO_URL) via AWS_PROFILE=hackathon; SUPPLIER_URL= to override)
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} AIRGAP_SUPPLIER_URL=$(or $(SUPPLIER_URL),$(DEMO_URL)) \
+	  .venv/bin/streamlit run supplier/console.py --server.port 8503
 
 attack-visual: data  ## visual e2e: local stack + bank console + attacker console, launch every attack, screenshots in .local/attack-visual/
 	$(PY) -m playwright install chromium >/dev/null

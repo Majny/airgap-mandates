@@ -77,6 +77,12 @@ Keep AWS runs serialized: Lambda concurrency in this account is 10 in total.
 Projector: bank console `make ui` (:8501) left, attacker workstation `make attacker` (:8502) right, Safe 3 on camera.
 The attacker is a separate app on another port: nothing in the bank console triggers it.
 
+Three screens, in this order: supplier `make supplier` (:8503) sends an invoice email (pick Delta Stavby, 118 750 CZK,
+"Send invoice"; nobody keys a payment into the bank), the bank console (:8501) shows it under Payments waiting for the
+Trezor (up to the 80 000 CZK cap it would be paid automatically), then the attacker (:8502) attacks it with h. The
+supplier's "Sent invoices" list follows the bank's decision live. Locally: `make local-stack` and point all three at
+`http://127.0.0.1:8000` (`SUPPLIER_URL=`, `ATTACK_URL=`, `UI_URL=`); `make attack-visual` runs this whole flow.
+
 The 300 s rule: a PAY approval request dies 300 s after the payment was proposed, it is never re-issued, and a reject
 does not restart the clock (executor `challenge_ttl_seconds`; confirmed by WS-A). Propose right before the beat.
 

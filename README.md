@@ -10,6 +10,14 @@ The demo runs on AWS eu-central-1 (executor, store, KMS, Object Lock, Bedrock, w
 
 **For a bank's architecture and risk teams:** [`docs/BANK-READINESS.md`](docs/BANK-READINESS.md) covers the deployment, what the bank must integrate (pain.001 handoff, SSO, mail, supplier master, devices, issuers, VoP), the control mapping, the threat model, the operating model, what is simulated, and the gap list to a pilot. It also explains how to run the console behind corporate SSO (`Dockerfile.console`) and the alert watcher (`make alerts`).
 
+## The demo screens
+
+Three apps, used in this order: the **supplier** (`make supplier`, :8503, outside the bank) sends an invoice email; the
+**bank console** (`make ui`, :8501) shows what the bank's agent proposed and what the executor decided (paid under the
+mandate, waiting for the clerk's Trezor above the cap, or refused); the **attacker workstation** (`make attacker`,
+:8502) attacks the bank from outside. Nobody keys payments by hand. `make local-stack` runs all three without AWS;
+`make attack-visual` drives the whole flow headless. Details: [`docs/STAGE.md`](docs/STAGE.md).
+
 ## For contributors
 
 - Design (what and why): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
