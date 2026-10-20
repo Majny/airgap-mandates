@@ -53,8 +53,10 @@ html, body, [class*="css"] { font-size: 18px; }
 </style>"""
 STATUS = {  # proposal status -> (plain label, colour)
     "EXECUTED": ("Paid", "#067647"), "CHALLENGED": ("Waiting for Trezor", "#1d4ed8"),
+    "PENDING_SIG": ("Waiting for Trezor", "#1d4ed8"),
     "DENIED": ("Blocked", "#b42318"), "EXPIRED": ("Expired", "#475467"), "REJECTED": ("Rejected", "#b42318"),
 }
+WAITING_SIG = ("PENDING_SIG", "CHALLENGED")  # proposal statuses that need a hardware signature
 
 
 def _memory_call() -> Any:
@@ -65,10 +67,22 @@ def _memory_call() -> Any:
     @st.cache_resource
     def env() -> Any:
         from executor import e2e, scenes
+        from tools.local_stack import seed_pending_overcap
         e = scenes.DemoEnv()
         e2e.run(e.call, e.clerk, e.treasury, now=e.now, log=lambda s: None)
         scenes.scene_s2(e, log=lambda s: None)
         scenes.scene_s3(e, log=lambda s: None)
+        # test/visual only: enrol the deterministic software clerk so "Approve on Trezor" (and the honest re-sign after
+        # attack h) can sign without a physical device. Same gate as tools/local_stack; never reachable against AWS.
+        import os
+        if os.environ.get("AIRGAP_TEST_SOFTWARE_CLERK") == "1":
+            from executor.store import seed
+            from host.signer import software_clerk_account
+            acct = software_clerk_account()
+            seed.enroll_signer(e.store, acct.address, "clerk", device="GENUINE",
+                               label="clerk (software key, test)", settings=e.settings)
+        # one over-cap payment left PENDING_SIG, so the Approve-on-Trezor button and the attack-h demo have a target
+        seed_pending_overcap(e.call, e.now, data_dir=e.settings.data_dir)
         return e
 
     return env().call
@@ -305,6 +319,48 @@ def pain001_batch(st: Any, data: dict[str, Any]) -> None:
                    "carry a hash that is not in the log.")
 
 
+def approve_on_trezor(st: Any, nonce: str, role: str, *, key: str) -> None:
+    """Operator presses this to exact-sign a waiting payment on the clerk's Trezor. The honest flow shows the executor
+    text on the device and pays on confirm. If the clerk's PC is compromised (host.implant, attacker level H4) the
+    device shows the attacker's IBAN instead — this console never reveals that — and the outcome is mapped to a plain
+    message. Never crashes when no device is attached."""
+    from host import signer
+
+    if not st.button("Approve on Trezor", key=f"approve-{key}", type="primary"):
+        return
+    driver = None
+    try:
+        if signer.software_clerk_allowed(EXECUTOR):
+            driver = signer.software_clerk_driver()
+    except Exception:  # noqa: BLE001 - fall back to the physical device path
+        driver = None
+    note = ("Signing with a software key (test)." if driver is not None
+            else "Check the Trezor: confirm only if payee, IBAN and amount match the invoice.")
+    try:
+        with st.spinner(note):
+            res = signer.sign_challenge(nonce, role, call=_call(), driver=driver)
+    except signer.SignerCancelled:
+        st.warning("You rejected it on the Trezor. Nothing was paid; the payment still waits for approval.")
+        return
+    except TimeoutError:
+        st.warning("No confirmation on the Trezor in time. Nothing was paid; the payment still waits for approval.")
+        return
+    except Exception as exc:  # noqa: BLE001 - no device attached, trezorlib missing, transport error: never crash
+        st.error(f"No Trezor connected ({type(exc).__name__}). Attach the clerk's Safe 3 and try again.")
+        return
+    http, err = res.get("_http"), res.get("error")
+    eff = (res.get("effect") or {}).get("type")
+    if http == 200 and eff == "payment_executed":
+        st.success("Paid · confirmed on Trezor.")
+    elif err == "render_mismatch":
+        st.error("Refused by the executor: the Trezor was asked to sign a different payment than the bank issued "
+                 "(the account number was changed on this PC). Nothing was paid. Treat this PC as compromised.")
+    elif err:
+        st.error(f"Refused by the executor: {err}. Nothing was paid.")
+    else:
+        st.info(f"Signature submitted: {eff or 'done'}.")
+
+
 def tab_payments(st: Any, data: dict[str, Any]) -> None:
     if not data["proposals"]:
         st.info("No payment proposals yet.")
@@ -326,10 +382,12 @@ def tab_payments(st: Any, data: dict[str, Any]) -> None:
             elif blocks:
                 st.markdown(f"Why: {blocks}")
             ch = v.get("challenge")
-            if ch and v.get("status") == "CHALLENGED":
+            if ch and v.get("status") in WAITING_SIG:
                 st.caption("Exactly this text is on the clerk's Trezor. The device signs what it shows, "
                            "not what this screen shows.")
                 st.markdown(f'<div class="device">{ch["text"]}</div>', unsafe_allow_html=True)
+                if data.get("who") == "host" and ch.get("nonce"):  # operators only; auditors never reach this tab
+                    approve_on_trezor(st, ch["nonce"], ch.get("role", "clerk"), key=p["proposal_id"])
             tx_id = p.get("tx_id")
             if p.get("status") == "EXECUTED" and tx_id:
                 exp = pain001(tx_id)
@@ -509,10 +567,11 @@ def body(st: Any, ident: auth.Identity | None = None) -> None:
     data = load(ident)
     if ident.role == "operator":
         k = data["kpis"]
-        waiting = [p for p in data["proposals"] if p.get("status") == "CHALLENGED"]
+        waiting = [p for p in data["proposals"] if p.get("status") in WAITING_SIG]
         waiting += [c for c in data["changes"] if c.get("state") in ("SIG_CLERK", "SIG_TREASURY")]
         if waiting:
-            st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Check the text on the Trezor.")
+            st.warning(f"{len(waiting)} item(s) waiting for a hardware signature. Open the Payments tab and check the "
+                       "text on the Trezor before you approve.")
         m = st.columns(4)
         m[0].metric("Paid to registered suppliers", story.czk(k["paid_minor"]), f"{k['paid_n']} payment{'' if k['paid_n'] == 1 else 's'}",
                     delta_color="off")

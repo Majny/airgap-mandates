@@ -471,6 +471,33 @@ def fake_supplier_portal(s: Session) -> AttackResult:
     return res
 
 
+def clerk_pc_malware(s: Session) -> AttackResult:
+    """Attacker level H4 (SIMULATED, host.implant): malware on the clerk's signing PC that swaps the IBAN the Trezor
+    shows and signs (Bybit-style, Feb 2025). Two-phase: this only ARMS the one-shot implant via a simulated C2 channel;
+    the outcome appears when the clerk approves a waiting payment on the bank console. The attacker never touches the
+    executor API here and cannot create the payment — the implant lies to the device, and the executor refuses it."""
+    from host import implant
+
+    res = AttackResult(
+        key="clerk_pc_malware", title="Malware on the clerk's PC (signing swap)",
+        control="Runs code on the clerk's signing PC (phishing / supply-chain). While the bank screen still shows the "
+                "real payment, the implant rewrites the IBAN sent to the Trezor to the attacker's account.",
+        labels=["one-shot implant", "simulated"])
+    rec = implant.arm(FRAUD_IBAN)
+    s.requests.append(Request("C2", "clerk-pc/implant", "attacker console", {"iban": rec["iban"]}, 200,
+                              {"armed": True, "by": rec["by"]},
+                              note="drop the one-shot implant on the clerk's PC (simulated C2 channel)"))
+    res.notes.append(f"implant armed: the next PAY the clerk approves will be swapped to {rec['iban']} on the device")
+    out = implant.last()
+    res.notes.append("waiting for the clerk to approve a payment on the bank console..." if out is None
+                     else f"previous outcome on file: {out.get('outcome')} (error {out.get('error')})")
+    res.verdict = ("Implant armed. When the clerk approves, the Trezor shows the ATTACKER's IBAN; if they confirm, the "
+                   "executor re-renders its own text and refuses it (render_mismatch) — the nonce is not consumed and "
+                   "nothing is paid. Either way the attacker gets 0.00 CZK.")
+    res.blocked = True  # arming moves no money; the executor blocks it at approval time (host.implant / render_mismatch)
+    return res
+
+
 def _run_real_agent(s: Session, email_ids: list[str]) -> str:
     """AWS only: invoke the real agent Lambda in naive mode over `email_ids` and summarise its tool calls."""
     if not s.agent_lambda or not email_ids:
@@ -490,6 +517,7 @@ ATTACKS: dict[str, Callable[[Session], AttackResult]] = {
     "replay_approval": replay_approval,
     "forged_approval": forged_approval,
     "fake_supplier_portal": fake_supplier_portal,
+    "clerk_pc_malware": clerk_pc_malware,
 }
 
 
