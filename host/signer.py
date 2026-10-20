@@ -679,7 +679,8 @@ def print_pending(call: Any) -> list[dict]:
     return pending
 
 
-def fresh_overcap(url: str | None, *, vendor_id: str = "ven_77665546", amount_minor: int = 11_875_000) -> dict:
+def fresh_overcap(url: str | None, *, vendor_id: str = "ven_77665546", amount_minor: int = 11_875_000,
+                  require_challenge: bool = True) -> dict:
     """A NEW legitimate over-cap invoice from a registered vendor: its DKIM-signed email is ingested and proposed via
     the tools API (the path the agent uses), so a fresh 300 s approval request starts now. For the attack h beat when
     the previous one expired. A new invoice number and a different amount keep it clear of the duplicate check."""
@@ -689,10 +690,18 @@ def fresh_overcap(url: str | None, *, vendor_id: str = "ven_77665546", amount_mi
 
     call = executor_call(url)
     now = datetime.now(timezone.utc)
-    inv = {"vendor_id": vendor_id, "invoice_no": f"DS-{now:%m%d%H%M%S}", "issue_date": f"{now:%Y-%m-%d}",
+    inv = {"vendor_id": vendor_id, "invoice_no": f"INV-{now:%m%d%H%M%S}", "issue_date": f"{now:%Y-%m-%d}",
            "due_date": f"{now:%Y-%m-%d}", "amount_minor": amount_minor, "currency": "CZK", "reason_code": "DUE"}
     st, r = call("POST", "/proposals", {"invoice": e2e.cite(call, inv), "hints": []}, "tools")
     dec = (r.get("decision") or {}) if isinstance(r, dict) else {}
+    if st == 201 and dec.get("decision") == "allow" and not require_challenge:
+        print(f"{inv['invoice_no']} {amount_minor / 100:.2f} CZK -> paid automatically under the mandate "
+              f"({(r.get('proposal') or {}).get('tx_id') or r.get('tx_id') or 'see the console'})")
+        return r
+    if st == 201 and dec.get("decision") == "deny" and not require_challenge:
+        print(f"{inv['invoice_no']} {amount_minor / 100:.2f} CZK -> refused by the executor: {dec.get('rule_ids')} "
+              "(F-SPLIT/F-DUP: this vendor was already paid today; try another VENDOR)")
+        return r
     if st != 201 or dec.get("decision") != "challenge":
         raise RuntimeError(f"expected an over-cap challenge, got {st} {dec.get('decision')} {dec.get('rule_ids')} {r}")
     print_pending(call)
@@ -716,6 +725,11 @@ def main(argv: list[str] | None = None) -> int:
     oc = sub.add_parser("overcap", help="a fresh legitimate over-cap invoice now (new 300 s approval request)")
     oc.add_argument("--url", default=None)
     oc.add_argument("--amount", type=float, default=118_750.00, help="CZK; change it if a stuck one has this amount")
+    iv = sub.add_parser("invoice", help="a new legitimate invoice from a registered vendor, any amount: within the "
+                                        "mandate it is paid automatically, above the cap it waits for the Trezor")
+    iv.add_argument("--url", default=None)
+    iv.add_argument("--amount", type=float, required=True, help="CZK")
+    iv.add_argument("--vendor", default="ven_77665546", help="registered vendor_id (default Delta Stavby)")
     sub.add_parser("pending", help="what waits for Approve on Trezor, and when each request dies").add_argument(
         "--url", default=None)
     md = sub.add_parser("mandate", help="stage S1 part 1: create the mandate and sign it on the devices (2/2)")
@@ -746,6 +760,8 @@ def main(argv: list[str] | None = None) -> int:
               + (": over-cap payment left for Approve on Trezor" if a.leave_pending else ""))
     elif a.cmd == "overcap":
         fresh_overcap(a.url, amount_minor=round(a.amount * 100))
+    elif a.cmd == "invoice":
+        fresh_overcap(a.url, vendor_id=a.vendor, amount_minor=round(a.amount * 100), require_challenge=False)
     elif a.cmd == "pending":
         print_pending(executor_call(a.url))
     elif a.cmd == "mandate":

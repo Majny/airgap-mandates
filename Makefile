@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker local-stack attack-visual overcap pending
+.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker local-stack attack-visual overcap pending invoice
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -58,6 +58,9 @@ attack-visual: data  ## visual e2e: local stack + bank console + attacker consol
 
 overcap:  ## attack h beat: a fresh legitimate over-cap invoice on AWS now (new 300 s approval request; AMOUNT=118750.00)
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.signer overcap --url $(DEMO_URL) $(if $(AMOUNT),--amount $(AMOUNT))
+
+invoice:  ## a new legitimate invoice on AWS: AMOUNT=12500 [VENDOR=ven_...]; within the mandate it pays automatically, above the cap it waits for Approve on Trezor
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.signer invoice --url $(DEMO_URL) --amount $(AMOUNT) $(if $(VENDOR),--vendor $(VENDOR))
 
 pending:  ## what waits for Approve on Trezor on AWS, and when each approval request dies
 	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.signer pending --url $(DEMO_URL)
