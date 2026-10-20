@@ -14,10 +14,36 @@ way executor.app does for `make dev`. Development only; the real demo runs on AW
 import argparse
 import dataclasses
 import json
+import os
 import sys
 from datetime import timedelta
 
 from executor import handler
+
+DELTA_VENDOR = "ven_77665546"
+DELTA_OVERCAP_MINOR = 12_500_050  # 125,000.50 CZK, over the 80,000 per-payment cap -> waits for a human on the Trezor
+
+
+def seed_pending_overcap(call, now, *, vendor_id=DELTA_VENDOR, amount_minor=DELTA_OVERCAP_MINOR, data_dir=None):
+    """Create one over-cap payment left PENDING_SIG (challenge purpose PAY), so the 'malware on the clerk PC' demo
+    (attack h, host.implant) has a legitimate payment waiting for approval. The attacker cannot create this; the normal
+    day did. Returns the proposal_id, or None if it could not be created. Idempotent-ish: skips if one already waits."""
+    from executor import e2e
+
+    st, r = call("GET", "/proposals?status=PENDING_SIG", None, "host")
+    existing = [p for p in r.get("proposals", []) if p.get("vendor_id") == vendor_id] if st == 200 else []
+    if existing:
+        return existing[0]["proposal_id"]
+    inv = {"vendor_id": vendor_id, "invoice_no": "DS-2026-0777", "issue_date": now.strftime("%Y-%m-%d"),
+           "due_date": now.strftime("%Y-%m-%d"), "amount_minor": amount_minor, "currency": "CZK", "reason_code": "DUE"}
+    try:
+        cited = e2e.cite(call, inv, data_dir=data_dir) if data_dir else e2e.cite(call, inv)
+    except Exception:  # noqa: BLE001 - never block the stack from starting
+        return None
+    st, r = call("POST", "/proposals", {"invoice": cited, "hints": []}, "tools")
+    if st != 201 or (r.get("decision", {}) if isinstance(r, dict) else {}).get("decision") != "challenge":
+        return None
+    return r["proposal"]["proposal_id"]
 
 
 def build_env(*, scenes: bool = True, log=print):
@@ -36,8 +62,22 @@ def build_env(*, scenes: bool = True, log=print):
             env.active_mandate()
     else:
         env.active_mandate()
+    # test/visual only: enrol the deterministic software clerk so the bank console's "Approve on Trezor" can sign
+    # without a physical device (loopback stack only; never AWS). Gated so a real demo is never polluted.
+    if os.environ.get("AIRGAP_TEST_SOFTWARE_CLERK") == "1":
+        from executor.store import seed
+        from host.signer import software_clerk_account
+        acct = software_clerk_account()
+        seed.enroll_signer(env.store, acct.address, "clerk", device="GENUINE",
+                           label="clerk (software key, test)", settings=env.settings)
+        log(f"  enrolled software clerk (test) {acct.address}")
     # pin the served clock after the scenes but well inside the mandate validity (T0 + 1 day)
-    settings = dataclasses.replace(env.settings, fake_now=_z(T0 + timedelta(seconds=300)))
+    pinned_now = T0 + timedelta(seconds=300)
+    settings = dataclasses.replace(env.settings, fake_now=_z(pinned_now))
+    pinned_call = lambda m, p, b, who: handler.dispatch(m, p, None, b, principal=who,  # noqa: E731
+                                                        ctx=handler.Context(settings, env.store))
+    pid = seed_pending_overcap(pinned_call, pinned_now, data_dir=env.settings.data_dir)
+    log(f"  seed pending over-cap payment (Delta) -> {pid or 'skipped'}")
     return settings, env.store
 
 
