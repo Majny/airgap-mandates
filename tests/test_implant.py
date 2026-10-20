@@ -160,3 +160,17 @@ def test_story_card_render_mismatch():
     _, cards = story.build(bundle, [], [], [])
     titles = [c["title"] for c in cards]
     assert "Tampered approval stopped" in titles
+
+
+def test_fresh_overcap_starts_a_new_approval_request(monkeypatch):
+    """Stage fallback for attack h: when the waiting request died, a NEW legitimate over-cap invoice gets a fresh one."""
+    from executor import e2e, scenes
+    from host import signer
+
+    env = scenes.DemoEnv()
+    e2e.run(env.call, env.clerk, env.treasury, now=env.now, log=lambda s: None)  # mandate + the normal day
+    monkeypatch.setattr(signer, "executor_call", lambda url=None: env.call)
+    r = signer.fresh_overcap("memory:")
+    assert r["decision"]["decision"] == "challenge" and r["proposal"]["status"] == "PENDING_SIG"
+    pending = signer.print_pending(env.call)
+    assert r["proposal"]["proposal_id"] in [p["proposal_id"] for p in pending]

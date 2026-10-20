@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker local-stack attack-visual
+.PHONY: help venv data test test-render dev ui ui-visual alerts bench verify e2e scene-s2 scene-s3 contracts lint ci lock deploy teardown checkpoint-now preflight agent-s1 agent-s2 attacker local-stack attack-visual overcap pending
 
 help:  ## list targets
 	@awk -F ":.*## " "/^[a-z-]+:.*## / {printf \"%-12s %s\\n\", \$$1, \$$2}" Makefile
@@ -55,6 +55,12 @@ attacker:  ## attacker workstation console on :8502 (against $(DEMO_URL) via AWS
 attack-visual: data  ## visual e2e: local stack + bank console + attacker console, launch every attack, screenshots in .local/attack-visual/
 	$(PY) -m playwright install chromium >/dev/null
 	$(PY) -m tools.attack_visual
+
+overcap:  ## attack h beat: a fresh legitimate over-cap invoice on AWS now (new 300 s approval request; AMOUNT=118750.00)
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.signer overcap --url $(DEMO_URL) $(if $(AMOUNT),--amount $(AMOUNT))
+
+pending:  ## what waits for Approve on Trezor on AWS, and when each approval request dies
+	AWS_PROFILE=$${AWS_PROFILE:-hackathon} $(PY) -m host.signer pending --url $(DEMO_URL)
 
 bench:  ## run AgentPayBench
 	$(PY) -m bench.run_bench --out bench/results

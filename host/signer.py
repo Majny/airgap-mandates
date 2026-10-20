@@ -624,8 +624,10 @@ def run_agent_s1(*, log: Any = print) -> dict:
 
 
 def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = True, auto_clerk: bool | None = None,
-                 vendor_id: str | None = None) -> dict:
-    """The stage S1 beat as one: mandate (device 2/2) -> the real agent pays under it -> device step-up -> replay."""
+                 vendor_id: str | None = None, leave_pending: bool = False) -> dict:
+    """The stage S1 beat as one: mandate (device 2/2) -> the real agent pays under it -> device step-up -> replay.
+    `leave_pending` stops before the step-up: the over-cap payment waits for "Approve on Trezor" in the console
+    (attack h beat), and its challenge dies 300 s after the agent proposed it."""
     clerk, treasury = demo_signers(auto_treasury=auto_treasury, auto_clerk=auto_clerk)
     call = executor_call(url)
     print(f"clerk    {clerk.address}  {clerk.device}\ntreasury {treasury.address}  {treasury.device}\n")
@@ -650,6 +652,9 @@ def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = Tru
     st, led = call("GET", "/ledger", None, "host")
     paid = [t for t in (led.get("txs", []) if st == 200 else []) if (t.get("authorization") or {}).get("kind") == "mandate"]
     print(f"paid under the mandate (ledger): {len(paid)}")
+    if leave_pending:
+        print_pending(call)
+        return {"mandate": m["mandate_id"], "paid_under_mandate": len(paid), "stepups": 0, "agent": agent}
     steps = pay_up(call, clerk, vendor_id=vendor_id)
     if with_agent and not steps:
         raise RuntimeError("nothing was stepped up on the device: the stage S1 beat is incomplete")
@@ -657,6 +662,41 @@ def run_stage_s1(url: str, *, with_agent: bool = True, auto_treasury: bool = Tru
     if st == 200:
         print(f"mandate spent {mm['spent_minor'] / 100:.2f} CZK in {mm['count']} payments (the step-up is outside it)")
     return {"mandate": m["mandate_id"], "paid_under_mandate": len(paid), "stepups": len(steps), "agent": agent}
+
+
+def print_pending(call: Any) -> list[dict]:
+    """List what waits for "Approve on Trezor" in the console, with the time each approval request dies."""
+    st, r = call("GET", "/proposals?status=PENDING_SIG", None, "host")
+    pending = r.get("proposals", []) if st == 200 else []
+    for p in pending:
+        _, ch = call("GET", f"/challenges/{p['challenge_nonce']}", None, "host")
+        inv = p.get("invoice", {})
+        print(f"--> WAITING for Approve on Trezor: {inv.get('vendor_id')} {inv.get('invoice_no')} "
+              f"{inv.get('amount_minor', 0) / 100:.2f} {inv.get('currency')}  (approval request dies at "
+              f"{ch.get('exp') if isinstance(ch, dict) else '?'} UTC)")
+    if not pending:
+        print("nothing waits for a signature")
+    return pending
+
+
+def fresh_overcap(url: str | None, *, vendor_id: str = "ven_77665546", amount_minor: int = 11_875_000) -> dict:
+    """A NEW legitimate over-cap invoice from a registered vendor: its DKIM-signed email is ingested and proposed via
+    the tools API (the path the agent uses), so a fresh 300 s approval request starts now. For the attack h beat when
+    the previous one expired. A new invoice number and a different amount keep it clear of the duplicate check."""
+    from datetime import datetime, timezone
+
+    from executor import e2e
+
+    call = executor_call(url)
+    now = datetime.now(timezone.utc)
+    inv = {"vendor_id": vendor_id, "invoice_no": f"DS-{now:%m%d%H%M%S}", "issue_date": f"{now:%Y-%m-%d}",
+           "due_date": f"{now:%Y-%m-%d}", "amount_minor": amount_minor, "currency": "CZK", "reason_code": "DUE"}
+    st, r = call("POST", "/proposals", {"invoice": e2e.cite(call, inv), "hints": []}, "tools")
+    dec = (r.get("decision") or {}) if isinstance(r, dict) else {}
+    if st != 201 or dec.get("decision") != "challenge":
+        raise RuntimeError(f"expected an over-cap challenge, got {st} {dec.get('decision')} {dec.get('rule_ids')} {r}")
+    print_pending(call)
+    return r
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -671,6 +711,13 @@ def main(argv: list[str] | None = None) -> int:
     s1.add_argument("--url", default=None, help="drive a running executor (e.g. the AWS regional API) instead")
     s1.add_argument("--with-agent", action="store_true",
                     help="stage S1: mandate on the device, the real agent pays (make agent-s1), device step-up")
+    s1.add_argument("--leave-pending", action="store_true",
+                    help="with --with-agent: stop before the step-up; approve it from the console (attack h beat)")
+    oc = sub.add_parser("overcap", help="a fresh legitimate over-cap invoice now (new 300 s approval request)")
+    oc.add_argument("--url", default=None)
+    oc.add_argument("--amount", type=float, default=118_750.00, help="CZK; change it if a stuck one has this amount")
+    sub.add_parser("pending", help="what waits for Approve on Trezor, and when each request dies").add_argument(
+        "--url", default=None)
     md = sub.add_parser("mandate", help="stage S1 part 1: create the mandate and sign it on the devices (2/2)")
     md.add_argument("--url", default=None)
     pu = sub.add_parser("payup", help="stage S1 part 3: exact-sign every PENDING_SIG proposal on the clerk device")
@@ -693,8 +740,14 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "s1" and a.with_agent:
         if not a.url:
             ap.error("--with-agent needs --url (the agent beat runs on AWS)")
-        run_stage_s1(a.url, auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None)
-        print("\nSTAGE S1 OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else ""))
+        run_stage_s1(a.url, auto_treasury=not a.manual_treasury, auto_clerk=False if a.manual_clerk else None,
+                     leave_pending=a.leave_pending)
+        print("\nSTAGE S1 OK" + (" (FALLBACK: EMULATOR CLERK)" if emulator_only() else "")
+              + (": over-cap payment left for Approve on Trezor" if a.leave_pending else ""))
+    elif a.cmd == "overcap":
+        fresh_overcap(a.url, amount_minor=round(a.amount * 100))
+    elif a.cmd == "pending":
+        print_pending(executor_call(a.url))
     elif a.cmd == "mandate":
         clerk, treasury = demo_signers()
         create_mandate(executor_call(a.url), clerk, treasury)
