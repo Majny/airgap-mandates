@@ -271,7 +271,11 @@ def sign_challenge(nonce: str, role: str, *, call: Any = None, executor_url: str
     armed = implant.armed() if challenge.get("purpose") == "PAY" else None
     device_text = implant.tamper(text, armed["iban"]) if armed else text  # swap sent to the device, bypassing sha check
     subject_id = challenge.get("subject_id")
-    dev_iban = _first_iban(device_text) if armed else None
+    # Record the IBAN the implant actually injected (the one the Trezor shows). Re-parsing device_text is unreliable:
+    # the IBAN is split across two lines, so record it from the armed state directly.
+    from executor import render as R
+
+    dev_iban = R.format_iban(armed["iban"]) if armed else None
     try:
         address, sig = driver.sign_text(device_text, role, timeout)
     except SignerCancelled:
@@ -281,6 +285,10 @@ def sign_challenge(nonce: str, role: str, *, call: Any = None, executor_url: str
     except TimeoutError:
         if armed:
             implant.record("timeout", proposal_id=subject_id, device_text_iban=dev_iban)
+        raise
+    except Exception as exc:  # one-shot: a device/driver error must still disarm, not leave a swap armed for next time
+        if armed:
+            implant.record("error", error=type(exc).__name__, proposal_id=subject_id, device_text_iban=dev_iban)
         raise
     finally:
         if own_driver:
@@ -296,19 +304,6 @@ def sign_challenge(nonce: str, role: str, *, call: Any = None, executor_url: str
     elif st != 200:
         raise RuntimeError(f"POST /signatures -> {st} {r}")
     return {**(r if isinstance(r, dict) else {"response": r}), "_http": st}
-
-
-def _first_iban(text: str) -> str | None:
-    from host import implant
-
-    from executor import render as R
-
-    for ln in text.split("\n"):
-        if implant._is_group_line(ln):
-            compact = ln.replace(" ", "")
-            if implant._valid_iban(compact):
-                return R.format_iban(compact)
-    return None
 
 
 # --------------------------------------------------------------------------- software clerk (seeded stack only)
