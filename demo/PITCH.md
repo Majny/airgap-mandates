@@ -85,6 +85,8 @@ Run IDs:
 
 - **Who pays today:** EU refund rules are written for consumers (PSD2 today, the PSR next). A company that pays a fake supplier authorised the payment itself, so the loss stays with the company and lands on its bank relationship.
 - **What we sell:** a payment-authorisation layer an AP agent can't talk its way past. Mandate for volume, exact-sign for exceptions, attestation network for new payees.
+  - Target pricing (not yet validated with customers): banks pay about **EUR 0.20 per protected payment**. AP platforms about EUR 200 per company per month up to 1,000 payments. Suppliers join free.
+  - Value: a company with 1,000 supplier payments a month pays EUR 2,400 a year. The average BEC loss reported to the FBI in 2025 was about USD 123,000 (USD 3.05 bn over 24,768 complaints, IC3 2025).
   - Hardware per approver: Trezor Safe 3, **EUR 59 / CZK 1,439** list price (trezor.io, checked 20 Oct 2026).
   - Compute: about **USD 0.3-0.6 per 100 agent episodes** in our bench [QA/QB].
 - **Network effect:** every supplier bank that attests its own clients' accounts makes payee changes safer for every buyer.
