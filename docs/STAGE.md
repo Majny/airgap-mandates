@@ -72,6 +72,32 @@ laptop: that is the operator's cue. The host UI (`make ui`, WS-F) is the project
 The UI calls the API with SigV4 via `host.signer.executor_call`.
 Keep AWS runs serialized: Lambda concurrency in this account is 10 in total.
 
+## Attack h beat: the Trezor exposes malware on the clerk's PC (two screens + device)
+
+Projector: bank console `make ui` (:8501) left, attacker workstation `make attacker` (:8502) right, Safe 3 on camera.
+The attacker is a separate app on another port: nothing in the bank console triggers it.
+
+The 300 s rule: a PAY approval request dies 300 s after the payment was proposed, it is never re-issued, and a reject
+does not restart the clock (executor `challenge_ttl_seconds`; confirmed by WS-A). Propose right before the beat.
+
+1. Laptop: `.venv/bin/python -m host.signer s1 --with-agent --leave-pending --url $API`: hold 1 = MANDATE, the agent
+   pays ACME/Beta/Gamma, Delta 125000.50 CZK is left waiting (prints `--> WAITING ... dies at`). The bank console shows
+   it under Payments with "Approve within m:ss". If it died: `make overcap` (fresh legitimate Delta invoice, 118750.00;
+   `AMOUNT=` to change) and `make pending` to see what waits.
+2. Attacker screen: attack h "Malware on the clerk's PC" -> Launch. It shows "waiting for the clerk to approve".
+   The bank console shows nothing new: the malware is invisible there.
+3. Bank console, Payments, Delta: "Approve on Trezor". The device shows the attacker's account
+   (`LT48 3999 0000 / 0000 1234`) where the screen shows `CZ52 0100 0000 / 0077 8899 0011`.
+4. Device operator REJECTS: press LEFT until the first screen ("Signing address"), then LEFT once more (5 presses from
+   the hold page). One LEFT on the hold page only goes back a page. One button at a time.
+   Bank: "You rejected it on the Trezor. Nothing was paid." Attacker: outcome + money to attacker 0.00 CZK.
+   (If someone holds CONFIRM instead: executor 403 `render_mismatch`, "Tampered approval stopped", still 0.00 CZK.)
+5. "Approve on Trezor" again (the implant was one-shot): the device shows Delta's real account, hold -> "Paid ·
+   confirmed on Trezor". Line to say: "The screen was owned. The Trezor showed what was really being signed, and the
+   executor only accepts its own text."
+
+The console waits 90 s for the device (`AIRGAP_UI_SIGN_TIMEOUT_S`), so a missed reject still leaves time for step 5.
+
 ## Fallback switch (emulator clerk)
 
 Flip it when the physical Safe 3 cannot be brought back within 60 s (see "USB drop"), or before the demo if
