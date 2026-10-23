@@ -1,10 +1,10 @@
 # AirGap Mandates
 
-> AI may propose. Policy may block. Only a human-held key may move money — and the supervisor can prove it offline.
+> AI may propose. Policy may block. Only a human-held key may move money, and the supervisor can prove it offline.
 
 The FinTechers Hackathon 2026 · Track 3 "Securing the agentic bank".
 
-A bank back-office AI agent proposes payments but holds no write credential. An executor outside the operator's laptop pays only within a mandate signed on a hardware device (Trezor Safe 3), or after a human holds-to-confirm exactly what the device display shows — and the display shows only facts the executor verified itself. A new payee account needs 2-of-3 independent supplier attestations (SD-JWT VCs bound to the change) and dual control on two devices. Every input, decision, signature and execution lands in a C2SP-format transparency log, cosigned by witnesses and verifiable offline (log signatures with unmodified upstream Go; entries and cosignatures with our open verifier).
+A bank back-office AI agent proposes payments but holds no write credential. An executor outside the operator's laptop pays only within a mandate signed on a hardware device (Trezor Safe 3), or after a human holds-to-confirm exactly what the device display shows, and the display shows only facts the executor verified itself. A new payee account needs 2-of-3 independent supplier attestations (SD-JWT VCs bound to the change) and dual control on two devices. Every input, decision, signature and execution lands in a C2SP-format transparency log, cosigned by witnesses and verifiable offline (log signatures with unmodified upstream Go; entries and cosignatures with our open verifier).
 
 The demo runs on AWS eu-central-1 (executor, store, KMS, Object Lock, Bedrock, witnesses). The local `memory`/`moto` backends exist for development and CI only.
 
@@ -46,7 +46,7 @@ Everything after the `hackathon-start` tag. This list is updated as modules land
 - [ ] WS-C device: Safe 3 (USB) + T3B1 emulator signer worker, screen oracle, enrolment ceremony, camera rig
 - [ ] WS-D payee change: FSM v2, facts engine on content-hashed snapshots (incl. Mostly Right), VoP mock, 3 SD-JWT VC issuers + verifier, vendor portal (callback, tripwire, break-glass)
 - [ ] WS-E agent and perimeter: AP-Clerk (naive + quarantined), tools λ with Cedar tool policies / AgentCore Gateway, egress λ + DLP, VPC without NAT, IAM split, IaC
-- [ ] WS-F bench and demo: H0–H6 attackers, arms A0–A3, simulated humans, Wilson CIs, dashboard, demo scenes, fallback video
+- [ ] WS-F bench and demo: H0 to H6 attackers, arms A0 to A3, simulated humans, Wilson CIs, dashboard, demo scenes, fallback video
 
 ## Open source / data we build on
 
